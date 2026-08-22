@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@vijayee/wavedb": "file:/home/victor/Workspace/src/github.com/vijayee/WaveDB/bindings/nodejs",
-    "crabs-node": "file:/home/victor/Workspace/src/github.com/vijayee/CRABS/bindings/node",
+    "crabs-wasm": "file:/home/victor/Workspace/src/github.com/vijayee/CRABS/bindings/wasm",
     "express": "^4.19.2",
     "ws": "^8.18.0"
   },
