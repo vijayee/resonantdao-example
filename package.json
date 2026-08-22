@@ -4,19 +4,17 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "copy-wasm": "bash scripts/copy-wasm.sh",
     "build": "bash scripts/build.sh",
     "build:server": "tsc -p server/tsconfig.json",
     "build:client": "vite build --config client/vite.config.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "ts-node-dev --transpile-only server/src/index.ts",
     "dev:client": "vite --config client/vite.config.ts",
-    "test": "playwright test",
-    "postinstall": "npm run copy-wasm"
+    "test": "playwright test"
   },
   "dependencies": {
-    "@vijayee/wavedb": "file:/home/victor/Workspace/src/github.com/vijayee/WaveDB/bindings/nodejs",
-    "crabs-wasm": "file:/home/victor/Workspace/src/github.com/vijayee/CRABS/bindings/wasm",
+    "@vijayee/wavedb": "file:../WaveDB/bindings/nodejs",
+    "crabs-wasm": "file:../CRABS/bindings/wasm",
     "express": "^4.19.2",
     "ws": "^8.18.0"
   },
