@@ -1,0 +1,8 @@
+node_modules/
+dist/
+client/dist/
+client/public/wasm/
+data/
+.DS_Store
+*.log
+.env
