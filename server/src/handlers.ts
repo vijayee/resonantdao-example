@@ -96,14 +96,11 @@ export class ConnectionHandler {
           if (!isNonEmptyString(msg.username)) {
             return this.send(ws, { kind: 'error', message: 'Invalid login payload' });
           }
-          // Snapshot access: snapshots are stored server-side for recovery and returned
-          // on login/get_snapshot without extra authentication in this PoC.
           if (!(await this.db.userExists(msg.username))) {
             return this.send(ws, { kind: 'error', message: 'User not found' });
           }
           this.socketUsers.set(ws, msg.username);
-          const snapshot = await this.db.getSnapshot(msg.username);
-          this.send(ws, { kind: 'snapshot', snapshot });
+          this.send(ws, { kind: 'login_ok', username: msg.username });
           break;
         }
 
@@ -120,8 +117,10 @@ export class ConnectionHandler {
           if (!isNonEmptyString(msg.operationBytes)) {
             return this.send(ws, { kind: 'error', message: 'Invalid submit_op payload' });
           }
-          // Execute-then-persist is intentional for validation; a production system
-          // would need a rollback/snapshot mechanism if persistence fails after execution.
+          // Intentional PoC trade-off: execute before persisting so invalid operations
+          // are rejected before entering the log. If persistence fails after execution,
+          // the in-memory DAO mirror will be ahead of the persisted log; a production
+          // implementation would need rollback via state snapshots or a two-phase commit.
           const operationBytes = msg.operationBytes;
           const socket = ws;
           this.submitQueue = this.submitQueue.then(async () => {
