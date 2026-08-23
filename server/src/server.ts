@@ -9,10 +9,27 @@ import { ConnectionHandler } from './handlers';
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const STATIC_DIR = path.join(__dirname, '../../client/dist');
 
+function base64ToBytes(base64: string): Uint8Array {
+  return new Uint8Array(Buffer.from(base64, 'base64'));
+}
+
+export async function hydrateDao(db: DaoDatabase, dao: DaoNode): Promise<void> {
+  for (const user of await db.getAllUsers()) {
+    dao.registerMember(user.username, user.publicKeyHex);
+  }
+  const ops = await db.getOperations(0);
+  for (const op of ops) {
+    const bytes = base64ToBytes(op.bytes);
+    const operation = await dao.deserializeOperation(bytes);
+    dao.executeOperation(operation);
+  }
+}
+
 export async function startServer() {
   const db = new DaoDatabase();
   const dao = new DaoNode();
   await dao.init();
+  await hydrateDao(db, dao);
   const handler = new ConnectionHandler(db, dao);
 
   const app = express();

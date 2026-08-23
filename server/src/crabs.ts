@@ -1,6 +1,12 @@
 import { Node, KeyPair, Operation } from 'crabs-wasm';
-import { POLICIES, STATE_NAMES, VOTE_THRESHOLD } from '../../shared/src/policies';
-import { AddMemberPayload, ExecutePayload, ProposalPayload, VotePayload } from '../../shared/src/types';
+import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
+import { POLICIES, STATE_NAMES } from '../../shared/src/policies';
+import {
+  makeAddMemberHandler,
+  makeCreateProposalHandler,
+  makeVoteHandler,
+  makeExecuteHandler,
+} from '../../shared/src/handlers';
 
 const ADMIN_ID = 'admin';
 
@@ -13,59 +19,28 @@ export class DaoNode {
     this.nodeKey = await KeyPair.generate();
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
-    this.node.addOneShotFlag(STATE_NAMES.executedProposals);
+    this.node.addORSet(STATE_NAMES.executedProposals);
 
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);
     this.node.setPolicy('execute', POLICIES.execute);
     this.node.setPolicy('add_member', POLICIES.add_member);
 
-    this.node.registerHandlerJs('add_member', (state, op) => {
-      const payload: AddMemberPayload = JSON.parse(op.payload || '{}');
-      state.setAdd(STATE_NAMES.members, payload.username, payload.publicKeyHex);
-      return 0;
-    });
-
-    this.node.registerHandlerJs('create_proposal', (state, op) => {
-      const payload: ProposalPayload = JSON.parse(op.payload || '{}');
-      state.setAdd(STATE_NAMES.proposals, payload.proposalId, JSON.stringify(payload));
-      return 0;
-    });
-
-    this.node.registerHandlerJs('vote', (state, op) => {
-      const payload: VotePayload = JSON.parse(op.payload || '{}');
-      const voteSet = `votes:${payload.proposalId}`;
-      // Remove any prior vote from this signer and adjust counters
-      if (state.setContains(`${voteSet}:yes`, `${op.signerId}:yes`)) {
-        state.setRemove(`${voteSet}:yes`, `${op.signerId}:yes`);
-        state.decrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
-      }
-      if (state.setContains(`${voteSet}:no`, `${op.signerId}:no`)) {
-        state.setRemove(`${voteSet}:no`, `${op.signerId}:no`);
-        state.decrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);
-      }
-      // Add current vote
-      state.setAdd(`${voteSet}:${payload.vote}`, `${op.signerId}:${payload.vote}`, op.signerId);
-      if (payload.vote === 'yes') state.incrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
-      else state.incrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);
-      return 0;
-    });
-
-    this.node.registerHandlerJs('execute', (state, op) => {
-      const payload: ExecutePayload = JSON.parse(op.payload || '{}');
-      const voteSet = `votes:${payload.proposalId}`;
-      const yes = state.getPNCounter(`${voteSet}:yes_count`) || 0;
-      if (yes >= VOTE_THRESHOLD) {
-        state.flagSet(STATE_NAMES.executedProposals, payload.proposalId);
-      }
-      return 0;
-    });
+    this.node.registerHandlerJs('add_member', makeAddMemberHandler());
+    this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node));
+    this.node.registerHandlerJs('vote', makeVoteHandler());
+    this.node.registerHandlerJs('execute', makeExecuteHandler());
   }
 
   registerMember(username: string, publicKeyHex: string): number {
     // Initial attributes cannot contain privileged names such as "role";
     // register the user with no initial attributes, then grant roles via admin ops.
     // registerUser sets key_version to 1; each grantRole bumps it by 1.
+    //
+    // PoC note: clients bootstrap their local membership state from the
+    // attributeMachine the server returns at registration. A production system
+    // should replay server-signed membership operations from the canonical log
+    // instead of trusting a string summary.
     this.node.registerUser(username, publicKeyHex);
     this.node.grantRole(username, 'role', 'member', ADMIN_ID);
     this.node.grantRole(username, 'reputation', '1', ADMIN_ID);
@@ -83,13 +58,18 @@ export class DaoNode {
     const op = await Operation.create(type);
     op.signerId = ADMIN_ID;
     op.nodeId = 'server';
-    op.payload = JSON.stringify(payload);
+    op.payload = new TextEncoder().encode(JSON.stringify(payload) + '\0');
+    setOperationSignerKeyVersion(op, 1);
     this.node.sign(op, this.nodeKey);
     return op;
   }
 
   executeOperation(op: Operation) {
-    this.node.execute(op);
+    try {
+      this.node.execute(op);
+    } finally {
+      op.destroy();
+    }
   }
 
   async deserializeOperation(bytes: Uint8Array): Promise<Operation> {

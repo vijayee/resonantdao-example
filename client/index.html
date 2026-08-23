@@ -4,9 +4,59 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ResonantDAO Example</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.2rem; margin-top: 1.5rem; }
+    .hidden { display: none; }
+    form { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
+    input, button { padding: 0.5rem; font-size: 1rem; }
+    button { cursor: pointer; }
+    ul { list-style: none; padding: 0; }
+    li { border: 1px solid #ccc; border-radius: 0.25rem; padding: 0.75rem; margin-bottom: 0.75rem; }
+    .vote-counts { margin: 0.5rem 0; }
+    .actions { display: flex; gap: 0.5rem; }
+    #status { margin-top: 1rem; color: #d32f2f; min-height: 1.25rem; }
+  </style>
 </head>
 <body>
-  <div id="app"></div>
+  <h1>ResonantDAO Example</h1>
+
+  <section id="auth">
+    <h2>Register</h2>
+    <form id="register-form">
+      <input id="register-username" type="text" placeholder="Username" required />
+      <input id="register-password" type="password" placeholder="Password" required />
+      <button type="submit">Register</button>
+    </form>
+
+    <h2>Login</h2>
+    <form id="login-form">
+      <input id="login-username" type="text" placeholder="Username" required />
+      <input id="login-password" type="password" placeholder="Password" required />
+      <button type="submit">Login</button>
+    </form>
+  </section>
+
+  <section id="dashboard" class="hidden">
+    <p>Welcome, <span id="username"></span>! <button id="logout" type="button">Logout</button></p>
+
+    <h2>Members</h2>
+    <ul id="members"></ul>
+
+    <h2>Create Proposal</h2>
+    <form id="proposal-form">
+      <input id="proposal-title" type="text" placeholder="Title" required />
+      <input id="proposal-description" type="text" placeholder="Description" />
+      <button type="submit">Create Proposal</button>
+    </form>
+
+    <h2>Proposals</h2>
+    <ul id="proposals"></ul>
+  </section>
+
+  <div id="status"></div>
+
   <script src="/wasm/eauth/eauth.js"></script>
   <script src="/wasm/crabs/crabs.js"></script>
   <script type="module" src="/src/main.ts"></script>

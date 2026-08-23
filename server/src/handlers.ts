@@ -78,14 +78,17 @@ export class ConnectionHandler {
             await this.db.putUser(user);
             this.socketUsers.set(ws, msg.username);
             const snapshot = await this.db.getSnapshot(msg.username);
+            const members = await this.db.getAllUsers();
             this.send(ws, {
               kind: 'registered',
               username: msg.username,
               publicKeyHex: msg.publicKeyHex,
               keyVersion,
               attributeMachine: 'role:member reputation:1',
+              members,
               snapshot: snapshot || undefined,
             });
+            this.broadcast({ kind: 'members', users: members });
           } finally {
             this.registering.delete(msg.username);
           }
@@ -100,7 +103,8 @@ export class ConnectionHandler {
             return this.send(ws, { kind: 'error', message: 'User not found' });
           }
           this.socketUsers.set(ws, msg.username);
-          this.send(ws, { kind: 'login_ok', username: msg.username });
+          const members = await this.db.getAllUsers();
+          this.send(ws, { kind: 'login_ok', username: msg.username, members });
           break;
         }
 

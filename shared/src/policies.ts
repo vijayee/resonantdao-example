@@ -3,7 +3,7 @@ export const VOTE_THRESHOLD = 2;
 export const POLICIES = {
   create_proposal: 'role:member',
   vote: 'role:member',
-  execute: `role:member AND votes >= ${VOTE_THRESHOLD}`,
+  execute: 'role:member',
   add_member: 'role:member',
 } as const;
 

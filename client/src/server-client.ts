@@ -1,6 +1,7 @@
 import {
   ClientMessage,
   EncryptedSnapshot,
+  PublicUser,
   ServerMessage,
   StoredOperation,
 } from '@shared/types';
@@ -21,6 +22,7 @@ const SERVER_MESSAGE_KINDS: ServerMessage['kind'][] = [
   'op_rejected',
   'broadcast',
   'error',
+  'members',
 ];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -42,6 +44,16 @@ function isStoredOperation(value: unknown): value is StoredOperation {
   return typeof value.index === 'number' && typeof value.bytes === 'string';
 }
 
+function isPublicUser(value: unknown): value is PublicUser {
+  if (!isPlainObject(value)) return false;
+  return (
+    typeof value.username === 'string' &&
+    typeof value.publicKeyHex === 'string' &&
+    typeof value.registeredAt === 'number' &&
+    typeof value.keyVersion === 'number'
+  );
+}
+
 function isServerMessage(value: unknown): value is ServerMessage {
   if (!isPlainObject(value)) return false;
   const kind = value.kind;
@@ -59,10 +71,16 @@ function isServerMessage(value: unknown): value is ServerMessage {
         typeof value.publicKeyHex === 'string' &&
         typeof value.keyVersion === 'number' &&
         typeof value.attributeMachine === 'string' &&
+        Array.isArray(value.members) &&
+        value.members.every(isPublicUser) &&
         (value.snapshot === undefined || isEncryptedSnapshot(value.snapshot))
       );
     case 'login_ok':
-      return typeof value.username === 'string';
+      return (
+        typeof value.username === 'string' &&
+        Array.isArray(value.members) &&
+        value.members.every(isPublicUser)
+      );
     case 'snapshot':
       return value.snapshot === null || isEncryptedSnapshot(value.snapshot);
     case 'log':
@@ -78,6 +96,8 @@ function isServerMessage(value: unknown): value is ServerMessage {
       return isStoredOperation(value.operation);
     case 'error':
       return typeof value.message === 'string';
+    case 'members':
+      return Array.isArray(value.users) && value.users.every(isPublicUser);
     default:
       return false;
   }
