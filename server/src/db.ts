@@ -3,11 +3,18 @@ import { EncryptedSnapshot, PublicUser, ServerOperation } from '../../shared/src
 
 const DB_PATH = process.env.WAVEDB_PATH || './data/wavedb';
 
+function valueToString(v: string | Buffer | null): string | null {
+  if (v === null) return null;
+  if (typeof v === 'string') return v;
+  if (Buffer.isBuffer(v)) return v.toString('utf8');
+  throw new Error(`Unexpected value type: ${typeof v}`);
+}
+
 export class DaoDatabase {
   private db: WaveDB;
 
-  constructor() {
-    this.db = new WaveDB(DB_PATH, {
+  constructor(path = DB_PATH) {
+    this.db = new WaveDB(path, {
       delimiter: '/',
       wal: { syncMode: 'debounced' },
     });
@@ -23,10 +30,11 @@ export class DaoDatabase {
 
   async getOperationCount(): Promise<number> {
     const last = await this.db.get('meta/operation_count');
-    return last ? parseInt(last as string, 10) : 0;
+    const s = valueToString(last);
+    return s ? parseInt(s, 10) : 0;
   }
 
-  async setOperationCount(n: number): Promise<void> {
+  private async setOperationCount(n: number): Promise<void> {
     await this.db.put('meta/operation_count', String(n));
   }
 
@@ -36,7 +44,11 @@ export class DaoDatabase {
     for (let i = after; i < count; i++) keys.push(`log/${i}`);
     if (keys.length === 0) return [];
     const values = await this.db.getMany(keys);
-    return values.map((v) => JSON.parse(v as string));
+    return values.map((v) => {
+      const s = valueToString(v);
+      if (s === null) throw new Error('Missing operation entry');
+      return JSON.parse(s) as ServerOperation;
+    });
   }
 
   async putSnapshot(snapshot: EncryptedSnapshot): Promise<void> {
@@ -44,7 +56,7 @@ export class DaoDatabase {
   }
 
   async getSnapshot(username: string): Promise<EncryptedSnapshot | null> {
-    return (await this.db.getObject(`snapshots/${username}`)) as EncryptedSnapshot | null;
+    return this.db.getObject<EncryptedSnapshot>(`snapshots/${username}`);
   }
 
   async putUser(user: PublicUser): Promise<void> {
@@ -52,7 +64,7 @@ export class DaoDatabase {
   }
 
   async getUser(username: string): Promise<PublicUser | null> {
-    return (await this.db.getObject(`users/${username}`)) as PublicUser | null;
+    return this.db.getObject<PublicUser>(`users/${username}`);
   }
 
   async userExists(username: string): Promise<boolean> {
@@ -60,16 +72,28 @@ export class DaoDatabase {
   }
 
   async getAllUsers(): Promise<PublicUser[]> {
-    const iter = this.db.createReadStream({ start: 'users/', end: 'users/~' });
-    const users: PublicUser[] = [];
-    return new Promise((resolve, reject) => {
-      iter.on('data', ({ value }: { value: string }) => users.push(JSON.parse(value)));
-      iter.on('end', () => resolve(users));
+    const iter = this.db.createReadStream({ start: 'users/', end: 'users/~', keys: true, values: false });
+    const usernames = new Set<string>();
+    await new Promise<void>((resolve, reject) => {
+      iter.on('data', ({ key }: { key: string | Buffer | null }) => {
+        const s = valueToString(key);
+        if (s === null) return;
+        const match = s.match(/^users\/([^/]+)(?:\/|$)/);
+        if (match) usernames.add(match[1]);
+      });
+      iter.on('end', () => resolve());
       iter.on('error', reject);
     });
+    return Promise.all(
+      [...usernames].map(async (username) => {
+        const user = await this.getUser(username);
+        if (user === null) throw new Error(`User missing: ${username}`);
+        return user;
+      })
+    );
   }
 
-  async close(): Promise<void> {
+  close(): void {
     this.db.close();
   }
 }

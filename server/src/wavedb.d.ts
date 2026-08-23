@@ -20,8 +20,8 @@ declare module '@vijayee/wavedb' {
     put(key: string, value: string | Buffer): Promise<void>;
     get(key: string): Promise<string | Buffer | null>;
     getMany(keys: string[]): Promise<Array<string | Buffer | null>>;
-    putObject(key: string, obj: any): Promise<void>;
-    getObject(key: string): Promise<any | null>;
+    putObject<T>(key: string, obj: T): Promise<void>;
+    getObject<T>(key: string): Promise<T | null>;
     createReadStream(options?: ReadStreamOptions): NodeJS.ReadableStream;
     close(): void;
   }
