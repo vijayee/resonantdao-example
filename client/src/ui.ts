@@ -11,6 +11,7 @@ import {
   loadLoginBundle,
   saveWalletState,
   loadWalletState,
+  importWalletState,
   WalletState,
 } from './storage';
 import { ServerClient } from './server-client';
@@ -52,7 +53,7 @@ export class AppUI {
 
   private bindDashboard() {
     const logoutBtn = document.getElementById('logout');
-    logoutBtn?.addEventListener('click', () => this.onLogout());
+    logoutBtn?.addEventListener('click', () => void this.onLogout());
 
     const proposalForm = document.getElementById('proposal-form') as HTMLFormElement | null;
     proposalForm?.addEventListener('submit', (ev) => {
@@ -92,16 +93,17 @@ export class AppUI {
 
   private async replayLog(dao: BrowserDao) {
     const logMsg = await this.client.getLog(0);
-    if (logMsg.kind === 'log') {
-      for (const stored of logMsg.operations) {
-        try {
-          await dao.executeRemote(base64ToBytes(stored.bytes));
-        } catch (err) {
-          console.warn('Failed to replay operation:', err);
-        }
+    if (logMsg.kind !== 'log') return;
+    for (const stored of logMsg.operations) {
+      try {
+        await this.safeExecuteRemote(base64ToBytes(stored.bytes));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.setStatus(`State sync failed: ${message}`);
+        return;
       }
-      this.renderProposals();
     }
+    this.renderProposals();
   }
 
   private async onRegister() {
@@ -145,7 +147,8 @@ export class AppUI {
         encryptionKey: bundle.keys.encryptionKey,
         keyVersion: res.keyVersion,
       };
-      await saveWalletState(walletState);
+      const snapshot = await saveWalletState(walletState);
+      await this.client.putSnapshot(snapshot);
 
       this.dao = dao;
       this.wallet = walletState;
@@ -183,10 +186,21 @@ export class AppUI {
       this.setStatus('Unlocking wallet...');
       const keys = await loginWallet(username, password, bundle.loginInfo, bundle.keyStore);
 
-      const wallet = await loadWalletState(username, keys.encryptionKey);
+      let wallet = await loadWalletState(username, keys.encryptionKey);
       if (!wallet) {
-        this.setStatus('Wallet state not found.');
-        return;
+        this.setStatus('Fetching wallet snapshot from server...');
+        const snapshotRes = await this.client.getSnapshot(username);
+        if (snapshotRes.kind !== 'snapshot' || !snapshotRes.snapshot) {
+          this.setStatus('No wallet state found locally or on server.');
+          return;
+        }
+        const restored = await importWalletState(username, keys.encryptionKey, snapshotRes.snapshot);
+        if (!restored) {
+          this.setStatus('Failed to restore wallet from server snapshot.');
+          return;
+        }
+        await saveWalletState(restored);
+        wallet = restored;
       }
 
       const dao = new BrowserDao();
@@ -284,10 +298,11 @@ export class AppUI {
   private async onServerMessage(msg: ServerMessage) {
     if (msg.kind === 'broadcast') {
       try {
-        await this.dao?.executeRemote(base64ToBytes(msg.operation.bytes));
+        await this.safeExecuteRemote(base64ToBytes(msg.operation.bytes));
         this.renderProposals();
       } catch (err) {
-        console.warn('Failed to apply broadcast operation:', err);
+        const message = err instanceof Error ? err.message : String(err);
+        this.setStatus(`Failed to apply update: ${message}`);
       }
     } else if (msg.kind === 'members') {
       for (const user of msg.users) {
@@ -320,7 +335,15 @@ export class AppUI {
     this.dashboardSection?.classList.add('hidden');
   }
 
-  private onLogout() {
+  private async onLogout() {
+    if (this.wallet) {
+      try {
+        const snapshot = await saveWalletState(this.wallet);
+        await this.client.putSnapshot(snapshot);
+      } catch (err) {
+        console.warn('Failed to upload snapshot on logout:', err);
+      }
+    }
     this.dao?.destroy();
     this.wallet = null;
     this.dao = null;

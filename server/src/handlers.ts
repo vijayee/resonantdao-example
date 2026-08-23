@@ -13,6 +13,17 @@ function base64ToBytes(base64: string): Uint8Array {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
+function isEncryptedSnapshot(value: unknown): value is { username: string; iv: string; ciphertext: string; updatedAt: number } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.username === 'string' &&
+    typeof v.iv === 'string' &&
+    typeof v.ciphertext === 'string' &&
+    typeof v.updatedAt === 'number'
+  );
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
 }
@@ -121,20 +132,22 @@ export class ConnectionHandler {
           if (!isNonEmptyString(msg.operationBytes)) {
             return this.send(ws, { kind: 'error', message: 'Invalid submit_op payload' });
           }
-          // Intentional PoC trade-off: execute before persisting so invalid operations
-          // are rejected before entering the log. If persistence fails after execution,
-          // the in-memory DAO mirror will be ahead of the persisted log; a production
-          // implementation would need rollback via state snapshots or a two-phase commit.
+          // Persist the operation bytes before executing so the canonical log is never
+          // behind the in-memory mirror. Invalid operations are still appended to the
+          // log and skipped on replay (see hydrateDao); a production system would
+          // either prune invalid entries or use a two-phase commit.
           const operationBytes = msg.operationBytes;
           const socket = ws;
           this.submitQueue = this.submitQueue.then(async () => {
             try {
-              const bytes = base64ToBytes(operationBytes);
-              const op = await this.dao.deserializeOperation(bytes);
-              this.dao.executeOperation(op);
               const index = await this.db.getOperationCount();
               const stored: StoredOperation = { index, bytes: operationBytes };
               await this.db.putOperation(index, stored);
+
+              const bytes = base64ToBytes(operationBytes);
+              const op = await this.dao.deserializeOperation(bytes);
+              this.dao.executeOperation(op);
+
               this.broadcast({ kind: 'broadcast', operation: stored });
               this.send(socket, { kind: 'op_accepted', index });
             } catch (err) {
@@ -160,6 +173,18 @@ export class ConnectionHandler {
           // on login/get_snapshot without extra authentication in this PoC.
           const snapshot = await this.db.getSnapshot(msg.username);
           this.send(ws, { kind: 'snapshot', snapshot });
+          break;
+        }
+
+        case 'put_snapshot': {
+          if (!isEncryptedSnapshot(msg.snapshot)) {
+            return this.send(ws, { kind: 'error', message: 'Invalid put_snapshot payload' });
+          }
+          const boundUser = this.socketUsers.get(ws);
+          if (boundUser !== msg.snapshot.username) {
+            return this.send(ws, { kind: 'error', message: 'Not authorized for this snapshot' });
+          }
+          await this.db.putSnapshot(msg.snapshot);
           break;
         }
 

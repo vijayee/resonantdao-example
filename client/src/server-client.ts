@@ -263,4 +263,8 @@ export class ServerClient {
     await this.send({ kind: 'get_snapshot', username });
     return this.waitFor('snapshot', 30000, 'error');
   }
+
+  async putSnapshot(snapshot: EncryptedSnapshot): Promise<void> {
+    await this.send({ kind: 'put_snapshot', snapshot });
+  }
 }

@@ -111,7 +111,7 @@ export async function loadLoginBundle(username: string): Promise<LoginBundle | n
   });
 }
 
-export async function saveWalletState(state: WalletState): Promise<void> {
+export async function saveWalletState(state: WalletState): Promise<EncryptedSnapshot> {
   const db = await openDb();
   const encrypted = await aesGcmEncrypt(
     state.encryptionKey,
@@ -121,9 +121,25 @@ export async function saveWalletState(state: WalletState): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(WALLET_STORE, 'readwrite');
     tx.objectStore(WALLET_STORE).put(encrypted, state.username);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => resolve(encrypted);
     tx.onerror = () => reject(tx.error);
   });
+}
+
+export async function importWalletState(
+  username: string,
+  encryptionKey: Uint8Array,
+  snapshot: EncryptedSnapshot
+): Promise<WalletState | null> {
+  if (snapshot.username !== username) return null;
+  try {
+    const plaintext = await aesGcmDecrypt(encryptionKey, snapshot);
+    const parsed = deserializeWalletState(plaintext);
+    if (parsed.username !== username) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export async function loadWalletState(

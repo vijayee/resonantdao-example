@@ -60,6 +60,7 @@ export class BrowserDao {
   }
 
   registerMember(username: string, publicKeyHex: string) {
+    if (this.node.getUser(username)?.status === 'active') return;
     this.node.registerUser(username, publicKeyHex);
     this.node.grantRole(username, 'role', 'member', ADMIN_ID);
     this.node.grantRole(username, 'reputation', '1', ADMIN_ID);

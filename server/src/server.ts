@@ -15,13 +15,21 @@ function base64ToBytes(base64: string): Uint8Array {
 
 export async function hydrateDao(db: DaoDatabase, dao: DaoNode): Promise<void> {
   for (const user of await db.getAllUsers()) {
-    dao.registerMember(user.username, user.publicKeyHex);
+    try {
+      dao.registerMember(user.username, user.publicKeyHex);
+    } catch (err) {
+      console.warn('Failed to re-register user during hydration:', user.username, err);
+    }
   }
   const ops = await db.getOperations(0);
   for (const op of ops) {
-    const bytes = base64ToBytes(op.bytes);
-    const operation = await dao.deserializeOperation(bytes);
-    dao.executeOperation(operation);
+    try {
+      const bytes = base64ToBytes(op.bytes);
+      const operation = await dao.deserializeOperation(bytes);
+      dao.executeOperation(operation);
+    } catch (err) {
+      console.warn('Skipping invalid operation during hydration:', op.index, err);
+    }
   }
 }
 
