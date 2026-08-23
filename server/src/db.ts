@@ -1,5 +1,5 @@
 import { WaveDB } from '@vijayee/wavedb';
-import { EncryptedSnapshot, PublicUser, ServerOperation } from '../../shared/src/types';
+import { EncryptedSnapshot, PublicUser, StoredOperation } from '../../shared/src/types';
 
 const DB_PATH = process.env.WAVEDB_PATH || './data/wavedb';
 
@@ -20,8 +20,8 @@ export class DaoDatabase {
     });
   }
 
-  async putOperation(index: number, op: ServerOperation): Promise<void> {
-    await this.db.put(`log/${index}`, JSON.stringify(op));
+  async putOperation(index: number, op: StoredOperation): Promise<void> {
+    await this.db.put(`log/${index}`, op.bytes);
     const current = await this.getOperationCount();
     if (index + 1 > current) {
       await this.setOperationCount(index + 1);
@@ -38,17 +38,16 @@ export class DaoDatabase {
     await this.db.put('meta/operation_count', String(n));
   }
 
-  async getOperations(after: number): Promise<ServerOperation[]> {
+  async getOperations(after: number): Promise<StoredOperation[]> {
     const count = await this.getOperationCount();
     const keys: string[] = [];
     for (let i = after; i < count; i++) keys.push(`log/${i}`);
     if (keys.length === 0) return [];
     const values = await this.db.getMany(keys);
-    return values.map((v) => {
-      const s = valueToString(v);
-      if (s === null) throw new Error('Missing operation entry');
-      return JSON.parse(s) as ServerOperation;
-    });
+    return values
+      .map(valueToString)
+      .map((v, i) => (v === null ? null : { index: after + i, bytes: v }))
+      .filter((v): v is StoredOperation => v !== null);
   }
 
   async putSnapshot(snapshot: EncryptedSnapshot): Promise<void> {

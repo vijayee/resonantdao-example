@@ -19,10 +19,10 @@ describe('DaoDatabase', () => {
   });
 
   it('stores and retrieves operations', async () => {
-    await db.putOperation(0, { type: 'noop', signerId: 'alice', nodeId: 'server', payload: null, signature: null });
+    await db.putOperation(0, { index: 0, bytes: 'eyJ0eXBlIjoibm9vcCJ9' });
     const ops = await db.getOperations(0);
     expect(ops).toHaveLength(1);
-    expect(ops[0].type).toBe('noop');
+    expect(ops[0].bytes).toBe('eyJ0eXBlIjoibm9vcCJ9');
   });
 
   it('stores and retrieves snapshots', async () => {
@@ -42,6 +42,7 @@ describe('DaoDatabase', () => {
       username: 'alice',
       publicKeyHex: 'alice-public-key',
       registeredAt: Date.now(),
+      keyVersion: 3,
     };
     await db.putUser(user);
     const got = await db.getUser('alice');
@@ -50,13 +51,13 @@ describe('DaoDatabase', () => {
 
   it('reports user existence', async () => {
     expect(await db.userExists('bob')).toBe(false);
-    await db.putUser({ username: 'bob', publicKeyHex: 'bob-public-key', registeredAt: Date.now() });
+    await db.putUser({ username: 'bob', publicKeyHex: 'bob-public-key', registeredAt: Date.now(), keyVersion: 3 });
     expect(await db.userExists('bob')).toBe(true);
   });
 
   it('lists all users', async () => {
-    const alice: PublicUser = { username: 'alice', publicKeyHex: 'alice-public-key', registeredAt: 1 };
-    const bob: PublicUser = { username: 'bob', publicKeyHex: 'bob-public-key', registeredAt: 2 };
+    const alice: PublicUser = { username: 'alice', publicKeyHex: 'alice-public-key', registeredAt: 1, keyVersion: 3 };
+    const bob: PublicUser = { username: 'bob', publicKeyHex: 'bob-public-key', registeredAt: 2, keyVersion: 3 };
     await db.putUser(alice);
     await db.putUser(bob);
     const all = await db.getAllUsers();

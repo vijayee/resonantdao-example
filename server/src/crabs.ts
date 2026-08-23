@@ -1,16 +1,12 @@
 import { Node, KeyPair, Operation } from 'crabs-wasm';
 import { POLICIES, STATE_NAMES, VOTE_THRESHOLD } from '../../shared/src/policies';
-import { AddMemberPayload, ExecutePayload, ProposalPayload, ServerOperation, VotePayload } from '../../shared/src/types';
+import { AddMemberPayload, ExecutePayload, ProposalPayload, VotePayload } from '../../shared/src/types';
 
 const ADMIN_ID = 'admin';
 
 export class DaoNode {
   node!: Node;
   private nodeKey!: KeyPair;
-  // The crabs-wasm JS wrapper does not expose user key_version or a setter for
-  // operation signer_key_version, but CRABS requires them to match at execute
-  // time (R7-04). We track the version ourselves because grantRole increments it.
-  private userKeyVersions = new Map<string, number>();
 
   async init() {
     this.node = await Node.create(ADMIN_ID, { ordering: 'hlc' });
@@ -61,61 +57,38 @@ export class DaoNode {
     });
   }
 
-  registerMember(username: string, publicKeyHex: string) {
+  registerMember(username: string, publicKeyHex: string): number {
     // Initial attributes cannot contain privileged names such as "role";
-    // roles are granted separately by the bootstrap admin.
-    this.node.registerUser(username, publicKeyHex, undefined);
-    let keyVersion = 1;
+    // register the user with no initial attributes, then grant roles via admin ops.
+    // registerUser sets key_version to 1; each grantRole bumps it by 1.
+    this.node.registerUser(username, publicKeyHex);
     this.node.grantRole(username, 'role', 'member', ADMIN_ID);
-    keyVersion++;
     this.node.grantRole(username, 'reputation', '1', ADMIN_ID);
-    keyVersion++;
-    this.userKeyVersions.set(username, keyVersion);
+    return 3;
   }
 
-  async createSignedOperation(type: string, signerId: string, payload: object, signingKey: KeyPair | string): Promise<Operation> {
+  getUserKeyVersion(username: string): number {
+    // For this PoC the server is the only source of attribute changes, so it
+    // can return the fixed post-registration version. If attributes ever change
+    // at runtime, this should be derived from the actual CRABS state.
+    return this.isMember(username) ? 3 : 0;
+  }
+
+  async createAdminOperation(type: string, payload: object): Promise<Operation> {
     const op = await Operation.create(type);
-    op.signerId = signerId;
+    op.signerId = ADMIN_ID;
     op.nodeId = 'server';
-    // The crabs-wasm handler payload getter requires a null-terminated buffer,
-    // but the Operation payload setter encodes strings without a trailing zero.
-    // Append an explicit null byte so handlers can read the payload back.
-    const payloadJson = JSON.stringify(payload);
-    op.payload = new TextEncoder().encode(payloadJson + '\0');
-    // CRABS requires the operation's signer_key_version to match the user's
-    // current key_version. The crabs-wasm JS wrapper does not expose a setter,
-    // so we patch the field directly in WASM memory before signing.
-    const keyVersion = this.userKeyVersions.get(signerId) ?? 0;
-    this.setOperationSignerKeyVersion(op, keyVersion);
-    this.node.sign(op, signingKey);
+    op.payload = JSON.stringify(payload);
+    this.node.sign(op, this.nodeKey);
     return op;
-  }
-
-  private setOperationSignerKeyVersion(op: Operation, version: number): void {
-    // Based on the in-memory operation_t layout (WASM32, default alignment):
-    // type[64], uuid[16], payload*(4), payload_size(4), payload_format(1),
-    // padding(3), resources*(4), resource_count(4), required_state*(4),
-    // next_state*(4), lock_claims*(4), lock_claim_count(4), policy[256],
-    // signature[64], signer_id[64], padding(4), signer_key_version(8).
-    // Therefore signer_key_version is at offset 504.
-    const M = (op as any)._M;
-    const ptr = (op as any)._ptr;
-    if (!M || !ptr) return;
-    const offset = 504;
-    const addr = ptr + offset;
-    const v = BigInt(version);
-    M.HEAPU8[addr] = Number(v & BigInt(0xff));
-    M.HEAPU8[addr + 1] = Number((v >> BigInt(8)) & BigInt(0xff));
-    M.HEAPU8[addr + 2] = Number((v >> BigInt(16)) & BigInt(0xff));
-    M.HEAPU8[addr + 3] = Number((v >> BigInt(24)) & BigInt(0xff));
-    M.HEAPU8[addr + 4] = Number((v >> BigInt(32)) & BigInt(0xff));
-    M.HEAPU8[addr + 5] = Number((v >> BigInt(40)) & BigInt(0xff));
-    M.HEAPU8[addr + 6] = Number((v >> BigInt(48)) & BigInt(0xff));
-    M.HEAPU8[addr + 7] = Number((v >> BigInt(56)) & BigInt(0xff));
   }
 
   executeOperation(op: Operation) {
     this.node.execute(op);
+  }
+
+  async deserializeOperation(bytes: Uint8Array): Promise<Operation> {
+    return await Operation.deserialize(bytes);
   }
 
   getProposalVotes(proposalId: string): { yes: number; no: number } {
@@ -132,13 +105,5 @@ export class DaoNode {
 
   serialize(): Uint8Array {
     return this.node.serialize();
-  }
-
-  async deserializeOperation(so: ServerOperation): Promise<Operation> {
-    const op = await Operation.create(so.type);
-    op.signerId = so.signerId;
-    op.nodeId = so.nodeId;
-    op.payload = so.payload || undefined;
-    return op;
   }
 }

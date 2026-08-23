@@ -4,6 +4,7 @@ export interface PublicUser {
   username: string;
   publicKeyHex: string;
   registeredAt: number;
+  keyVersion: number;
 }
 
 export interface EncryptedSnapshot {
@@ -13,12 +14,10 @@ export interface EncryptedSnapshot {
   updatedAt: number;
 }
 
-export interface ServerOperation {
-  type: 'create_proposal' | 'vote' | 'execute' | 'add_member' | 'noop';
-  signerId: string;
-  nodeId: string;
-  payload: string | null;
-  signature: string | null;
+// Serialized CRABS operation stored in the server log and broadcast to peers.
+export interface StoredOperation {
+  index: number;
+  bytes: string; // base64
 }
 
 export interface ProposalPayload {
@@ -44,15 +43,15 @@ export interface AddMemberPayload {
 export type ClientMessage =
   | { kind: 'register'; username: string; publicKeyHex: string }
   | { kind: 'login'; username: string }
-  | { kind: 'submit_op'; operation: ServerOperation }
+  | { kind: 'submit_op'; operationBytes: string }
   | { kind: 'get_log'; after: number }
   | { kind: 'get_snapshot'; username: string };
 
 export type ServerMessage =
-  | { kind: 'registered'; attributeMachine: string; snapshot?: EncryptedSnapshot }
+  | { kind: 'registered'; username: string; publicKeyHex: string; keyVersion: number; snapshot?: EncryptedSnapshot }
   | { kind: 'snapshot'; snapshot: EncryptedSnapshot | null }
-  | { kind: 'log'; operations: ServerOperation[] }
-  | { kind: 'op_accepted'; operation: ServerOperation }
+  | { kind: 'log'; operations: StoredOperation[] }
+  | { kind: 'op_accepted'; index: number }
   | { kind: 'op_rejected'; reason: string }
-  | { kind: 'broadcast'; operation: ServerOperation }
+  | { kind: 'broadcast'; operation: StoredOperation }
   | { kind: 'error'; message: string };
