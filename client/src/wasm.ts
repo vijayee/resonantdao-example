@@ -9,7 +9,7 @@ export async function loadEAuth(): Promise<eauth.EAuth> {
   return EAuth.create();
 }
 
-export async function loadCRABS(): Promise<any> {
+export async function loadCRABS(): Promise<typeof import('/wasm/crabs/index.js')> {
   return getCRABSModule();
 }
 

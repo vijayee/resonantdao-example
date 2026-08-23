@@ -5,6 +5,24 @@ const DB_NAME = 'ResonantDAO';
 const STORE_NAME = 'wallet';
 const KEY = 'encryptedState';
 
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000; // 32k
+  let result = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    result += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(result);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
@@ -28,29 +46,32 @@ export interface LocalWalletState {
   keys: WalletKeys;
 }
 
-export async function aesGcmEncrypt(plaintext: Uint8Array, key: Uint8Array): Promise<EncryptedSnapshot> {
+export async function aesGcmEncrypt(
+  plaintext: Uint8Array,
+  key: Uint8Array,
+  username: string
+): Promise<EncryptedSnapshot> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['encrypt']);
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, plaintext as BufferSource));
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as BufferSource }, cryptoKey, plaintext as BufferSource));
   return {
-    username: '',
-    iv: btoa(String.fromCharCode(...iv)),
-    ciphertext: btoa(String.fromCharCode(...ciphertext)),
+    username,
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(ciphertext),
     updatedAt: Date.now(),
   };
 }
 
 export async function aesGcmDecrypt(snapshot: EncryptedSnapshot, key: Uint8Array): Promise<Uint8Array> {
-  const iv = Uint8Array.from(atob(snapshot.iv), (c) => c.charCodeAt(0));
-  const ciphertext = Uint8Array.from(atob(snapshot.ciphertext), (c) => c.charCodeAt(0));
+  const iv = base64ToBytes(snapshot.iv);
+  const ciphertext = base64ToBytes(snapshot.ciphertext);
   const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['decrypt']);
-  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, cryptoKey, ciphertext as BufferSource));
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv as BufferSource }, cryptoKey, ciphertext as BufferSource));
 }
 
 export async function saveLocalState(state: LocalWalletState): Promise<void> {
   const db = await openDb();
-  const encrypted = await aesGcmEncrypt(serializeLocalState(state), state.keys.encryptionKey);
-  encrypted.username = state.username;
+  const encrypted = await aesGcmEncrypt(serializeLocalState(state), state.keys.encryptionKey, state.username);
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     tx.objectStore(STORE_NAME).put(encrypted, KEY);
@@ -68,7 +89,9 @@ export async function loadLocalState(username: string, encryptionKey: Uint8Array
       const snapshot: EncryptedSnapshot | undefined = req.result;
       if (!snapshot) return resolve(null);
       const plaintext = await aesGcmDecrypt(snapshot, encryptionKey);
-      resolve(deserializeLocalState(plaintext));
+      const parsed = deserializeLocalState(plaintext);
+      if (parsed.username !== username) return resolve(null);
+      resolve(parsed);
     };
     req.onerror = () => reject(req.error);
   });
