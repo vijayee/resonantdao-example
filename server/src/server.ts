@@ -27,5 +27,18 @@ export async function startServer() {
     console.log(`ResonantDAO Example server listening on http://localhost:${PORT}`);
   });
 
-  return { server, db, dao };
+  return {
+    server,
+    db,
+    dao,
+    stop: () =>
+      new Promise<void>((resolve) => {
+        wss.close(() => {
+          server.close(() => {
+            db.close();
+            resolve();
+          });
+        });
+      }),
+  };
 }
