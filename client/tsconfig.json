@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../shared/src/*"],
+      "/wasm/eauth/index.js": ["../node_modules/eauth-wasm/index.d.ts"],
+      "/wasm/crabs/index.js": ["../node_modules/crabs-wasm/index.d.ts"]
+    },
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src/**/*", "../shared/src/**/*"]
+}

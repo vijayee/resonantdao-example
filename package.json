@@ -17,6 +17,7 @@
   "dependencies": {
     "@vijayee/wavedb": "file:../WaveDB/bindings/nodejs",
     "crabs-wasm": "file:../CRABS/bindings/wasm",
+    "eauth-wasm": "file:../EAuth/bindings/wasm",
     "express": "^4.19.2",
     "ws": "^8.18.0"
   },
