@@ -48,7 +48,7 @@ export type ClientMessage =
   | { kind: 'get_snapshot'; username: string };
 
 export type ServerMessage =
-  | { kind: 'registered'; username: string; publicKeyHex: string; keyVersion: number; snapshot?: EncryptedSnapshot }
+  | { kind: 'registered'; username: string; publicKeyHex: string; keyVersion: number; attributeMachine: string; snapshot?: EncryptedSnapshot }
   | { kind: 'snapshot'; snapshot: EncryptedSnapshot | null }
   | { kind: 'log'; operations: StoredOperation[] }
   | { kind: 'op_accepted'; index: number }
