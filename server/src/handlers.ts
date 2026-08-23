@@ -23,6 +23,7 @@ function isNonNegativeInteger(value: unknown): value is number {
 
 export class ConnectionHandler {
   private sockets = new Set<WebSocket>();
+  private socketUsers = new WeakMap<WebSocket, string>();
   private submitQueue = Promise.resolve();
   private registering = new Set<string>();
 
@@ -75,6 +76,7 @@ export class ConnectionHandler {
               keyVersion,
             };
             await this.db.putUser(user);
+            this.socketUsers.set(ws, msg.username);
             const snapshot = await this.db.getSnapshot(msg.username);
             this.send(ws, {
               kind: 'registered',
@@ -99,6 +101,7 @@ export class ConnectionHandler {
           if (!(await this.db.userExists(msg.username))) {
             return this.send(ws, { kind: 'error', message: 'User not found' });
           }
+          this.socketUsers.set(ws, msg.username);
           const snapshot = await this.db.getSnapshot(msg.username);
           this.send(ws, { kind: 'snapshot', snapshot });
           break;
@@ -117,22 +120,24 @@ export class ConnectionHandler {
           if (!isNonEmptyString(msg.operationBytes)) {
             return this.send(ws, { kind: 'error', message: 'Invalid submit_op payload' });
           }
+          // Execute-then-persist is intentional for validation; a production system
+          // would need a rollback/snapshot mechanism if persistence fails after execution.
           const operationBytes = msg.operationBytes;
+          const socket = ws;
           this.submitQueue = this.submitQueue.then(async () => {
-            let op;
             try {
               const bytes = base64ToBytes(operationBytes);
-              op = await this.dao.deserializeOperation(bytes);
+              const op = await this.dao.deserializeOperation(bytes);
               this.dao.executeOperation(op);
+              const index = await this.db.getOperationCount();
+              const stored: StoredOperation = { index, bytes: operationBytes };
+              await this.db.putOperation(index, stored);
+              this.broadcast({ kind: 'broadcast', operation: stored });
+              this.send(socket, { kind: 'op_accepted', index });
             } catch (err) {
-              this.send(ws, { kind: 'op_rejected', reason: String(err) });
-              return;
+              console.error('submit_op failed:', err);
+              this.send(socket, { kind: 'op_rejected', reason: String(err) });
             }
-            const index = await this.db.getOperationCount();
-            const stored: StoredOperation = { index, bytes: operationBytes };
-            await this.db.putOperation(index, stored);
-            this.broadcast({ kind: 'broadcast', operation: stored });
-            this.send(ws, { kind: 'op_accepted', index });
           });
           break;
         }
@@ -140,6 +145,13 @@ export class ConnectionHandler {
         case 'get_snapshot': {
           if (!isNonEmptyString(msg.username)) {
             return this.send(ws, { kind: 'error', message: 'Invalid get_snapshot payload' });
+          }
+          const boundUser = this.socketUsers.get(ws);
+          if (boundUser !== msg.username) {
+            return this.send(ws, { kind: 'error', message: 'Not authorized for this snapshot' });
+          }
+          if (!(await this.db.userExists(msg.username))) {
+            return this.send(ws, { kind: 'snapshot', snapshot: null });
           }
           // Snapshot access: snapshots are stored server-side for recovery and returned
           // on login/get_snapshot without extra authentication in this PoC.
