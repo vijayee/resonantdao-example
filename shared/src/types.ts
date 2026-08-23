@@ -1,5 +1,4 @@
 export const DAO_NAME = 'resonant-dao-example';
-export const PROPOSAL_THRESHOLD = 2;
 
 export interface PublicUser {
   username: string;
@@ -15,13 +14,11 @@ export interface EncryptedSnapshot {
 }
 
 export interface ServerOperation {
-  type: string;
+  type: 'create_proposal' | 'vote' | 'execute' | 'add_member';
   signerId: string;
   nodeId: string;
   payload: string | null;
   signature: string | null;
-  lamportTime?: number;
-  hlc?: string;
 }
 
 export interface ProposalPayload {

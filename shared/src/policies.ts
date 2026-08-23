@@ -1,14 +1,10 @@
+export const VOTE_THRESHOLD = 2;
+
 export const POLICIES = {
   create_proposal: 'role:member',
   vote: 'role:member',
-  execute: 'role:member AND votes >= threshold',
+  execute: `role:member AND votes >= ${VOTE_THRESHOLD}`,
   add_member: 'role:member',
-} as const;
-
-export const ATTRIBUTES = {
-  member: 'role:member',
-  reputation: (n: number) => `reputation:${n}`,
-  human: 'trust:human',
 } as const;
 
 export const STATE_NAMES = {
