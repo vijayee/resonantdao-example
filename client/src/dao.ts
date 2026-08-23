@@ -1,19 +1,28 @@
-import { Node, KeyPair, Operation } from './wasm';
+import {
+  Node as CRABSNode,
+  KeyPair as CRABSKeyPair,
+  Operation as CRABSOperation,
+} from './wasm';
+import type { Node, KeyPair, Operation } from '/wasm/crabs/index.js';
 import { POLICIES, STATE_NAMES, VOTE_THRESHOLD } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import { AddMemberPayload, ExecutePayload, ProposalPayload, VotePayload } from '@shared/types';
 
+type CRABSNode = Node;
+type CRABSKeyPair = KeyPair;
+type CRABSOperation = Operation;
+
 const ADMIN_ID = 'admin';
 
 export class BrowserDao {
-  node!: Node;
-  private signingKey!: KeyPair;
+  node!: CRABSNode;
+  private signingKey!: CRABSKeyPair;
   private keyVersion = 0;
 
   async init(signingSeedHex: string, attributeMachine: string, keyVersion: number) {
-    this.signingKey = KeyPair.fromPrivateHex(signingSeedHex);
+    this.signingKey = await CRABSKeyPair.fromPrivateHex(signingSeedHex);
     this.keyVersion = keyVersion;
-    this.node = await Node.create(ADMIN_ID, { ordering: 'hlc' });
+    this.node = await CRABSNode.create(ADMIN_ID, { ordering: 'hlc' });
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addOneShotFlag(STATE_NAMES.executedProposals);
@@ -78,7 +87,7 @@ export class BrowserDao {
   }
 
   private async signAndSerialize(type: string, userId: string, payloadJson: string): Promise<Uint8Array> {
-    const op = await Operation.create(type);
+    const op = await CRABSOperation.create(type);
     op.signerId = userId;
     op.nodeId = 'browser';
     // The crabs-wasm handler payload getter expects a null-terminated buffer.
