@@ -7,6 +7,8 @@
     "build": "bash scripts/build.sh",
     "build:server": "tsc -p server/tsconfig.json",
     "build:client": "vite build --config client/vite.config.ts",
+    "copy-wasm": "bash scripts/copy-wasm.sh",
+    "postinstall": "npm run copy-wasm",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "ts-node-dev --transpile-only server/src/index.ts",
     "dev:client": "vite --config client/vite.config.ts",
