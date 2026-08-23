@@ -12,7 +12,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "ts-node-dev --transpile-only server/src/index.ts",
     "dev:client": "vite --config client/vite.config.ts",
-    "test": "playwright test",
+    "test": "jest server/test --runInBand",
     "test:server": "jest server/test --runInBand"
   },
   "dependencies": {
