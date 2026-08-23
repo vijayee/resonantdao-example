@@ -14,7 +14,7 @@ export interface EncryptedSnapshot {
 }
 
 export interface ServerOperation {
-  type: 'create_proposal' | 'vote' | 'execute' | 'add_member';
+  type: 'create_proposal' | 'vote' | 'execute' | 'add_member' | 'noop';
   signerId: string;
   nodeId: string;
   payload: string | null;
