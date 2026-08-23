@@ -1,7 +1,11 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "outDir": "../dist/server"
+    "outDir": "../dist/server",
+    "baseUrl": ".",
+    "paths": {
+      "crabs-wasm": ["src/crabs-wasm.d.ts"]
+    }
   },
   "include": ["src/**/*", "../shared/src/**/*"]
 }
