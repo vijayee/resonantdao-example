@@ -4,58 +4,115 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ResonantDAO Example</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.5rem; }
-    h2 { font-size: 1.2rem; margin-top: 1.5rem; }
-    .hidden { display: none; }
-    form { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
-    input, button { padding: 0.5rem; font-size: 1rem; }
-    button { cursor: pointer; }
-    ul { list-style: none; padding: 0; }
-    li { border: 1px solid #ccc; border-radius: 0.25rem; padding: 0.75rem; margin-bottom: 0.75rem; }
-    .vote-counts { margin: 0.5rem 0; }
-    .actions { display: flex; gap: 0.5rem; }
-    #status { margin-top: 1rem; color: #d32f2f; min-height: 1.25rem; }
-  </style>
+  <link rel="stylesheet" href="/src/theme.css" />
 </head>
 <body>
-  <h1>ResonantDAO Example</h1>
+  <div id="app">
+    <!-- Auth stage -->
+    <main id="auth" class="auth-stage">
+      <div class="auth-card" role="tabpanel" aria-label="Authentication">
+        <div class="auth-card__brand">
+          <h1>Resonant<span>DAO</span></h1>
+          <p>Contribution economy demo</p>
+        </div>
 
-  <section id="auth">
-    <h2>Register</h2>
-    <form id="register-form">
-      <input id="register-username" type="text" placeholder="Username" required />
-      <input id="register-password" type="password" placeholder="Password" required />
-      <button type="submit">Register</button>
-    </form>
+        <div class="auth-tabs" role="tablist" aria-label="Register or login">
+          <button id="tab-register" class="auth-tab" type="button" role="tab" aria-selected="true" aria-controls="register-panel">
+            Register
+          </button>
+          <button id="tab-login" class="auth-tab" type="button" role="tab" aria-selected="false" aria-controls="login-panel">
+            Login
+          </button>
+        </div>
 
-    <h2>Login</h2>
-    <form id="login-form">
-      <input id="login-username" type="text" placeholder="Username" required />
-      <input id="login-password" type="password" placeholder="Password" required />
-      <button type="submit">Login</button>
-    </form>
-  </section>
+        <div id="register-panel" class="auth-form" role="tabpanel" aria-labelledby="tab-register">
+          <form id="register-form" class="auth-form">
+            <div class="form-group">
+              <label class="form-label" for="register-username">Username</label>
+              <input id="register-username" class="form-input" type="text" autocomplete="username" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="register-password">Password</label>
+              <input id="register-password" class="form-input" type="password" autocomplete="new-password" required />
+            </div>
+            <button class="button button--primary" type="submit">Create account</button>
+          </form>
+        </div>
 
-  <section id="dashboard" class="hidden">
-    <p>Welcome, <span id="username"></span>! <button id="logout" type="button">Logout</button></p>
+        <div id="login-panel" class="auth-form hidden" role="tabpanel" aria-labelledby="tab-login">
+          <form id="login-form" class="auth-form">
+            <div class="form-group">
+              <label class="form-label" for="login-username">Username</label>
+              <input id="login-username" class="form-input" type="text" autocomplete="username" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="login-password">Password</label>
+              <input id="login-password" class="form-input" type="password" autocomplete="current-password" required />
+            </div>
+            <button class="button button--primary" type="submit">Sign in</button>
+          </form>
+        </div>
+      </div>
+    </main>
 
-    <h2>Members</h2>
-    <ul id="members"></ul>
+    <!-- Dashboard stage -->
+    <div id="dashboard" class="app-shell hidden">
+      <header class="app-header">
+        <div class="app-header__brand">Resonant<span>DAO</span></div>
+        <div class="app-header__user">
+          <span id="username"></span>
+          <button id="logout" class="button button--secondary button--small" type="button">Logout</button>
+        </div>
+      </header>
 
-    <h2>Create Proposal</h2>
-    <form id="proposal-form">
-      <input id="proposal-title" type="text" placeholder="Title" required />
-      <input id="proposal-description" type="text" placeholder="Description" />
-      <button type="submit">Create Proposal</button>
-    </form>
+      <main class="app-main">
+        <div class="dashboard">
+          <aside class="dashboard__panel">
+            <section class="section-card" aria-labelledby="members-title">
+              <div class="section-card__header">
+                <h2 id="members-title" class="section-card__title">Members</h2>
+              </div>
+              <ul id="members" class="member-list"></ul>
+            </section>
+          </aside>
 
-    <h2>Proposals</h2>
-    <ul id="proposals"></ul>
-  </section>
+          <div class="dashboard__panel">
+            <section class="section-card" aria-labelledby="create-title">
+              <div class="section-card__header">
+                <h2 id="create-title" class="section-card__title">New proposal</h2>
+              </div>
+              <form id="proposal-form" class="proposal-form">
+                <div class="form-group">
+                  <label class="form-label" for="proposal-title">Title</label>
+                  <input id="proposal-title" class="form-input" type="text" placeholder="What do you want to propose?" required />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="proposal-description">Description</label>
+                  <input id="proposal-description" class="form-input" type="text" placeholder="Optional details" />
+                </div>
+                <div class="proposal-form__actions">
+                  <button class="button button--primary" type="submit">Create proposal</button>
+                </div>
+              </form>
+            </section>
 
-  <div id="status"></div>
+            <section class="section-card" aria-labelledby="proposals-title">
+              <div class="section-card__header">
+                <h2 id="proposals-title" class="section-card__title">Proposals</h2>
+              </div>
+              <ul id="proposals" class="proposal-list"></ul>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <footer class="app-footer">
+        ResonantDAO Example — browser-based DAO proof of concept
+      </footer>
+    </div>
+
+    <div id="status" class="status-bar status-bar--neutral" role="status" aria-live="polite"></div>
+  </div>
 
   <script src="/wasm/eauth/eauth.js"></script>
   <script src="/wasm/crabs/crabs.js"></script>

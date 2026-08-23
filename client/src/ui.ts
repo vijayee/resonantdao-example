@@ -22,6 +22,8 @@ export class AppUI {
   private wallet: WalletState | null = null;
   private dao: BrowserDao | null = null;
   private submitting = false;
+  private activeTab: 'register' | 'login' = 'register';
+  private memberUsernames = new Set<string>();
 
   constructor() {
     this.bindAuth();
@@ -49,6 +51,11 @@ export class AppUI {
       ev.preventDefault();
       void this.onLogin();
     });
+
+    const registerTab = document.getElementById('tab-register');
+    const loginTab = document.getElementById('tab-login');
+    registerTab?.addEventListener('click', () => this.switchTab('register'));
+    loginTab?.addEventListener('click', () => this.switchTab('login'));
   }
 
   private bindDashboard() {
@@ -62,9 +69,32 @@ export class AppUI {
     });
   }
 
-  private setStatus(text: string) {
+  private switchTab(tab: 'register' | 'login') {
+    this.activeTab = tab;
+    const registerPanel = document.getElementById('register-panel');
+    const loginPanel = document.getElementById('login-panel');
+    const registerTab = document.getElementById('tab-register');
+    const loginTab = document.getElementById('tab-login');
+
+    if (tab === 'register') {
+      registerPanel?.classList.remove('hidden');
+      loginPanel?.classList.add('hidden');
+      registerTab?.setAttribute('aria-selected', 'true');
+      loginTab?.setAttribute('aria-selected', 'false');
+    } else {
+      registerPanel?.classList.add('hidden');
+      loginPanel?.classList.remove('hidden');
+      registerTab?.setAttribute('aria-selected', 'false');
+      loginTab?.setAttribute('aria-selected', 'true');
+    }
+  }
+
+  private setStatus(text: string, kind: 'neutral' | 'error' | 'success' | 'loading' = 'neutral') {
     const el = document.getElementById('status');
-    if (el) el.textContent = text;
+    if (!el) return;
+    el.textContent = text;
+    el.className = `status-bar status-bar--${kind}`;
+    el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   }
 
   private setSubmitting(value: boolean) {
@@ -84,7 +114,6 @@ export class AppUI {
       await this.dao.executeRemote(bytes);
     } catch (err) {
       if (err instanceof Error && err.message.includes('duplicate_operation')) {
-        // Broadcast already applied the operation; this is expected.
         return;
       }
       throw err;
@@ -99,7 +128,7 @@ export class AppUI {
         await this.safeExecuteRemote(base64ToBytes(stored.bytes));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        this.setStatus(`State sync failed: ${message}`);
+        this.setStatus(`State sync failed: ${message}`, 'error');
         return;
       }
     }
@@ -110,19 +139,19 @@ export class AppUI {
     const username = this.inputValue('register-username').trim();
     const password = this.inputValue('register-password');
     if (!username || !password) {
-      this.setStatus('Username and password are required.');
+      this.setStatus('Username and password are required.', 'error');
       return;
     }
 
     try {
-      this.setStatus('Registering wallet...');
+      this.setStatus('Registering wallet...', 'loading');
       const bundle = await registerWallet(username, password);
       const publicKeyHex = await CRABSKeyPair.derivePublicHex(bytesToHex(bundle.keys.signingSeed));
 
-      this.setStatus('Registering with server...');
+      this.setStatus('Registering with server...', 'loading');
       const res = await this.client.register(username, publicKeyHex);
       if (res.kind !== 'registered') {
-        this.setStatus('Registration failed.');
+        this.setStatus('Registration failed.', 'error');
         return;
       }
 
@@ -152,11 +181,13 @@ export class AppUI {
 
       this.dao = dao;
       this.wallet = walletState;
+      this.memberUsernames.clear();
+      this.memberUsernames.add(username);
       await this.replayLog(dao);
       this.showDashboard();
-      this.setStatus('Registered and logged in.');
+      this.setStatus('Registered and logged in.', 'success');
     } catch (err) {
-      this.setStatus(`Registration error: ${err instanceof Error ? err.message : String(err)}`);
+      this.setStatus(`Registration error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
     }
   }
@@ -165,38 +196,38 @@ export class AppUI {
     const username = this.inputValue('login-username').trim();
     const password = this.inputValue('login-password');
     if (!username || !password) {
-      this.setStatus('Username and password are required.');
+      this.setStatus('Username and password are required.', 'error');
       return;
     }
 
     try {
-      this.setStatus('Logging in...');
+      this.setStatus('Logging in...', 'loading');
       const loginRes = await this.client.login(username);
       if (loginRes.kind !== 'login_ok') {
-        this.setStatus('Login failed.');
+        this.setStatus('Login failed.', 'error');
         return;
       }
 
       const bundle = await loadLoginBundle(username);
       if (!bundle) {
-        this.setStatus('No wallet found for this browser.');
+        this.setStatus('No wallet found for this browser.', 'error');
         return;
       }
 
-      this.setStatus('Unlocking wallet...');
+      this.setStatus('Unlocking wallet...', 'loading');
       const keys = await loginWallet(username, password, bundle.loginInfo, bundle.keyStore);
 
       let wallet = await loadWalletState(username, keys.encryptionKey);
       if (!wallet) {
-        this.setStatus('Fetching wallet snapshot from server...');
+        this.setStatus('Fetching wallet snapshot from server...', 'loading');
         const snapshotRes = await this.client.getSnapshot(username);
         if (snapshotRes.kind !== 'snapshot' || !snapshotRes.snapshot) {
-          this.setStatus('No wallet state found locally or on server.');
+          this.setStatus('No wallet state found locally or on server.', 'error');
           return;
         }
         const restored = await importWalletState(username, keys.encryptionKey, snapshotRes.snapshot);
         if (!restored) {
-          this.setStatus('Failed to restore wallet from server snapshot.');
+          this.setStatus('Failed to restore wallet from server snapshot.', 'error');
           return;
         }
         await saveWalletState(restored);
@@ -208,19 +239,22 @@ export class AppUI {
 
       this.dao = dao;
       this.wallet = wallet;
+      this.memberUsernames.clear();
+      this.memberUsernames.add(username);
 
       for (const member of loginRes.members) {
         if (member.username !== username) {
           this.dao?.registerMember(member.username, member.publicKeyHex);
+          this.memberUsernames.add(member.username);
         }
       }
 
       await this.replayLog(dao);
 
       this.showDashboard();
-      this.setStatus('Logged in.');
+      this.setStatus('Logged in.', 'success');
     } catch (err) {
-      this.setStatus(`Login error: ${err instanceof Error ? err.message : String(err)}`);
+      this.setStatus(`Login error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
     }
   }
@@ -231,7 +265,7 @@ export class AppUI {
     const title = this.inputValue('proposal-title');
     const description = this.inputValue('proposal-description');
     if (!title) {
-      this.setStatus('Proposal title is required.');
+      this.setStatus('Proposal title is required.', 'error');
       return;
     }
 
@@ -248,9 +282,9 @@ export class AppUI {
       await this.safeExecuteRemote(bytes);
       this.renderProposals();
       this.clearForm('proposal-form');
-      this.setStatus('Proposal created.');
+      this.setStatus('Proposal created.', 'success');
     } catch (err) {
-      this.setStatus(`Create proposal error: ${err instanceof Error ? err.message : String(err)}`);
+      this.setStatus(`Create proposal error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
     } finally {
       this.setSubmitting(false);
@@ -266,10 +300,10 @@ export class AppUI {
       const bytes = await this.dao.vote(this.wallet.username, payload);
       await this.client.submitOp(bytesToBase64(bytes));
       await this.safeExecuteRemote(bytes);
-      this.setStatus(`Voted ${vote}.`);
+      this.setStatus(`Voted ${vote}.`, 'success');
       this.renderProposals();
     } catch (err) {
-      this.setStatus(`Vote error: ${err instanceof Error ? err.message : String(err)}`);
+      this.setStatus(`Vote error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
     } finally {
       this.setSubmitting(false);
@@ -285,10 +319,10 @@ export class AppUI {
       const bytes = await this.dao.execute(this.wallet.username, payload);
       await this.client.submitOp(bytesToBase64(bytes));
       await this.safeExecuteRemote(bytes);
-      this.setStatus('Execution submitted.');
+      this.setStatus('Execution submitted.', 'success');
       this.renderProposals();
     } catch (err) {
-      this.setStatus(`Execute error: ${err instanceof Error ? err.message : String(err)}`);
+      this.setStatus(`Execute error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
     } finally {
       this.setSubmitting(false);
@@ -302,18 +336,20 @@ export class AppUI {
         this.renderProposals();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        this.setStatus(`Failed to apply update: ${message}`);
+        this.setStatus(`Failed to apply update: ${message}`, 'error');
       }
     } else if (msg.kind === 'members') {
       for (const user of msg.users) {
-        if (user.username !== this.wallet?.username) {
+        if (user.username !== this.wallet?.username && !this.memberUsernames.has(user.username)) {
           this.dao?.registerMember(user.username, user.publicKeyHex);
+          this.memberUsernames.add(user.username);
         }
       }
+      this.renderMembers();
     } else if (msg.kind === 'op_rejected') {
-      this.setStatus(`Rejected: ${msg.reason}`);
+      this.setStatus(`Rejected: ${msg.reason}`, 'error');
     } else if (msg.kind === 'error') {
-      this.setStatus(`Error: ${msg.message}`);
+      this.setStatus(`Error: ${msg.message}`, 'error');
     }
   }
 
@@ -333,6 +369,7 @@ export class AppUI {
   private showAuth() {
     this.authSection?.classList.remove('hidden');
     this.dashboardSection?.classList.add('hidden');
+    this.switchTab('register');
   }
 
   private async onLogout() {
@@ -347,6 +384,7 @@ export class AppUI {
     this.dao?.destroy();
     this.wallet = null;
     this.dao = null;
+    this.memberUsernames.clear();
     this.showAuth();
     this.setStatus('');
   }
@@ -357,53 +395,139 @@ export class AppUI {
 
     list.innerHTML = '';
     const proposals = this.dao.getProposals();
+    if (proposals.length === 0) {
+      list.appendChild(this.createEmptyState('No proposals yet. Create the first one above.'));
+      return;
+    }
+
     for (const proposal of proposals) {
       const { yes, no } = this.dao.getProposalVotes(proposal.proposalId);
       const executed = this.dao.isProposalExecuted(proposal.proposalId);
-
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <strong>${this.escapeHtml(proposal.title)}</strong>
-        <p>${this.escapeHtml(proposal.description)}</p>
-        <div class="vote-counts">Yes: ${yes} / No: ${no}</div>
-        <div class="actions">
-          <button class="vote-yes" data-id="${this.escapeHtml(proposal.proposalId)}">Yes</button>
-          <button class="vote-no" data-id="${this.escapeHtml(proposal.proposalId)}">No</button>
-          <button class="execute" data-id="${this.escapeHtml(proposal.proposalId)}" ${executed ? 'disabled' : ''}>Execute</button>
-        </div>
-      `;
-      list.appendChild(li);
+      list.appendChild(this.createProposalCard(proposal, yes, no, executed));
     }
 
-    list.querySelectorAll('.vote-yes').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = (btn as HTMLElement).dataset.id;
-        if (id) void this.onVote(id, 'yes');
-      });
-    });
-    list.querySelectorAll('.vote-no').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = (btn as HTMLElement).dataset.id;
-        if (id) void this.onVote(id, 'no');
-      });
-    });
-    list.querySelectorAll('.execute').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = (btn as HTMLElement).dataset.id;
-        if (id) void this.onExecute(id);
-      });
-    });
-
     this.setButtonsDisabled(this.submitting);
+  }
+
+  private createEmptyState(text: string): HTMLElement {
+    const li = document.createElement('li');
+    li.className = 'empty-state';
+    li.textContent = text;
+    return li;
+  }
+
+  private createProposalCard(
+    proposal: ProposalPayload,
+    yes: number,
+    no: number,
+    executed: boolean
+  ): HTMLElement {
+    const li = document.createElement('li');
+    li.className = 'proposal-card';
+
+    const header = document.createElement('div');
+    header.className = 'proposal-card__header';
+
+    const title = document.createElement('h3');
+    title.className = 'proposal-card__title';
+    title.textContent = proposal.title;
+    header.appendChild(title);
+
+    const badge = document.createElement('span');
+    badge.className = executed
+      ? 'proposal-card__badge proposal-card__badge--executed'
+      : 'proposal-card__badge proposal-card__badge--open';
+    badge.textContent = executed ? 'Executed' : 'Open';
+    badge.setAttribute('aria-label', executed ? 'Proposal executed' : 'Proposal open for voting');
+    header.appendChild(badge);
+    li.appendChild(header);
+
+    if (proposal.description) {
+      const desc = document.createElement('p');
+      desc.className = 'proposal-card__description';
+      desc.textContent = proposal.description;
+      li.appendChild(desc);
+    }
+
+    const id = document.createElement('div');
+    id.className = 'proposal-card__id';
+    id.textContent = proposal.proposalId;
+    id.title = 'Proposal ID';
+    li.appendChild(id);
+
+    const votes = document.createElement('div');
+    votes.className = 'proposal-card__votes';
+
+    const yesStat = document.createElement('div');
+    yesStat.className = 'vote-stat vote-stat--yes';
+    yesStat.innerHTML = `<span class="vote-stat__label">Yes</span><span class="vote-stat__value">${yes}</span>`;
+    votes.appendChild(yesStat);
+
+    const noStat = document.createElement('div');
+    noStat.className = 'vote-stat vote-stat--no';
+    noStat.innerHTML = `<span class="vote-stat__label">No</span><span class="vote-stat__value">${no}</span>`;
+    votes.appendChild(noStat);
+    li.appendChild(votes);
+
+    const actions = document.createElement('div');
+    actions.className = 'proposal-card__actions';
+
+    const yesBtn = document.createElement('button');
+    yesBtn.type = 'button';
+    yesBtn.className = 'button button--secondary vote-yes';
+    yesBtn.textContent = 'Yes';
+    yesBtn.disabled = executed;
+    yesBtn.addEventListener('click', () => void this.onVote(proposal.proposalId, 'yes'));
+    actions.appendChild(yesBtn);
+
+    const noBtn = document.createElement('button');
+    noBtn.type = 'button';
+    noBtn.className = 'button button--secondary vote-no';
+    noBtn.textContent = 'No';
+    noBtn.disabled = executed;
+    noBtn.addEventListener('click', () => void this.onVote(proposal.proposalId, 'no'));
+    actions.appendChild(noBtn);
+
+    const executeBtn = document.createElement('button');
+    executeBtn.type = 'button';
+    executeBtn.className = 'button button--primary execute';
+    executeBtn.textContent = 'Execute';
+    executeBtn.disabled = executed;
+    executeBtn.addEventListener('click', () => void this.onExecute(proposal.proposalId));
+    actions.appendChild(executeBtn);
+
+    li.appendChild(actions);
+    return li;
   }
 
   private renderMembers() {
     const list = document.getElementById('members');
     if (!list || !this.wallet) return;
+
     list.innerHTML = '';
-    const li = document.createElement('li');
-    li.textContent = `${this.wallet.username} (you)`;
-    list.appendChild(li);
+
+    const youItem = document.createElement('li');
+    youItem.className = 'member-item';
+    const youName = document.createElement('span');
+    youName.className = 'member-item__name';
+    youName.textContent = this.wallet.username;
+    const youBadge = document.createElement('span');
+    youBadge.className = 'member-item__badge';
+    youBadge.textContent = 'you';
+    youItem.appendChild(youName);
+    youItem.appendChild(youBadge);
+    list.appendChild(youItem);
+
+    for (const username of this.memberUsernames) {
+      if (username === this.wallet.username) continue;
+      const item = document.createElement('li');
+      item.className = 'member-item';
+      const name = document.createElement('span');
+      name.className = 'member-item__name';
+      name.textContent = username;
+      item.appendChild(name);
+      list.appendChild(item);
+    }
   }
 
   private inputValue(id: string): string {
@@ -414,14 +538,5 @@ export class AppUI {
   private clearForm(id: string) {
     const el = document.getElementById(id) as HTMLFormElement | null;
     el?.reset();
-  }
-
-  private escapeHtml(text: string): string {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
   }
 }
