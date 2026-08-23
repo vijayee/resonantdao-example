@@ -244,6 +244,48 @@ body {
   color: var(--color-text-dim);
 }
 
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.password-strength__bar {
+  flex: 1;
+  height: 4px;
+  background: var(--color-border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.password-strength__fill {
+  height: 100%;
+  width: 0%;
+  transition: width var(--transition-fast), background var(--transition-fast);
+}
+
+.password-strength--weak .password-strength__fill {
+  width: 33%;
+  background: var(--color-danger);
+}
+
+.password-strength--fair .password-strength__fill {
+  width: 66%;
+  background: #f59e0b;
+}
+
+.password-strength--good .password-strength__fill {
+  width: 100%;
+  background: var(--color-success);
+}
+
+.password-strength__label {
+  white-space: nowrap;
+}
+
 /* Buttons */
 .button {
   display: inline-flex;

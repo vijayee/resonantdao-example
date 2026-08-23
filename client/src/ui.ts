@@ -56,6 +56,9 @@ export class AppUI {
     const loginTab = document.getElementById('tab-login');
     registerTab?.addEventListener('click', () => this.switchTab('register'));
     loginTab?.addEventListener('click', () => this.switchTab('login'));
+
+    const passwordInput = document.getElementById('register-password') as HTMLInputElement | null;
+    passwordInput?.addEventListener('input', () => this.updatePasswordStrength());
   }
 
   private bindDashboard() {
@@ -135,11 +138,54 @@ export class AppUI {
     this.renderProposals();
   }
 
+  private evaluatePasswordStrength(password: string): { score: number; label: string; className: string } {
+    let score = 0;
+    if (password.length >= 8) score += 1;
+    if (/[A-Z]/.test(password)) score += 1;
+    if (/[0-9]/.test(password)) score += 1;
+    if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+    const levels = [
+      { label: 'Too short', className: 'password-strength--weak' },
+      { label: 'Weak', className: 'password-strength--weak' },
+      { label: 'Fair', className: 'password-strength--fair' },
+      { label: 'Good', className: 'password-strength--good' },
+      { label: 'Strong', className: 'password-strength--good' },
+    ];
+    return { score, ...levels[score] };
+  }
+
+  private updatePasswordStrength() {
+    const password = this.inputValue('register-password');
+    const container = document.getElementById('password-strength');
+    if (!container) return;
+
+    const { score, label, className } = this.evaluatePasswordStrength(password);
+    container.className = `password-strength ${className}`;
+    container.innerHTML = `
+      <div class="password-strength__bar" aria-hidden="true"><div class="password-strength__fill"></div></div>
+      <span class="password-strength__label">${label}</span>
+    `;
+    // Ensure the fill width matches the chosen class; set inline width for the visual bar.
+    const widths = ['0%', '33%', '66%', '100%', '100%'];
+    const fill = container.querySelector('.password-strength__fill') as HTMLElement | null;
+    if (fill) fill.style.width = widths[score];
+  }
+
   private async onRegister() {
     const username = this.inputValue('register-username').trim();
     const password = this.inputValue('register-password');
+    const confirmPassword = this.inputValue('register-password-confirm');
     if (!username || !password) {
       this.setStatus('Username and password are required.', 'error');
+      return;
+    }
+    if (password.length < 8) {
+      this.setStatus('Password must be at least 8 characters.', 'error');
+      return;
+    }
+    if (password !== confirmPassword) {
+      this.setStatus('Passwords do not match.', 'error');
       return;
     }
 
