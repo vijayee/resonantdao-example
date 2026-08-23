@@ -1275,10 +1275,10 @@ git commit -m "feat(client): add CRABS DAO helpers"
 **Files:**
 - Create: `client/src/server-client.ts`
 
-- [ ] **Step 1: Write `client/src/server-client.ts`**
+- [x] **Step 1: Write `client/src/server-client.ts`**
 
 ```typescript
-import { ClientMessage, ServerMessage, ServerOperation } from '@shared/types';
+import { ClientMessage, ServerMessage } from '@shared/types';
 
 export class ServerClient {
   private ws: WebSocket;
@@ -1321,11 +1321,11 @@ export class ServerClient {
 
   async login(username: string) {
     this.send({ kind: 'login', username });
-    return this.waitFor('snapshot');
+    return this.waitFor('login_ok');
   }
 
-  async submitOp(operation: ServerOperation) {
-    this.send({ kind: 'submit_op', operation });
+  async submitOp(operationBytes: string) {
+    this.send({ kind: 'submit_op', operationBytes });
     return this.waitFor('op_accepted');
   }
 
@@ -1333,13 +1333,18 @@ export class ServerClient {
     this.send({ kind: 'get_log', after });
     return this.waitFor('log');
   }
+
+  async getSnapshot(username: string) {
+    this.send({ kind: 'get_snapshot', username });
+    return this.waitFor('snapshot');
+  }
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
-git add client/src/server-client.ts
+git add client/src/server-client.ts docs/superpowers/plans/2026-08-22-resonant-dao-example.md
 git commit -m "feat(client): add WebSocket client"
 ```
 
