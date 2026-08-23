@@ -18,7 +18,8 @@
 | `scripts/copy-wasm.sh` | Copy CRABS/EAuth WASM artifacts into `client/public/wasm/` |
 | `scripts/build.sh` | Build server and client in one command |
 | `shared/src/types.ts` | Message envelopes, operation payloads, and shared constants |
-| `shared/src/policies.ts` | CRABS policy strings and attribute helpers |
+| `shared/src/policies.ts` | CRABS policy strings and state-name helpers |
+| `shared/src/crabs-helpers.ts` | Low-level CRABS WASM helper (`signer_key_version` setter) |
 | `server/src/db.ts` | WaveDB wrapper: put/get/scan for operations, snapshots, and user records |
 | `server/src/crabs.ts` | Initialize the server's CRABS WASM mirror and DAO state machine |
 | `server/src/handlers.ts` | HTTP/WebSocket handlers: register, login/snapshot, submit operation, stream log |
@@ -180,6 +181,7 @@ git commit -m "chore: add WASM copy script"
 **Files:**
 - Create: `shared/src/types.ts`
 - Create: `shared/src/policies.ts`
+- Create: `shared/src/crabs-helpers.ts`
 
 - [ ] **Step 1: Write `shared/src/types.ts`**
 
@@ -261,6 +263,26 @@ export const STATE_NAMES = {
   proposalVotes: (id: string) => `votes:${id}`,
   executedProposals: 'executed',
 } as const;
+```
+
+- [ ] **Step 3: Write `shared/src/crabs-helpers.ts`**
+
+```typescript
+// Low-level helper for the crabs-wasm JS wrapper, which does not expose a
+// public setter for an operation's signer_key_version. CRABS requires the
+// version in the operation to match the user's current key_version when the
+// operation is executed, so callers must set it before signing.
+export function setOperationSignerKeyVersion(op: any, version: number): void {
+  const M = op._M;
+  const ptr = op._ptr;
+  if (!M || !ptr) return;
+  const offset = 504;
+  const addr = ptr + offset;
+  const v = BigInt(version);
+  for (let i = 0; i < 8; i++) {
+    M.HEAPU8[addr + i] = Number((v >> BigInt(i * 8)) & BigInt(0xff));
+  }
+}
 ```
 
 ---
@@ -546,12 +568,17 @@ export class DaoNode {
     this.node.registerHandlerJs('vote', (state, op) => {
       const payload: VotePayload = JSON.parse(op.payload || '{}');
       const voteSet = `votes:${payload.proposalId}`;
-      // Remove any prior vote from this signer
-      state.setRemove(`${voteSet}:yes`, `${op.signerId}:yes`);
-      state.setRemove(`${voteSet}:no`, `${op.signerId}:no`);
+      // Remove any prior vote from this signer and adjust counters
+      if (state.setContains(`${voteSet}:yes`, `${op.signerId}:yes`)) {
+        state.setRemove(`${voteSet}:yes`, `${op.signerId}:yes`);
+        state.decrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
+      }
+      if (state.setContains(`${voteSet}:no`, `${op.signerId}:no`)) {
+        state.setRemove(`${voteSet}:no`, `${op.signerId}:no`);
+        state.decrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);
+      }
       // Add current vote
       state.setAdd(`${voteSet}:${payload.vote}`, `${op.signerId}:${payload.vote}`, op.signerId);
-      // Maintain counters because set iteration is not exposed
       if (payload.vote === 'yes') state.incrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
       else state.incrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);
       return 0;
@@ -672,15 +699,17 @@ git commit -m "feat(server): add CRABS DAO state machine mirror"
 import { RawData, WebSocket } from 'ws';
 import { DaoDatabase } from './db';
 import { DaoNode } from './crabs';
-import { Operation } from 'crabs-wasm';
 import {
-  AddMemberPayload,
   ClientMessage,
   EncryptedSnapshot,
   PublicUser,
   ServerMessage,
-  ServerOperation,
+  StoredOperation,
 } from '../../shared/src/types';
+
+function base64ToBytes(base64: string): Uint8Array {
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+}
 
 export class ConnectionHandler {
   private sockets = new Set<WebSocket>();
@@ -717,15 +746,23 @@ export class ConnectionHandler {
         if (await this.db.userExists(msg.username)) {
           return this.send(ws, { kind: 'error', message: 'Username taken' });
         }
-        this.dao.registerMember(msg.username, msg.publicKeyHex);
+        const keyVersion = this.dao.registerMember(msg.username, msg.publicKeyHex);
         const user: PublicUser = {
           username: msg.username,
           publicKeyHex: msg.publicKeyHex,
           registeredAt: Date.now(),
+          keyVersion,
         };
         await this.db.putUser(user);
         const snapshot = await this.db.getSnapshot(msg.username);
-        this.send(ws, { kind: 'registered', attributeMachine: 'role:member reputation:1', snapshot: snapshot || undefined });
+        this.send(ws, {
+          kind: 'registered',
+          username: msg.username,
+          publicKeyHex: msg.publicKeyHex,
+          keyVersion,
+          attributeMachine: 'role:member reputation:1',
+          snapshot: snapshot || undefined,
+        });
         break;
       }
 
@@ -745,17 +782,20 @@ export class ConnectionHandler {
       }
 
       case 'submit_op': {
-        const op = await this.dao.deserializeOperation(msg.operation);
+        const bytes = base64ToBytes(msg.operationBytes);
+        let op;
         try {
+          op = await this.dao.deserializeOperation(bytes);
           this.dao.executeOperation(op);
-          const index = await this.db.getOperationCount();
-          await this.db.putOperation(index, msg.operation);
-          await this.db.setOperationCount(index + 1);
-          this.broadcast({ kind: 'broadcast', operation: msg.operation });
-          this.send(ws, { kind: 'op_accepted', operation: msg.operation });
         } catch (err) {
           this.send(ws, { kind: 'op_rejected', reason: String(err) });
+          break;
         }
+        const index = await this.db.getOperationCount();
+        const stored: StoredOperation = { index, bytes: msg.operationBytes };
+        await this.db.putOperation(index, stored);
+        this.broadcast({ kind: 'broadcast', operation: stored });
+        this.send(ws, { kind: 'op_accepted', index });
         break;
       }
 
@@ -1094,63 +1134,87 @@ git commit -m "feat(client): add EAuth wallet and IndexedDB storage"
 - [ ] **Step 1: Write `client/src/dao.ts`**
 
 ```typescript
+:
 import { Node, KeyPair, Operation } from './wasm';
-import { POLICIES, STATE_NAMES } from '@shared/policies';
+import { POLICIES, STATE_NAMES, VOTE_THRESHOLD } from '@shared/policies';
+import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import { AddMemberPayload, ExecutePayload, ProposalPayload, VotePayload } from '@shared/types';
 
 const ADMIN_ID = 'admin';
 
 export class BrowserDao {
-  node: Node;
-  private signingKey: KeyPair;
+  node!: Node;
+  private signingKey!: KeyPair;
+  private keyVersion = 0;
 
-  constructor(signingSeedHex: string) {
+  async init(signingSeedHex: string, attributeMachine: string, keyVersion: number) {
     this.signingKey = KeyPair.fromPrivateHex(signingSeedHex);
-    this.node = Node.create(ADMIN_ID, { ordering: 'hlc' });
+    this.keyVersion = keyVersion;
+    this.node = await Node.create(ADMIN_ID, { ordering: 'hlc' });
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addOneShotFlag(STATE_NAMES.executedProposals);
+
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);
     this.node.setPolicy('execute', POLICIES.execute);
     this.node.setPolicy('add_member', POLICIES.add_member);
-  }
 
-  async init(signingSeedHex: string, attributeMachine: string) {
-    // The browser node mirrors the same state shape as the server node.
-    // For this PoC, attributes are stored as a simple string on the client.
+    this.node.registerHandlerJs('add_member', (state, op) => {
+      const payload: AddMemberPayload = JSON.parse(op.payload || '{}');
+      state.setAdd(STATE_NAMES.members, payload.username, payload.publicKeyHex);
+      return 0;
+    });
+
+    this.node.registerHandlerJs('create_proposal', (state, op) => {
+      const payload: ProposalPayload = JSON.parse(op.payload || '{}');
+      state.setAdd(STATE_NAMES.proposals, payload.proposalId, JSON.stringify(payload));
+      return 0;
+    });
+
+    this.node.registerHandlerJs('vote', (state, op) => {
+      const payload: VotePayload = JSON.parse(op.payload || '{}');
+      const voteSet = `votes:${payload.proposalId}`;
+      state.setRemove(`${voteSet}:yes`, `${op.signerId}:yes`);
+      state.setRemove(`${voteSet}:no`, `${op.signerId}:no`);
+      state.setAdd(`${voteSet}:${payload.vote}`, `${op.signerId}:${payload.vote}`, op.signerId);
+      if (payload.vote === 'yes') state.incrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
+      else state.incrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);
+      return 0;
+    });
+
+    this.node.registerHandlerJs('execute', (state, op) => {
+      const payload: ExecutePayload = JSON.parse(op.payload || '{}');
+      const voteSet = `votes:${payload.proposalId}`;
+      const yes = state.getPNCounter(`${voteSet}:yes_count`) || 0;
+      if (yes >= VOTE_THRESHOLD) {
+        state.flagSet(STATE_NAMES.executedProposals, payload.proposalId);
+      }
+      return 0;
+    });
+
     this.node.registerUser('self', this.signingKey.publicKeyHex(), attributeMachine);
   }
 
   async createProposal(userId: string, payload: ProposalPayload): Promise<Uint8Array> {
-    const op = await Operation.create('create_proposal');
-    op.signerId = userId;
-    op.nodeId = 'browser';
-    op.payload = JSON.stringify(payload);
-    this.node.sign(op, this.signingKey);
-    const bytes = op.serialize();
-    this.node.execute(op);
-    op.destroy();
-    return bytes;
+    return this.signAndSerialize('create_proposal', userId, JSON.stringify(payload));
   }
 
   async vote(userId: string, payload: VotePayload): Promise<Uint8Array> {
-    const op = await Operation.create('vote');
-    op.signerId = userId;
-    op.nodeId = 'browser';
-    op.payload = JSON.stringify(payload);
-    this.node.sign(op, this.signingKey);
-    const bytes = op.serialize();
-    this.node.execute(op);
-    op.destroy();
-    return bytes;
+    return this.signAndSerialize('vote', userId, JSON.stringify(payload));
   }
 
   async execute(userId: string, payload: ExecutePayload): Promise<Uint8Array> {
-    const op = await Operation.create('execute');
+    return this.signAndSerialize('execute', userId, JSON.stringify(payload));
+  }
+
+  private async signAndSerialize(type: string, userId: string, payloadJson: string): Promise<Uint8Array> {
+    const op = await Operation.create(type);
     op.signerId = userId;
     op.nodeId = 'browser';
-    op.payload = JSON.stringify(payload);
+    // The crabs-wasm handler payload getter expects a null-terminated buffer.
+    op.payload = new TextEncoder().encode(payloadJson + '\0');
+    setOperationSignerKeyVersion(op, this.keyVersion);
     this.node.sign(op, this.signingKey);
     const bytes = op.serialize();
     this.node.execute(op);
@@ -1166,6 +1230,22 @@ export class BrowserDao {
     // CRABS WASM does not expose a deserialize method in the high-level wrapper.
     // In this PoC, the client reconstructs state by replaying the operation log from the server.
   }
+}
+
+export function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let result = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    result += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(result);
+}
 }
 ```
 

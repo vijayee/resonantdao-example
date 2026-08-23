@@ -38,8 +38,14 @@ export class BrowserDao {
     this.node.registerHandlerJs('vote', (state, op) => {
       const payload: VotePayload = JSON.parse(op.payload || '{}');
       const voteSet = `votes:${payload.proposalId}`;
-      state.setRemove(`${voteSet}:yes`, `${op.signerId}:yes`);
-      state.setRemove(`${voteSet}:no`, `${op.signerId}:no`);
+      if (state.setContains(`${voteSet}:yes`, `${op.signerId}:yes`)) {
+        state.setRemove(`${voteSet}:yes`, `${op.signerId}:yes`);
+        state.decrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
+      }
+      if (state.setContains(`${voteSet}:no`, `${op.signerId}:no`)) {
+        state.setRemove(`${voteSet}:no`, `${op.signerId}:no`);
+        state.decrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);
+      }
       state.setAdd(`${voteSet}:${payload.vote}`, `${op.signerId}:${payload.vote}`, op.signerId);
       if (payload.vote === 'yes') state.incrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
       else state.incrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);

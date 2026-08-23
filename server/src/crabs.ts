@@ -35,12 +35,17 @@ export class DaoNode {
     this.node.registerHandlerJs('vote', (state, op) => {
       const payload: VotePayload = JSON.parse(op.payload || '{}');
       const voteSet = `votes:${payload.proposalId}`;
-      // Remove any prior vote from this signer
-      state.setRemove(`${voteSet}:yes`, `${op.signerId}:yes`);
-      state.setRemove(`${voteSet}:no`, `${op.signerId}:no`);
+      // Remove any prior vote from this signer and adjust counters
+      if (state.setContains(`${voteSet}:yes`, `${op.signerId}:yes`)) {
+        state.setRemove(`${voteSet}:yes`, `${op.signerId}:yes`);
+        state.decrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
+      }
+      if (state.setContains(`${voteSet}:no`, `${op.signerId}:no`)) {
+        state.setRemove(`${voteSet}:no`, `${op.signerId}:no`);
+        state.decrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);
+      }
       // Add current vote
       state.setAdd(`${voteSet}:${payload.vote}`, `${op.signerId}:${payload.vote}`, op.signerId);
-      // Maintain counters because set iteration is not exposed
       if (payload.vote === 'yes') state.incrementPNCounter(`${voteSet}:yes_count`, 1, op.signerId);
       else state.incrementPNCounter(`${voteSet}:no_count`, 1, op.signerId);
       return 0;
