@@ -386,6 +386,17 @@ describe('Election handlers', () => {
     expect(state.getPNCounter('election:e1:cand:alice:votes')).toBe(1);
   });
 
+  it('does not consume the voter ballot slot when a pick is invalid', () => {
+    startElection('e1');
+    const ballot = makeCastBallotHandler({ getTimeMs: () => 0 });
+    // Mixed ballot: one valid pick, one unknown candidate.
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: ['bob', 'zebra'] }))).toBe(-1);
+    expect(state.getPNCounter('election:e1:cand:bob:votes')).toBe(0);
+    // The voter can still cast a fully valid ballot afterwards.
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: ['bob'] }))).toBe(0);
+    expect(state.getPNCounter('election:e1:cand:bob:votes')).toBe(1);
+  });
+
   it('rejects ballots with invalid picks, counts, or expired elections', () => {
     startElection('e1');
     const ballot = makeCastBallotHandler({ getTimeMs: () => 0 });
