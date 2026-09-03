@@ -1,6 +1,6 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
 import { AddMemberPayload, ExecutePayload, ProposalPayload, ProposalType, VotePayload } from './types';
-import { STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, VOTE_THRESHOLD } from './policies';
+import { CONFIG_NAMES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, VOTE_THRESHOLD } from './policies';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
@@ -82,11 +82,13 @@ function distributeTokens(state: HandlerState, username: string, nowMs: number):
     return balance;
   }
 
+  const interval = state.getRegister(CONFIG_NAMES.distributionInterval()) || TOKEN_CONFIG.distributionIntervalMs;
+  const rate = state.getRegister(CONFIG_NAMES.distributionRate()) || TOKEN_CONFIG.distributionRate;
   const elapsed = nowMs - lastDist;
-  const intervals = Math.floor(elapsed / TOKEN_CONFIG.distributionIntervalMs);
+  const intervals = Math.floor(elapsed / interval);
   if (intervals > 0) {
-    balance += intervals * TOKEN_CONFIG.distributionRate;
-    lastDist += intervals * TOKEN_CONFIG.distributionIntervalMs;
+    balance += intervals * rate;
+    lastDist += intervals * interval;
     state.setRegister(balanceReg, balance, 'system');
     state.setRegister(lastDistReg, lastDist, 'system');
   }

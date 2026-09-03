@@ -1,5 +1,5 @@
 import { loadCRABS } from './wasm';
-import { POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES } from '@shared/policies';
+import { CONFIG_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import { ProposalPayload, VotePayload, ExecutePayload } from '@shared/types';
 import {
@@ -41,6 +41,8 @@ export class BrowserDao {
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addORSet(STATE_NAMES.executedProposals);
     this.node.addRegister('time_now', 0);
+    this.node.addRegister(CONFIG_NAMES.distributionInterval(), 0);
+    this.node.addRegister(CONFIG_NAMES.distributionRate(), 0);
 
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);

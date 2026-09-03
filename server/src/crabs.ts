@@ -1,6 +1,6 @@
 import { Node, KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
-import { POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES } from '../../shared/src/policies';
+import { CONFIG_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES } from '../../shared/src/policies';
 import {
   makeAddMemberHandler,
   makeCreateProposalHandler,
@@ -21,6 +21,8 @@ export class DaoNode {
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addORSet(STATE_NAMES.executedProposals);
     this.node.addRegister('time_now', 0);
+    this.node.addRegister(CONFIG_NAMES.distributionInterval(), 0);
+    this.node.addRegister(CONFIG_NAMES.distributionRate(), 0);
 
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);

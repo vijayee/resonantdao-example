@@ -45,6 +45,41 @@ export interface AddMemberPayload {
   publicKeyHex: string;
 }
 
+export interface StartElectionPayload {
+  electionId: string;
+  candidates: string[];
+  expiresAt: number; // epoch ms
+}
+
+export interface CastBallotPayload {
+  electionId: string;
+  picks: string[]; // 1-5 member usernames
+}
+
+export interface FinalizeElectionPayload {
+  electionId: string;
+  candidates: string[];
+}
+
+export interface CastRunoffVotePayload {
+  electionId: string;
+  candidate: string;
+}
+
+export interface SetTokenConfigPayload {
+  intervalMs: number;
+  rate: number;
+}
+
+export interface RemoveMemberPayload {
+  username: string;
+}
+
+export interface SyncRolesPayload {
+  custodians: string[];
+  roleVersions: Record<string, number>; // total custodian-role mutations per user
+}
+
 export interface TokenConfig {
   initialTokens: number;
   distributionRate: number; // tokens per distribution interval

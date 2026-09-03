@@ -308,4 +308,22 @@ describe('Governance handlers', () => {
     expect(state.getRegister('proposals:p1:passed')).toBe(0);
     expect(state.getRegister('proposals:p1:winner')).toBe(0);
   });
+
+  it('honors custodian-configured distribution settings', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    // Custodian configured: 5000ms interval, 7 tokens per interval.
+    state.setRegister('config:distribution_interval', 5000);
+    state.setRegister('config:distribution_rate', 7);
+
+    setupProposal(node, state, 'p1', 'quadratic', 20000);
+    initUser(state, 'alice', 0);
+
+    const vote = makeVoteHandler({ getTimeMs: () => 5001 });
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }))).toBe(0);
+
+    expect(state.getRegister('tokens:alice')).toBe(
+      TOKEN_CONFIG.initialTokens + 7
+    );
+  });
 });
