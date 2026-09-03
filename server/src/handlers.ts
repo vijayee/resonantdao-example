@@ -139,13 +139,14 @@ export class ConnectionHandler {
           const operationBytes = msg.operationBytes;
           const socket = ws;
           this.submitQueue = this.submitQueue.then(async () => {
+            let op: import('crabs-wasm').Operation | null = null;
             try {
               const index = await this.db.getOperationCount();
               const stored: StoredOperation = { index, bytes: operationBytes };
               await this.db.putOperation(index, stored);
 
               const bytes = base64ToBytes(operationBytes);
-              const op = await this.dao.deserializeOperation(bytes);
+              op = await this.dao.deserializeOperation(bytes);
               this.dao.executeOperation(op);
 
               const syncOp = await this.dao.observeOperation(op);
@@ -171,10 +172,13 @@ export class ConnectionHandler {
 
               this.broadcast({ kind: 'broadcast', operation: stored });
               this.send(socket, { kind: 'op_accepted', index });
-              op.destroy();
             } catch (err) {
               console.error('submit_op failed:', err);
               this.send(socket, { kind: 'op_rejected', reason: String(err) });
+            } finally {
+              if (op) {
+                try { op.destroy(); } catch (destroyErr) { /* already destroyed */ }
+              }
             }
           });
           break;

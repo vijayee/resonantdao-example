@@ -176,7 +176,7 @@ export class DaoNode {
       return null;
     }
     const roleVersions: Record<string, number> = {};
-    for (const user of [...removed, ...winners]) {
+    for (const user of [...removed, ...additions]) {
       if (removed.includes(user)) {
         this.grantMemberRole(user);
       } else {
