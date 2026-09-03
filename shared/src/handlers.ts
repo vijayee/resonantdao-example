@@ -1,6 +1,6 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, ExecutePayload, ProposalPayload, ProposalType, VotePayload } from './types';
-import { CONFIG_NAMES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, VOTE_THRESHOLD } from './policies';
+import { AddMemberPayload, CastBallotPayload, ExecutePayload, ProposalPayload, ProposalType, StartElectionPayload, VotePayload } from './types';
+import { CONFIG_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, VOTE_THRESHOLD } from './policies';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
@@ -205,6 +205,104 @@ export function makeExecuteHandler(
     state.setRegister(TOKEN_NAMES.proposalWinner(payload.proposalId), hasMajority ? leaderIdx + 1 : 0, op.signerId);
     state.setRegister(TOKEN_NAMES.proposalExecuted(payload.proposalId), 1, op.signerId);
     state.setAdd(STATE_NAMES.executedProposals, payload.proposalId, op.signerId);
+    return 0;
+  };
+}
+
+export function makeStartElectionHandler(
+  node: { addORSet(name: string): void; addPNCounter(name: string): void; addRegister(name: string, initial?: number): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: StartElectionPayload = JSON.parse(op.payload || '{}');
+    const id = payload.electionId;
+    if (
+      !isNonEmptyString(id) ||
+      !Array.isArray(payload.candidates) ||
+      payload.candidates.length === 0 ||
+      payload.candidates.length > 50 ||
+      !payload.candidates.every(isNonEmptyString) ||
+      new Set(payload.candidates).size !== payload.candidates.length
+    ) {
+      return -1;
+    }
+    for (const candidate of payload.candidates) {
+      if (!state.setContains(STATE_NAMES.members, candidate)) {
+        return -1;
+      }
+    }
+
+    try {
+      node.addORSet(ELECTION_NAMES.ballots(id));
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes('duplicate_operation')) {
+        return -1; // election id already in use
+      }
+      console.warn('start_election resource init warning:', err);
+    }
+    try { node.addORSet(ELECTION_NAMES.candidates(id)); } catch (err) { console.warn('start_election resource init warning:', err); }
+    for (const candidate of payload.candidates) {
+      try { node.addPNCounter(ELECTION_NAMES.candVotes(id, candidate)); } catch (err) { console.warn('start_election resource init warning:', err); }
+      state.setAdd(ELECTION_NAMES.candidates(id), candidate, op.signerId);
+    }
+    try { node.addRegister(ELECTION_NAMES.expires(id), 0); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(ELECTION_NAMES.finalized(id), 0); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(ELECTION_NAMES.isRunoff(id), 0); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(ELECTION_NAMES.seats(id), 0); } catch (err) { /* ignore duplicate */ }
+
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const expiresAt = typeof payload.expiresAt === 'number' && payload.expiresAt > nowMs
+      ? payload.expiresAt
+      : nowMs + TOKEN_CONFIG.defaultExpiryMs;
+
+    state.setRegister(ELECTION_NAMES.expires(id), expiresAt, op.signerId);
+    state.setRegister(ELECTION_NAMES.finalized(id), 0, op.signerId);
+    state.setRegister(ELECTION_NAMES.isRunoff(id), 0, op.signerId);
+    state.setRegister(ELECTION_NAMES.seats(id), CUSTODIAN_SEATS, op.signerId);
+    return 0;
+  };
+}
+
+export function makeCastBallotHandler(
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: CastBallotPayload = JSON.parse(op.payload || '{}');
+    const id = payload.electionId;
+    if (!isNonEmptyString(id) || !Array.isArray(payload.picks)) {
+      return -1;
+    }
+    if (payload.picks.length < 1 || payload.picks.length > CUSTODIAN_SEATS) {
+      return -1;
+    }
+    if (!payload.picks.every(isNonEmptyString) || new Set(payload.picks).size !== payload.picks.length) {
+      return -1;
+    }
+
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const expiresAt = state.getRegister(ELECTION_NAMES.expires(id)) || 0;
+    if (expiresAt <= 0 || nowMs > expiresAt) {
+      return -1;
+    }
+    if (state.getRegister(ELECTION_NAMES.finalized(id)) === 1) {
+      return -1;
+    }
+
+    const ballots = ELECTION_NAMES.ballots(id);
+    if (state.setContains(ballots, op.signerId)) {
+      return -1; // one ballot per voter
+    }
+
+    for (const pick of payload.picks) {
+      if (!state.setContains(ELECTION_NAMES.candidates(id), pick)) {
+        return -1;
+      }
+    }
+
+    state.setAdd(ballots, op.signerId, op.signerId);
+    for (const pick of payload.picks) {
+      state.incrementPNCounter(ELECTION_NAMES.candVotes(id, pick), 1, op.signerId);
+    }
     return 0;
   };
 }

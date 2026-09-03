@@ -3,9 +3,12 @@ import {
   HandlerOperation,
 } from 'crabs-wasm';
 import {
+  makeAddMemberHandler,
   makeCreateProposalHandler,
   makeVoteHandler,
   makeExecuteHandler,
+  makeStartElectionHandler,
+  makeCastBallotHandler,
 } from '../../shared/src/handlers';
 import { TOKEN_CONFIG, VOTE_THRESHOLD } from '../../shared/src/policies';
 
@@ -325,5 +328,80 @@ describe('Governance handlers', () => {
     expect(state.getRegister('tokens:alice')).toBe(
       TOKEN_CONFIG.initialTokens + 7
     );
+  });
+});
+
+describe('Election handlers', () => {
+  let node: MockNode;
+  let state: MockState;
+
+  beforeEach(() => {
+    node = new MockNode();
+    state = new MockState(node);
+    // seed members set via add_member semantics
+    const addMember = makeAddMemberHandler();
+    addMember(state, makeOp('add_member', 'admin', { username: 'alice', publicKeyHex: 'pk-a' }));
+    addMember(state, makeOp('add_member', 'admin', { username: 'bob', publicKeyHex: 'pk-b' }));
+    addMember(state, makeOp('add_member', 'admin', { username: 'carol', publicKeyHex: 'pk-c' }));
+  });
+
+  function startElection(id: string, candidates = ['alice', 'bob', 'carol'], nowMs = 0) {
+    const handler = makeStartElectionHandler(node, { getTimeMs: () => nowMs });
+    return handler(state, makeOp('start_election', 'alice', {
+      electionId: id, candidates, expiresAt: 1000,
+    }));
+  }
+
+  it('creates election resources for a valid candidate list', () => {
+    expect(startElection('e1')).toBe(0);
+    expect(state.getRegister('election:e1:expires')).toBe(1000);
+    expect(state.getRegister('election:e1:is_runoff')).toBe(0);
+    expect(state.getRegister('election:e1:seats')).toBe(5);
+    expect(state.setContains('election:e1:candidates', 'alice')).toBe(true);
+  });
+
+  it('rejects candidates who are not members and duplicate candidates', () => {
+    expect(startElection('e1', ['alice', 'dave'])).toBe(-1);
+    expect(startElection('e2', ['alice', 'alice'])).toBe(-1);
+    expect(state.getRegister('election:e1:expires')).toBe(0);
+    expect(state.getRegister('election:e2:expires')).toBe(0);
+  });
+
+  it('rejects a duplicate election id', () => {
+    expect(startElection('e1')).toBe(0);
+    expect(startElection('e1')).toBe(-1);
+  });
+
+  it('accepts one ballot per voter with up to 5 picks', () => {
+    startElection('e1');
+    const ballot = makeCastBallotHandler({ getTimeMs: () => 0 });
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: ['bob', 'carol'] }))).toBe(0);
+    expect(ballot(state, makeOp('cast_ballot', 'bob', { electionId: 'e1', picks: ['alice'] }))).toBe(0);
+    expect(state.getPNCounter('election:e1:cand:bob:votes')).toBe(1);
+    expect(state.getPNCounter('election:e1:cand:carol:votes')).toBe(1);
+    expect(state.getPNCounter('election:e1:cand:alice:votes')).toBe(1);
+
+    // Second ballot from the same voter is rejected.
+    expect(ballot(state, makeOp('cast_ballot', 'bob', { electionId: 'e1', picks: ['alice'] }))).toBe(-1);
+    expect(state.getPNCounter('election:e1:cand:alice:votes')).toBe(1);
+  });
+
+  it('rejects ballots with invalid picks, counts, or expired elections', () => {
+    startElection('e1');
+    const ballot = makeCastBallotHandler({ getTimeMs: () => 0 });
+    // Unknown candidate (not in this election)
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: ['zebra'] }))).toBe(-1);
+    // Duplicate pick
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: ['bob', 'bob'] }))).toBe(-1);
+    // Too many picks
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: ['a2', 'a3', 'a4', 'a5', 'a6', 'bob'] }))).toBe(-1);
+    // Empty picks
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: [] }))).toBe(-1);
+    // Unknown election
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'nope', picks: ['bob'] }))).toBe(-1);
+    // After expiry
+    const expired = makeCastBallotHandler({ getTimeMs: () => 1001 });
+    expect(expired(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: ['bob'] }))).toBe(-1);
+    expect(state.getPNCounter('election:e1:cand:bob:votes')).toBe(0);
   });
 });
