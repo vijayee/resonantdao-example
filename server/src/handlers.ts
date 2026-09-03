@@ -140,6 +140,7 @@ export class ConnectionHandler {
           const socket = ws;
           this.submitQueue = this.submitQueue.then(async () => {
             let op: import('crabs-wasm').Operation | null = null;
+            let syncOp: import('crabs-wasm').Operation | null = null;
             try {
               const index = await this.db.getOperationCount();
               const stored: StoredOperation = { index, bytes: operationBytes };
@@ -149,14 +150,13 @@ export class ConnectionHandler {
               op = await this.dao.deserializeOperation(bytes);
               this.dao.executeOperation(op);
 
-              const syncOp = await this.dao.observeOperation(op);
+              syncOp = await this.dao.observeOperation(op);
               if (syncOp) {
                 const syncBytes = syncOp.serialize();
                 const syncIndex = await this.db.getOperationCount();
                 const syncStored: StoredOperation = { index: syncIndex, bytes: Buffer.from(syncBytes).toString('base64') };
                 await this.db.putOperation(syncIndex, syncStored);
                 this.broadcast({ kind: 'broadcast', operation: syncStored });
-                syncOp.destroy();
               }
               if (op.type === 'remove_member') {
                 try {
@@ -178,6 +178,9 @@ export class ConnectionHandler {
             } finally {
               if (op) {
                 try { op.destroy(); } catch (destroyErr) { /* already destroyed */ }
+              }
+              if (syncOp) {
+                try { syncOp.destroy(); } catch (destroyErr) { /* already destroyed */ }
               }
             }
           });
