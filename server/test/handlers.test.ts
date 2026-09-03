@@ -11,8 +11,10 @@ import {
   makeCastBallotHandler,
   makeCastRunoffVoteHandler,
   makeFinalizeElectionHandler,
+  makeSetTokenConfigHandler,
+  makeRemoveMemberHandler,
 } from '../../shared/src/handlers';
-import { CONFIG_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, TOKEN_CONFIG, VOTE_THRESHOLD, runoffId } from '../../shared/src/policies';
+import { ELECTION_NAMES, TOKEN_CONFIG, VOTE_THRESHOLD, runoffId } from '../../shared/src/policies';
 
 class MockNode {
   orSets = new Set<string>();
@@ -561,5 +563,31 @@ describe('Election handlers', () => {
     const fin = makeFinalizeElectionHandler(node, { getTimeMs: () => 100001 });
     fin(state, makeOp('finalize_election', 'alice', { electionId: rid, candidates: ['bob', 'carol'] }));
     expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(-1);
+  });
+
+  it('applies custodian token config and removes members', () => {
+    initUser(state, 'dave', 0);
+    const addMember = makeAddMemberHandler();
+    addMember(state, makeOp('add_member', 'admin', { username: 'dave', publicKeyHex: 'pk-d' }));
+
+    const setConfig = makeSetTokenConfigHandler({ getTimeMs: () => 0 });
+    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 1000, rate: 5 }))).toBe(0);
+    expect(state.getRegister('config:distribution_interval')).toBe(1000);
+    expect(state.getRegister('config:distribution_rate')).toBe(5);
+
+    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 0, rate: 5 }))).toBe(-1);
+    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 1000, rate: 0 }))).toBe(-1);
+    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 999, rate: 5 }))).toBe(-1);
+    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 1000, rate: -1 }))).toBe(-1);
+    expect(state.getRegister('config:distribution_interval')).toBe(1000);
+
+    const removeMember = makeRemoveMemberHandler();
+    expect(removeMember(state, makeOp('remove_member', 'alice', { username: 'dave' }))).toBe(0);
+    expect(state.setContains('members', 'dave')).toBe(false);
+    expect(state.getRegister('tokens:dave')).toBe(0);
+    expect(state.getRegister('tokens:dave:last_dist')).toBe(0);
+
+    expect(removeMember(state, makeOp('remove_member', 'alice', { username: 'dave' }))).toBe(-1);
+    expect(removeMember(state, makeOp('remove_member', 'alice', { username: 'ghost' }))).toBe(-1);
   });
 });

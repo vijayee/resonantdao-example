@@ -1,5 +1,5 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, StartElectionPayload, VotePayload } from './types';
+import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, SetTokenConfigPayload, StartElectionPayload, VotePayload } from './types';
 import {
   CONFIG_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
@@ -473,6 +473,43 @@ export function makeCastRunoffVoteHandler(
     }
     state.setAdd(mirror, ELECTION_NAMES.mirrorElement(id, op.signerId, nextVote), `${op.signerId}:${nextVote}`);
     state.incrementPNCounter(ELECTION_NAMES.candVotes(id, payload.candidate), 1, op.signerId);
+    return 0;
+  };
+}
+
+export function makeSetTokenConfigHandler(
+  _config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: SetTokenConfigPayload = JSON.parse(op.payload || '{}');
+    if (
+      typeof payload.intervalMs !== 'number' ||
+      !Number.isInteger(payload.intervalMs) ||
+      payload.intervalMs < 1000 ||
+      typeof payload.rate !== 'number' ||
+      !Number.isInteger(payload.rate) ||
+      payload.rate < 1
+    ) {
+      return -1;
+    }
+    state.setRegister(CONFIG_NAMES.distributionInterval(), payload.intervalMs, op.signerId);
+    state.setRegister(CONFIG_NAMES.distributionRate(), payload.rate, op.signerId);
+    return 0;
+  };
+}
+
+export function makeRemoveMemberHandler() {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: RemoveMemberPayload = JSON.parse(op.payload || '{}');
+    if (!isNonEmptyString(payload.username)) {
+      return -1;
+    }
+    if (!state.setContains(STATE_NAMES.members, payload.username)) {
+      return -1;
+    }
+    state.setRemove(STATE_NAMES.members, payload.username);
+    state.setRegister(TOKEN_NAMES.balance(payload.username), 0, 'system');
+    state.setRegister(TOKEN_NAMES.lastDistribution(payload.username), 0, 'system');
     return 0;
   };
 }
