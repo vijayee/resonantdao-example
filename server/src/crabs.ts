@@ -162,6 +162,20 @@ export class DaoNode {
   // returns a sync_roles operation for the caller to persist and broadcast
   // (null when nothing changed).
   async observeOperation(op: Operation): Promise<Operation | null> {
+    if (op.type === 'remove_member') {
+      const username = this.parseRemoveMemberPayload(op);
+      if (!username || !this.currentCustodians.includes(username)) {
+        return null;
+      }
+      this.grantMemberRole(username);
+      const roleVersions: Record<string, number> = {
+        [username]: this.getUserRoleVersion(username),
+      };
+      return await this.createSyncRolesOperation({
+        custodians: this.currentCustodians,
+        roleVersions,
+      });
+    }
     if (op.type !== 'finalize_election') {
       return null;
     }
@@ -197,6 +211,17 @@ export class DaoNode {
         return null;
       }
       return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseRemoveMemberPayload(op: Operation): string | null {
+    try {
+      const raw = op.payload;
+      const json = typeof raw === 'string' ? raw : new TextDecoder().decode(raw as Uint8Array);
+      const parsed = JSON.parse(json.replace(/\0$/, ''));
+      return parsed && typeof parsed.username === 'string' ? parsed.username : null;
     } catch {
       return null;
     }

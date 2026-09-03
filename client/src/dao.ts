@@ -1,6 +1,6 @@
 import { loadCRABS } from './wasm';
 import {
-  CONFIG_NAMES, ELECTION_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, runoffId,
+  CONFIG_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, runoffId,
 } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import {
@@ -226,10 +226,10 @@ export class BrowserDao {
         for (let i = applied; i < version; i++) {
           this.node.grantRole(username, 'role', roleValue, this.adminId);
         }
-      }
-      this.roleChangeCount.set(username, version);
-      if (registered && username === this.walletUser) {
-        this.keyVersion = version;
+        this.roleChangeCount.set(username, version);
+        if (username === this.walletUser) {
+          this.keyVersion = version;
+        }
       }
     }
   }
@@ -252,7 +252,7 @@ export class BrowserDao {
           electionId: payload.electionId,
           candidates: payload.candidates,
           isRunoff: false,
-          seats: 5,
+          seats: CUSTODIAN_SEATS,
         });
       }
       return;
