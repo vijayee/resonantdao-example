@@ -1,12 +1,31 @@
 import { loadCRABS } from './wasm';
-import { CONFIG_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES } from '@shared/policies';
+import {
+  CONFIG_NAMES, ELECTION_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, runoffId,
+} from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
-import { ProposalPayload, VotePayload, ExecutePayload } from '@shared/types';
+import {
+  CastBallotPayload,
+  CastRunoffVotePayload,
+  ExecutePayload,
+  FinalizeElectionPayload,
+  ProposalPayload,
+  RemoveMemberPayload,
+  SetTokenConfigPayload,
+  StartElectionPayload,
+  SyncRolesPayload,
+  VotePayload,
+} from '@shared/types';
 import {
   makeAddMemberHandler,
+  makeCastBallotHandler,
+  makeCastRunoffVoteHandler,
   makeCreateProposalHandler,
-  makeVoteHandler,
   makeExecuteHandler,
+  makeFinalizeElectionHandler,
+  makeRemoveMemberHandler,
+  makeSetTokenConfigHandler,
+  makeStartElectionHandler,
+  makeVoteHandler,
 } from '@shared/handlers';
 
 export class BrowserDao {
@@ -54,6 +73,21 @@ export class BrowserDao {
     this.node.registerHandlerJs('vote', makeVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('execute', makeExecuteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
 
+    this.node.setPolicy('start_election', POLICIES.start_election);
+    this.node.setPolicy('cast_ballot', POLICIES.cast_ballot);
+    this.node.setPolicy('finalize_election', POLICIES.finalize_election);
+    this.node.setPolicy('cast_runoff_vote', POLICIES.cast_runoff_vote);
+    this.node.setPolicy('set_token_config', POLICIES.set_token_config);
+    this.node.setPolicy('remove_member', POLICIES.remove_member);
+
+    this.node.registerHandlerJs('start_election', makeStartElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('cast_ballot', makeCastBallotHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('finalize_election', makeFinalizeElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('cast_runoff_vote', makeCastRunoffVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('set_token_config', makeSetTokenConfigHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
+    this.node.registerHandlerJs('sync_roles', () => 0);
+
     this.node.registerUser(username, this.signingKey.publicKeyHex());
     // PoC bootstrap: the client locally grants its own membership attributes.
     this.node.grantRole(username, 'role', 'member', this.adminId);
@@ -71,6 +105,34 @@ export class BrowserDao {
 
   async execute(userId: string, payload: ExecutePayload): Promise<Uint8Array> {
     return this.signAndSerialize('execute', userId, JSON.stringify(payload));
+  }
+
+  setWalletUser(username: string) {
+    this.walletUser = username;
+  }
+
+  async startElection(userId: string, payload: StartElectionPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('start_election', userId, JSON.stringify(payload));
+  }
+
+  async castBallot(userId: string, payload: CastBallotPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('cast_ballot', userId, JSON.stringify(payload));
+  }
+
+  async finalizeElection(userId: string, payload: FinalizeElectionPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('finalize_election', userId, JSON.stringify(payload));
+  }
+
+  async castRunoffVote(userId: string, payload: CastRunoffVotePayload): Promise<Uint8Array> {
+    return this.signAndSerialize('cast_runoff_vote', userId, JSON.stringify(payload));
+  }
+
+  async setTokenConfig(userId: string, payload: SetTokenConfigPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('set_token_config', userId, JSON.stringify(payload));
+  }
+
+  async removeMember(userId: string, payload: RemoveMemberPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('remove_member', userId, JSON.stringify(payload));
   }
 
   registerMember(username: string, publicKeyHex: string) {
@@ -100,6 +162,10 @@ export class BrowserDao {
   }
 
   private proposals = new Map<string, ProposalPayload>();
+  private elections = new Map<string, { electionId: string; candidates: string[]; isRunoff: boolean; seats: number }>();
+  custodians: string[] = [];
+  private roleChangeCount = new Map<string, number>();
+  private walletUser = '';
 
   serialize(): Uint8Array {
     return this.node.serialize();
@@ -108,11 +174,16 @@ export class BrowserDao {
   async executeRemote(bytes: Uint8Array): Promise<void> {
     const op = await this.Operation.deserialize(bytes);
     try {
+      if (op.type === 'sync_roles') {
+        await this.applySyncRolesFromOp(op);
+        return;
+      }
       this.node.execute(op);
       const proposal = await this.parseCreateProposal(bytes);
       if (proposal) {
         this.proposals.set(proposal.proposalId, proposal);
       }
+      await this.mirrorElectionState(op);
     } finally {
       op.destroy();
     }
@@ -129,6 +200,79 @@ export class BrowserDao {
       return null;
     } finally {
       op.destroy();
+    }
+  }
+
+  private async applySyncRolesFromOp(op: any): Promise<void> {
+    let payload: SyncRolesPayload | null = null;
+    try {
+      const raw = op.payload;
+      const json = typeof raw === 'string' ? raw : new TextDecoder().decode(raw as Uint8Array);
+      payload = JSON.parse(json.replace(/\0$/, '')) as SyncRolesPayload;
+    } catch {
+      return;
+    }
+    if (!payload || !Array.isArray(payload.custodians) || typeof payload.roleVersions !== 'object' || payload.roleVersions === null) {
+      return;
+    }
+    this.custodians = payload.custodians.filter((u) => typeof u === 'string');
+    for (const [username, version] of Object.entries(payload.roleVersions)) {
+      if (typeof version !== 'number' || version < 0) continue;
+      const applied = this.roleChangeCount.get(username) ?? 0;
+      const isCustodian = this.custodians.includes(username);
+      const roleValue = isCustodian ? 'custodian' : 'member';
+      const registered = this.node.getUser(username)?.status === 'active';
+      if (registered) {
+        for (let i = applied; i < version; i++) {
+          this.node.grantRole(username, 'role', roleValue, this.adminId);
+        }
+      }
+      this.roleChangeCount.set(username, version);
+      if (registered && username === this.walletUser) {
+        this.keyVersion = version;
+      }
+    }
+  }
+
+  private async mirrorElectionState(op: any): Promise<void> {
+    if (op.type !== 'start_election' && op.type !== 'finalize_election') {
+      return;
+    }
+    let payload: any = null;
+    try {
+      const raw = op.payload;
+      const json = typeof raw === 'string' ? raw : new TextDecoder().decode(raw as Uint8Array);
+      payload = JSON.parse(json.replace(/\0$/, ''));
+    } catch {
+      return;
+    }
+    if (op.type === 'start_election') {
+      if (typeof payload.electionId === 'string' && Array.isArray(payload.candidates)) {
+        this.elections.set(payload.electionId, {
+          electionId: payload.electionId,
+          candidates: payload.candidates,
+          isRunoff: false,
+          seats: 5,
+        });
+      }
+      return;
+    }
+    // finalize_election: if it spawned a runoff, mirror it.
+    const id = payload.electionId;
+    if (typeof id !== 'string' || !this.elections.has(id)) {
+      return;
+    }
+    if (this.node.getRegister(ELECTION_NAMES.isRunoff(id)) === 1) {
+      const rid = runoffId(id);
+      const seats = this.node.getRegister(ELECTION_NAMES.seats(rid)) || 0;
+      const tied: string[] = [];
+      const parent = this.elections.get(id)!;
+      for (const candidate of parent.candidates) {
+        if (this.node.setContains(ELECTION_NAMES.candidates(rid), candidate)) {
+          tied.push(candidate);
+        }
+      }
+      this.elections.set(rid, { electionId: rid, candidates: tied, isRunoff: true, seats });
     }
   }
 
@@ -182,6 +326,51 @@ export class BrowserDao {
     const voteCount = this.getProposalVoteCount(proposalId, username);
     // Cumulative quadratic cost: sum of i^2 for i=1..voteCount
     return (voteCount * (voteCount + 1) * (2 * voteCount + 1)) / 6;
+  }
+
+  getElections(): Array<{ electionId: string; candidates: string[]; isRunoff: boolean; seats: number }> {
+    return Array.from(this.elections.values());
+  }
+
+  getElectionVotes(id: string): Record<string, number> {
+    const election = this.elections.get(id);
+    if (!election) return {};
+    const votes: Record<string, number> = {};
+    for (const candidate of election.candidates) {
+      votes[candidate] = this.node.getPNCounter(ELECTION_NAMES.candVotes(id, candidate)) || 0;
+    }
+    return votes;
+  }
+
+  getElectionExpiry(id: string): number {
+    return this.node.getRegister(ELECTION_NAMES.expires(id)) || 0;
+  }
+
+  getElectionFinalized(id: string): number {
+    return this.node.getRegister(ELECTION_NAMES.finalized(id)) || 0;
+  }
+
+  hasBallot(id: string): boolean {
+    return this.node.setContains(ELECTION_NAMES.ballots(id), this.walletUser);
+  }
+
+  getRunoffUsage(id: string): number {
+    let used = 0;
+    for (let i = 1; i <= 100; i++) {
+      if (this.node.setContains(ELECTION_NAMES.mirrorSet(id), ELECTION_NAMES.mirrorElement(id, this.walletUser, i))) {
+        used = i;
+      } else {
+        break;
+      }
+    }
+    return (used * (used + 1) * (2 * used + 1)) / 6;
+  }
+
+  getDistributionConfig(): { intervalMs: number; rate: number } {
+    return {
+      intervalMs: this.node.getRegister(CONFIG_NAMES.distributionInterval()) || TOKEN_CONFIG.distributionIntervalMs,
+      rate: this.node.getRegister(CONFIG_NAMES.distributionRate()) || TOKEN_CONFIG.distributionRate,
+    };
   }
 
   getNodeTimeMs(): number {
