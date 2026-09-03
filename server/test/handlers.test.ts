@@ -9,6 +9,7 @@ import {
   makeExecuteHandler,
   makeStartElectionHandler,
   makeCastBallotHandler,
+  makeFinalizeElectionHandler,
 } from '../../shared/src/handlers';
 import { TOKEN_CONFIG, VOTE_THRESHOLD } from '../../shared/src/policies';
 
@@ -414,5 +415,75 @@ describe('Election handlers', () => {
     const expired = makeCastBallotHandler({ getTimeMs: () => 1001 });
     expect(expired(state, makeOp('cast_ballot', 'alice', { electionId: 'e1', picks: ['bob'] }))).toBe(-1);
     expect(state.getPNCounter('election:e1:cand:bob:votes')).toBe(0);
+  });
+
+  function ballotFor(voter: string, picks: string[], time = 0) {
+    const ballot = makeCastBallotHandler({ getTimeMs: () => time });
+    expect(ballot(state, makeOp('cast_ballot', voter, { electionId: 'e1', picks }))).toBe(0);
+  }
+
+  it('finalizes with clear winners after expiry', () => {
+    startElection('e1');
+    ballotFor('alice', ['alice', 'bob', 'carol']);
+    ballotFor('bob', ['alice']);
+    ballotFor('carol', ['alice', 'bob']);
+
+    const finalize = makeFinalizeElectionHandler(node, { getTimeMs: () => 1001 });
+    expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: 'e1', candidates: ['alice', 'bob', 'carol'] }))).toBe(0);
+
+    expect(state.getRegister('election:e1:finalized')).toBe(1);
+    expect(state.setContains('election:e1:winners', 'alice')).toBe(true);
+    expect(state.setContains('election:e1:winners', 'bob')).toBe(true);
+    expect(state.setContains('election:e1:winners', 'carol')).toBe(true);
+  });
+
+  it('spawns a quadratic runoff when the seat cutoff is tied', () => {
+    const addMember = makeAddMemberHandler();
+    addMember(state, makeOp('add_member', 'admin', { username: 'dave', publicKeyHex: 'pk-d' }));
+    addMember(state, makeOp('add_member', 'admin', { username: 'erin', publicKeyHex: 'pk-e' }));
+    addMember(state, makeOp('add_member', 'admin', { username: 'fred', publicKeyHex: 'pk-f' }));
+
+    startElection('e2', ['alice', 'bob', 'carol', 'dave', 'erin', 'fred']);
+    const ballot = makeCastBallotHandler({ getTimeMs: () => 0 });
+    // alice/dave/erin/fred clear the cutoff; bob and carol tie at 1 vote -> runoff for 1 seat
+    expect(ballot(state, makeOp('cast_ballot', 'bob', { electionId: 'e2', picks: ['alice', 'bob'] }))).toBe(0);
+    expect(ballot(state, makeOp('cast_ballot', 'carol', { electionId: 'e2', picks: ['alice', 'dave', 'carol'] }))).toBe(0);
+    expect(ballot(state, makeOp('cast_ballot', 'dave', { electionId: 'e2', picks: ['alice', 'dave', 'erin'] }))).toBe(0);
+    expect(ballot(state, makeOp('cast_ballot', 'erin', { electionId: 'e2', picks: ['alice', 'dave', 'fred'] }))).toBe(0);
+    expect(ballot(state, makeOp('cast_ballot', 'alice', { electionId: 'e2', picks: ['alice', 'dave', 'erin', 'fred'] }))).toBe(0);
+    expect(ballot(state, makeOp('cast_ballot', 'fred', { electionId: 'e2', picks: ['alice', 'dave', 'erin', 'fred'] }))).toBe(0);
+
+    const finalize = makeFinalizeElectionHandler(node, { getTimeMs: () => 1001 });
+    expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: 'e2', candidates: ['alice', 'bob', 'carol', 'dave', 'erin', 'fred'] }))).toBe(0);
+
+    // four candidates clear the cutoff; bob/carol tied at the cutoff -> runoff, 1 seat at stake
+    expect(state.getRegister('election:e2:finalized')).toBe(2);
+    expect(state.setContains('election:e2:winners', 'alice')).toBe(true);
+    expect(state.getRegister('election:e2:runoff:is_runoff')).toBe(1);
+    expect(state.getRegister('election:e2:runoff:seats')).toBe(1);
+    expect(state.getRegister('election:e2:runoff:expires')).toBe(1001 + 60000);
+    expect(state.setContains('election:e2:runoff:candidates', 'bob')).toBe(true);
+    expect(state.setContains('election:e2:runoff:candidates', 'carol')).toBe(true);
+    expect(state.setContains('election:e2:runoff:candidates', 'alice')).toBe(false);
+
+    // Double finalize is idempotent while runoff pending.
+    expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: 'e2', candidates: ['alice', 'bob', 'carol', 'dave', 'erin', 'fred'] }))).toBe(0);
+    expect(state.getRegister('election:e2:finalized')).toBe(2);
+  });
+
+  it('finalizes with empty seats when nobody receives votes', () => {
+    startElection('e3');
+    const finalize = makeFinalizeElectionHandler(node, { getTimeMs: () => 1001 });
+    expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: 'e3', candidates: ['alice', 'bob', 'carol'] }))).toBe(0);
+    expect(state.getRegister('election:e3:finalized')).toBe(1);
+    expect(state.setContains('election:e3:winners', 'alice')).toBe(false);
+  });
+
+  it('rejects finalize before expiry or for unknown elections', () => {
+    startElection('e4');
+    const finalize = makeFinalizeElectionHandler(node, { getTimeMs: () => 0 });
+    expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: 'e4', candidates: ['alice', 'bob', 'carol'] }))).toBe(0);
+    expect(state.getRegister('election:e4:finalized')).toBe(0);
+    expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: 'zz', candidates: ['alice'] }))).toBe(-1);
   });
 });
