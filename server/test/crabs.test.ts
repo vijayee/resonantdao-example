@@ -15,7 +15,7 @@ describe('DaoNode', () => {
     const op = await Operation.create('create_proposal');
     op.signerId = 'alice';
     op.nodeId = 'browser';
-    const payloadJson = JSON.stringify({ proposalId: 'p1', title: 'Test', description: 'A test proposal' });
+    const payloadJson = JSON.stringify({ proposalId: 'p1', title: 'Test', description: 'A test proposal', proposalType: 'direct', options: ['Yes', 'No'], expiresAt: Date.now() + 5 * 60 * 1000 });
     op.payload = new TextEncoder().encode(payloadJson + '\0');
     // After registerUser + two grantRole calls, Alice's key_version is 3.
     setOperationSignerKeyVersion(op, 3);

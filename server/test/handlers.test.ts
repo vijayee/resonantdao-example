@@ -1,0 +1,311 @@
+import {
+  HandlerState,
+  HandlerOperation,
+} from 'crabs-wasm';
+import {
+  makeCreateProposalHandler,
+  makeVoteHandler,
+  makeExecuteHandler,
+} from '../../shared/src/handlers';
+import { TOKEN_CONFIG, VOTE_THRESHOLD } from '../../shared/src/policies';
+
+class MockNode {
+  orSets = new Set<string>();
+  registers = new Map<string, number>();
+  pnCounters = new Map<string, number>();
+  oneShotSets = new Set<string>();
+
+  addORSet(name: string) {
+    if (this.orSets.has(name)) throw new Error('duplicate_operation');
+    this.orSets.add(name);
+  }
+  addRegister(name: string, initial = 0) {
+    if (this.registers.has(name)) throw new Error('duplicate_operation');
+    this.registers.set(name, initial);
+  }
+  addPNCounter(name: string) {
+    if (this.pnCounters.has(name)) throw new Error('duplicate_operation');
+    this.pnCounters.set(name, 0);
+  }
+  addOneShotSet(name: string) {
+    if (this.oneShotSets.has(name)) throw new Error('duplicate_operation');
+    this.oneShotSets.add(name);
+  }
+}
+
+class MockState implements HandlerState {
+  private sets = new Map<string, Set<string>>();
+  private setTags = new Map<string, Map<string, string>>();
+  private registers = new Map<string, number>();
+  private pnCounters = new Map<string, number>();
+  private node: MockNode;
+
+  constructor(node: MockNode) {
+    this.node = node;
+  }
+
+  private ensureSet(name: string) {
+    if (!this.sets.has(name)) {
+      this.sets.set(name, new Set());
+      this.setTags.set(name, new Map());
+    }
+  }
+
+  incrementCounter(): void { throw new Error('not implemented'); }
+  incrementPNCounter(name: string, delta = 1): void {
+    this.pnCounters.set(name, (this.pnCounters.get(name) || 0) + delta);
+  }
+  decrementPNCounter(name: string, delta = 1): void {
+    this.pnCounters.set(name, (this.pnCounters.get(name) || 0) - delta);
+  }
+  setRegister(name: string, value: number, _nodeId?: string): void {
+    this.registers.set(name, value);
+  }
+  setAdd(name: string, element: string, tag = element): void {
+    this.ensureSet(name);
+    this.sets.get(name)!.add(element);
+    this.setTags.get(name)!.set(element, tag);
+  }
+  setRemove(name: string, element: string): void {
+    this.ensureSet(name);
+    this.sets.get(name)!.delete(element);
+    this.setTags.get(name)!.delete(element);
+  }
+  flagSet(): void { throw new Error('not implemented'); }
+  getCounter(): number { return 0; }
+  getPNCounter(name: string): number {
+    return this.pnCounters.get(name) || 0;
+  }
+  getRegister(name: string): number {
+    return this.registers.get(name) ?? this.node.registers.get(name) ?? 0;
+  }
+  setContains(name: string, element: string): boolean {
+    return this.sets.has(name) && this.sets.get(name)!.has(element);
+  }
+}
+
+function makeOp(type: string, signerId: string, payload: object): HandlerOperation {
+  return {
+    type,
+    signerId,
+    nodeId: 'browser',
+    payload: JSON.stringify(payload),
+  };
+}
+
+function setupProposal(
+  node: MockNode,
+  state: MockState,
+  proposalId: string,
+  proposalType: 'direct' | 'quadratic',
+  expiresAt: number,
+  options: string[] = ['Yes', 'No'],
+  nowMs = 0
+) {
+  const handler = makeCreateProposalHandler(node, { getTimeMs: () => nowMs });
+  const res = handler(state, makeOp('create_proposal', 'alice', {
+    proposalId,
+    title: 'Test',
+    description: 'Desc',
+    proposalType,
+    options,
+    expiresAt,
+  }));
+  expect(res).toBe(0);
+}
+
+function initUser(state: MockState, username: string, nowMs: number) {
+  state.setRegister(`tokens:${username}`, TOKEN_CONFIG.initialTokens);
+  state.setRegister(`tokens:${username}:last_dist`, nowMs > 0 ? nowMs : 1);
+}
+
+describe('Governance handlers', () => {
+  it('rejects duplicate direct votes from the same user', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    initUser(state, 'alice', 0);
+
+    setupProposal(node, state, 'p1', 'direct', 1000);
+
+    const vote = makeVoteHandler({ getTimeMs: () => 0 });
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }))).toBe(0);
+    expect(vote(state, makeOp('vote', 'bob', { proposalId: 'p1', choice: 0 }))).toBe(0);
+    expect(state.getPNCounter('votes:p1:opt0_count')).toBe(2);
+
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 1 }))).toBe(-1);
+    expect(state.getPNCounter('votes:p1:opt0_count')).toBe(2);
+    expect(state.getPNCounter('votes:p1:opt1_count')).toBe(0);
+  });
+
+  it('records multiple-choice direct votes per option and rejects duplicates', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    initUser(state, 'alice', 0);
+
+    setupProposal(node, state, 'p1', 'direct', 1000, ['Alpha', 'Beta', 'Gamma']);
+
+    const vote = makeVoteHandler({ getTimeMs: () => 0 });
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 2 }))).toBe(0);
+    expect(vote(state, makeOp('vote', 'bob', { proposalId: 'p1', choice: 0 }))).toBe(0);
+    expect(state.getPNCounter('votes:p1:opt2_count')).toBe(1);
+    expect(state.getPNCounter('votes:p1:opt0_count')).toBe(1);
+
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 1 }))).toBe(-1);
+    expect(state.getPNCounter('votes:p1:opt1_count')).toBe(0);
+  });
+
+  it('rejects votes for unknown option indexes', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    initUser(state, 'alice', 0);
+
+    setupProposal(node, state, 'p1', 'direct', 1000, ['Alpha', 'Beta']);
+
+    const vote = makeVoteHandler({ getTimeMs: () => 0 });
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 2 }))).toBe(-1);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: -1 }))).toBe(-1);
+    expect(state.getPNCounter('votes:p1:opt0_count')).toBe(0);
+    expect(state.getPNCounter('votes:p1:opt1_count')).toBe(0);
+  });
+
+  it('charges n^2 across different quadratic options and caps at the mirrored balance', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    initUser(state, 'alice', 0);
+
+    setupProposal(node, state, 'p1', 'quadratic', 1000, ['Alpha', 'Beta', 'Gamma']);
+
+    const vote = makeVoteHandler({ getTimeMs: () => 0 });
+    // Cumulative costs after n votes: 1, 5, 14. Balance is 20, so three votes succeed.
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }))).toBe(0);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 1 }))).toBe(0);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 2 }))).toBe(0);
+    expect(state.getPNCounter('votes:p1:opt0_count')).toBe(1);
+    expect(state.getPNCounter('votes:p1:opt1_count')).toBe(1);
+    expect(state.getPNCounter('votes:p1:opt2_count')).toBe(1);
+
+    // Fourth vote would bring cumulative cost to 30, exceeding balance 20.
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }))).toBe(-1);
+    expect(state.getPNCounter('votes:p1:opt0_count')).toBe(1);
+  });
+
+  it('distributes contribution tokens at the configured interval', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    const startTime = 1000;
+    initUser(state, 'alice', startTime);
+
+    setupProposal(node, state, 'p1', 'quadratic', startTime + TOKEN_CONFIG.distributionIntervalMs * 3);
+
+    const vote = makeVoteHandler({ getTimeMs: () => startTime + TOKEN_CONFIG.distributionIntervalMs });
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }))).toBe(0);
+
+    expect(state.getRegister('tokens:alice')).toBe(
+      TOKEN_CONFIG.initialTokens + TOKEN_CONFIG.distributionRate
+    );
+  });
+
+  it('rejects proposals with invalid option lists', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    const handler = makeCreateProposalHandler(node, { getTimeMs: () => 0 });
+
+    const base = { title: 'T', description: 'D', proposalType: 'direct' as const };
+    // Too few options
+    expect(handler(state, makeOp('create_proposal', 'alice', { ...base, proposalId: 'bad1', options: ['Only'], expiresAt: 1000 }))).toBe(-1);
+    // Duplicate labels
+    expect(handler(state, makeOp('create_proposal', 'alice', { ...base, proposalId: 'bad2', options: ['A', 'A'], expiresAt: 1000 }))).toBe(-1);
+    // Too many options
+    expect(handler(state, makeOp('create_proposal', 'alice', { ...base, proposalId: 'bad3', options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'], expiresAt: 1000 }))).toBe(-1);
+    // Empty label
+    expect(handler(state, makeOp('create_proposal', 'alice', { ...base, proposalId: 'bad4', options: ['A', ''], expiresAt: 1000 }))).toBe(-1);
+    // Nothing was created
+    expect(state.getRegister('proposals:bad1:option_count')).toBe(0);
+  });
+
+  it('passes a binary proposal on strict majority, equivalently to yes > no', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    initUser(state, 'alice', 0);
+    initUser(state, 'bob', 0);
+
+    const startTime = 1000;
+    setupProposal(node, state, 'p1', 'direct', startTime + 100);
+
+    const vote = makeVoteHandler({ getTimeMs: () => startTime });
+    vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }));
+    vote(state, makeOp('vote', 'bob', { proposalId: 'p1', choice: 0 }));
+
+    const execute = makeExecuteHandler({ getTimeMs: () => startTime + 101, threshold: VOTE_THRESHOLD });
+    expect(execute(state, makeOp('execute', 'alice', { proposalId: 'p1' }))).toBe(0);
+
+    expect(state.getRegister('proposals:p1:passed')).toBe(1);
+    expect(state.getRegister('proposals:p1:winner')).toBe(1); // option index 0 + 1
+    expect(state.getRegister('proposals:p1:executed')).toBe(1);
+  });
+
+  it('fails a tied binary proposal after expiry', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    initUser(state, 'alice', 0);
+    initUser(state, 'bob', 0);
+
+    const startTime = 1000;
+    setupProposal(node, state, 'p1', 'direct', startTime + 100);
+
+    const vote = makeVoteHandler({ getTimeMs: () => startTime });
+    vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }));
+    vote(state, makeOp('vote', 'bob', { proposalId: 'p1', choice: 1 }));
+
+    const execute = makeExecuteHandler({ getTimeMs: () => startTime + 101, threshold: VOTE_THRESHOLD });
+    expect(execute(state, makeOp('execute', 'alice', { proposalId: 'p1' }))).toBe(0);
+
+    expect(state.getRegister('proposals:p1:passed')).toBe(0);
+    expect(state.getRegister('proposals:p1:winner')).toBe(0);
+    expect(state.getRegister('proposals:p1:executed')).toBe(1);
+  });
+
+  it('records a majority winner on a multiple-choice proposal', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    for (const voter of ['v1', 'v2', 'v3']) {
+      initUser(state, voter, 0);
+    }
+
+    const startTime = 1000;
+    setupProposal(node, state, 'p1', 'direct', startTime + 100, ['Alpha', 'Beta', 'Gamma']);
+
+    const vote = makeVoteHandler({ getTimeMs: () => startTime });
+    vote(state, makeOp('vote', 'v1', { proposalId: 'p1', choice: 0 }));
+    vote(state, makeOp('vote', 'v2', { proposalId: 'p1', choice: 0 }));
+    vote(state, makeOp('vote', 'v3', { proposalId: 'p1', choice: 1 }));
+
+    const execute = makeExecuteHandler({ getTimeMs: () => startTime + 101, threshold: VOTE_THRESHOLD });
+    expect(execute(state, makeOp('execute', 'v1', { proposalId: 'p1' }))).toBe(0);
+
+    expect(state.getRegister('proposals:p1:passed')).toBe(1);
+    expect(state.getRegister('proposals:p1:winner')).toBe(1); // 'Alpha' = index 0 + 1
+    expect(state.getRegister('proposals:p1:executed')).toBe(1);
+  });
+
+  it('fails a plurality without majority (5/3/3 split)', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+
+    const startTime = 1000;
+    setupProposal(node, state, 'p1', 'direct', startTime + 100, ['Alpha', 'Beta', 'Gamma']);
+
+    const vote = makeVoteHandler({ getTimeMs: () => startTime });
+    const voters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k'];
+    voters.forEach((v, i) => {
+      const choice = i < 5 ? 0 : i < 8 ? 1 : 2;
+      expect(vote(state, makeOp('vote', v, { proposalId: 'p1', choice }))).toBe(0);
+    });
+
+    const execute = makeExecuteHandler({ getTimeMs: () => startTime + 101, threshold: VOTE_THRESHOLD });
+    expect(execute(state, makeOp('execute', 'a', { proposalId: 'p1' }))).toBe(0);
+
+    expect(state.getRegister('proposals:p1:passed')).toBe(0);
+    expect(state.getRegister('proposals:p1:winner')).toBe(0);
+  });
+});

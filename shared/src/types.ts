@@ -20,15 +20,20 @@ export interface StoredOperation {
   bytes: string; // base64
 }
 
+export type ProposalType = 'direct' | 'quadratic';
+
 export interface ProposalPayload {
   proposalId: string;
   title: string;
   description: string;
+  proposalType: ProposalType;
+  options: string[]; // 2-10 non-empty, unique options; binary = ['Yes','No']
+  expiresAt: number; // epoch ms
 }
 
 export interface VotePayload {
   proposalId: string;
-  vote: 'yes' | 'no';
+  choice: number; // index into options (0-based)
 }
 
 export interface ExecutePayload {
@@ -38,6 +43,13 @@ export interface ExecutePayload {
 export interface AddMemberPayload {
   username: string;
   publicKeyHex: string;
+}
+
+export interface TokenConfig {
+  initialTokens: number;
+  distributionRate: number; // tokens per distribution interval
+  distributionIntervalMs: number;
+  defaultExpiryMs: number;
 }
 
 export type ClientMessage =
