@@ -1,13 +1,25 @@
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
+import fs from 'fs';
 import path from 'path';
+import { Operation } from 'crabs-wasm';
 import { DaoDatabase } from './db';
 import { DaoNode } from './crabs';
 import { ConnectionHandler } from './handlers';
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const STATIC_DIR = path.join(__dirname, '../../client/dist');
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 9000;
+// Source runs from server/src; compiled output is dist/server/src.
+const STATIC_DIR = (() => {
+  const candidates = [
+    path.join(__dirname, '../../client/dist'),
+    path.join(__dirname, '../../../client/dist'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
+})();
 
 function base64ToBytes(base64: string): Uint8Array {
   return new Uint8Array(Buffer.from(base64, 'base64'));
@@ -23,12 +35,22 @@ export async function hydrateDao(db: DaoDatabase, dao: DaoNode): Promise<void> {
   }
   const ops = await db.getOperations(0);
   for (const op of ops) {
+    let operation: Operation | undefined;
     try {
       const bytes = base64ToBytes(op.bytes);
-      const operation = await dao.deserializeOperation(bytes);
+      operation = await dao.deserializeOperation(bytes);
       dao.executeOperation(operation);
+      const syncOp = await dao.observeOperation(operation);
+      if (syncOp) {
+        const syncIndex = await db.getOperationCount();
+        await db.putOperation(syncIndex, { index: syncIndex, bytes: Buffer.from(syncOp.serialize()).toString('base64') });
+        dao.executeOperation(syncOp);
+        syncOp.destroy();
+      }
+      operation.destroy();
     } catch (err) {
       console.warn('Skipping invalid operation during hydration:', op.index, err);
+      try { operation?.destroy(); } catch {}
     }
   }
 }

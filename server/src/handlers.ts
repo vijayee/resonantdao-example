@@ -148,8 +148,30 @@ export class ConnectionHandler {
               const op = await this.dao.deserializeOperation(bytes);
               this.dao.executeOperation(op);
 
+              const syncOp = await this.dao.observeOperation(op);
+              if (syncOp) {
+                const syncBytes = syncOp.serialize();
+                const syncIndex = await this.db.getOperationCount();
+                const syncStored: StoredOperation = { index: syncIndex, bytes: Buffer.from(syncBytes).toString('base64') };
+                await this.db.putOperation(syncIndex, syncStored);
+                this.broadcast({ kind: 'broadcast', operation: syncStored });
+                syncOp.destroy();
+              }
+              if (op.type === 'remove_member') {
+                try {
+                  const raw = typeof op.payload === 'string' ? op.payload : new TextDecoder().decode(op.payload as Uint8Array);
+                  const parsed = JSON.parse(raw.replace(/\0$/, ''));
+                  if (parsed && typeof parsed.username === 'string') {
+                    this.dao.revokeMember(parsed.username);
+                  }
+                } catch (err) {
+                  console.warn('remove_member revoke failed:', err);
+                }
+              }
+
               this.broadcast({ kind: 'broadcast', operation: stored });
               this.send(socket, { kind: 'op_accepted', index });
+              op.destroy();
             } catch (err) {
               console.error('submit_op failed:', err);
               this.send(socket, { kind: 'op_rejected', reason: String(err) });

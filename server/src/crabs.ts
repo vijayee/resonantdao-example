@@ -1,12 +1,21 @@
 import { Node, KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
-import { CONFIG_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES } from '../../shared/src/policies';
+import {
+  CONFIG_NAMES, ELECTION_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES,
+} from '../../shared/src/policies';
 import {
   makeAddMemberHandler,
+  makeCastBallotHandler,
+  makeCastRunoffVoteHandler,
   makeCreateProposalHandler,
-  makeVoteHandler,
   makeExecuteHandler,
+  makeFinalizeElectionHandler,
+  makeRemoveMemberHandler,
+  makeSetTokenConfigHandler,
+  makeStartElectionHandler,
+  makeVoteHandler,
 } from '../../shared/src/handlers';
+import { SyncRolesPayload } from '../../shared/src/types';
 
 const ADMIN_ID = 'admin';
 
@@ -28,11 +37,24 @@ export class DaoNode {
     this.node.setPolicy('vote', POLICIES.vote);
     this.node.setPolicy('execute', POLICIES.execute);
     this.node.setPolicy('add_member', POLICIES.add_member);
+    this.node.setPolicy('start_election', POLICIES.start_election);
+    this.node.setPolicy('cast_ballot', POLICIES.cast_ballot);
+    this.node.setPolicy('finalize_election', POLICIES.finalize_election);
+    this.node.setPolicy('cast_runoff_vote', POLICIES.cast_runoff_vote);
+    this.node.setPolicy('set_token_config', POLICIES.set_token_config);
+    this.node.setPolicy('remove_member', POLICIES.remove_member);
 
     this.node.registerHandlerJs('add_member', makeAddMemberHandler());
     this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('vote', makeVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('execute', makeExecuteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('start_election', makeStartElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('cast_ballot', makeCastBallotHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('finalize_election', makeFinalizeElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('cast_runoff_vote', makeCastRunoffVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('set_token_config', makeSetTokenConfigHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
+    this.node.registerHandlerJs('sync_roles', () => 0); // admin-signed; roles applied out-of-band
   }
 
   registerMember(username: string, publicKeyHex: string): number {
@@ -57,10 +79,9 @@ export class DaoNode {
   }
 
   getUserKeyVersion(username: string): number {
-    // For this PoC the server is the only source of attribute changes, so it
-    // can return the fixed post-registration version. If attributes ever change
-    // at runtime, this should be derived from the actual CRABS state.
-    return this.isMember(username) ? 3 : 0;
+    // Derive from the actual CRABS user record: registerUser sets 1 and each
+    // grantRole (member, reputation, custodian changes) bumps it by 1.
+    return this.node.getUser(username)?.keyVersion ?? 0;
   }
 
   async createAdminOperation(type: string, payload: object): Promise<Operation> {
@@ -74,11 +95,7 @@ export class DaoNode {
   }
 
   executeOperation(op: Operation) {
-    try {
-      this.node.execute(op);
-    } finally {
-      op.destroy();
-    }
+    this.node.execute(op);
   }
 
   async deserializeOperation(bytes: Uint8Array): Promise<Operation> {
@@ -104,6 +121,85 @@ export class DaoNode {
 
   isProposalExecuted(id: string): boolean {
     return this.node.setContains(STATE_NAMES.executedProposals, id);
+  }
+
+  currentCustodians: string[] = [];
+
+  grantCustodian(username: string) {
+    this.node.grantRole(username, 'role', 'custodian', ADMIN_ID);
+    if (!this.currentCustodians.includes(username)) {
+      this.currentCustodians.push(username);
+    }
+  }
+
+  grantMemberRole(username: string) {
+    this.node.grantRole(username, 'role', 'member', ADMIN_ID);
+    this.currentCustodians = this.currentCustodians.filter((u) => u !== username);
+  }
+
+  revokeMember(username: string) {
+    try {
+      this.node.revokeUser(username);
+    } catch (err) {
+      console.warn('revokeUser failed:', username, err);
+    }
+  }
+
+  isElectionWinner(electionId: string, username: string): boolean {
+    return this.node.setContains(ELECTION_NAMES.winners(electionId), username) || false;
+  }
+
+  getUserRoleVersion(username: string): number {
+    return this.node.getUser(username)?.keyVersion ?? 0;
+  }
+
+  async createSyncRolesOperation(payload: SyncRolesPayload): Promise<Operation> {
+    return this.createAdminOperation('sync_roles', payload);
+  }
+
+  // Called after every executed operation (live and during hydration). When a
+  // finalized election changes the custodian set, applies role grants and
+  // returns a sync_roles operation for the caller to persist and broadcast
+  // (null when nothing changed).
+  async observeOperation(op: Operation): Promise<Operation | null> {
+    if (op.type !== 'finalize_election') {
+      return null;
+    }
+    const payload = this.parseFinalizePayload(op);
+    if (!payload) {
+      return null;
+    }
+    const winners = payload.candidates.filter((c) => this.isElectionWinner(payload.electionId, c));
+    const additions = winners.filter((w) => !this.currentCustodians.includes(w));
+    const removed = this.currentCustodians.filter((c) => !winners.includes(c));
+    if (winners.length === 0 || (removed.length === 0 && additions.length === 0)) {
+      return null;
+    }
+    const roleVersions: Record<string, number> = {};
+    for (const user of [...removed, ...winners]) {
+      if (removed.includes(user)) {
+        this.grantMemberRole(user);
+      } else {
+        this.grantCustodian(user);
+      }
+      roleVersions[user] = this.getUserRoleVersion(user);
+    }
+    this.currentCustodians = [...winners];
+    return this.createSyncRolesOperation({ custodians: this.currentCustodians, roleVersions });
+  }
+
+  private parseFinalizePayload(op: Operation): { electionId: string; candidates: string[] } | null {
+    try {
+      const raw = op.payload;
+      const json = typeof raw === 'string' ? raw : new TextDecoder().decode(raw as Uint8Array);
+      const parsed = JSON.parse(json.replace(/\0$/, ''));
+      if (!parsed || typeof parsed.electionId !== 'string' || !Array.isArray(parsed.candidates)) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
   }
 
   serialize(): Uint8Array {
