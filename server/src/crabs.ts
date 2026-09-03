@@ -1,6 +1,6 @@
 import { Node, KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
-import { POLICIES, STATE_NAMES } from '../../shared/src/policies';
+import { POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES } from '../../shared/src/policies';
 import {
   makeAddMemberHandler,
   makeCreateProposalHandler,
@@ -20,6 +20,7 @@ export class DaoNode {
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addORSet(STATE_NAMES.executedProposals);
+    this.node.addRegister('time_now', 0);
 
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);
@@ -27,9 +28,9 @@ export class DaoNode {
     this.node.setPolicy('add_member', POLICIES.add_member);
 
     this.node.registerHandlerJs('add_member', makeAddMemberHandler());
-    this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node));
-    this.node.registerHandlerJs('vote', makeVoteHandler());
-    this.node.registerHandlerJs('execute', makeExecuteHandler());
+    this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('vote', makeVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('execute', makeExecuteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
   }
 
   registerMember(username: string, publicKeyHex: string): number {
@@ -44,7 +45,13 @@ export class DaoNode {
     this.node.registerUser(username, publicKeyHex);
     this.node.grantRole(username, 'role', 'member', ADMIN_ID);
     this.node.grantRole(username, 'reputation', '1', ADMIN_ID);
+    this.initTokenRegisters(username);
     return 3;
+  }
+
+  private initTokenRegisters(username: string) {
+    try { this.node.addRegister(TOKEN_NAMES.balance(username), TOKEN_CONFIG.initialTokens); } catch (err) { /* ignore duplicate */ }
+    try { this.node.addRegister(TOKEN_NAMES.lastDistribution(username), Date.now()); } catch (err) { /* ignore duplicate */ }
   }
 
   getUserKeyVersion(username: string): number {
@@ -76,19 +83,36 @@ export class DaoNode {
     return await Operation.deserialize(bytes);
   }
 
-  getProposalVotes(proposalId: string): { yes: number; no: number } {
-    const setName = `votes:${proposalId}`;
-    return {
-      yes: this.node.getPNCounter(`${setName}:yes_count`) || 0,
-      no: this.node.getPNCounter(`${setName}:no_count`) || 0,
-    };
+  getProposalOptionVotes(proposalId: string): number[] {
+    const optionCount = this.node.getRegister(TOKEN_NAMES.proposalOptionCount(proposalId)) || 0;
+    const counts: number[] = [];
+    for (let i = 0; i < optionCount; i++) {
+      counts.push(this.node.getPNCounter(TOKEN_NAMES.optionVoteCount(proposalId, i)) || 0);
+    }
+    return counts;
   }
 
   isMember(username: string): boolean {
     return this.node.getUser(username)?.status === 'active' || false;
   }
 
+  getTokenBalance(username: string): number {
+    return this.node.getRegister(TOKEN_NAMES.balance(username)) || 0;
+  }
+
+  isProposalExecuted(id: string): boolean {
+    return this.node.setContains(STATE_NAMES.executedProposals, id);
+  }
+
   serialize(): Uint8Array {
     return this.node.serialize();
+  }
+
+  private getNodeTimeMs(): number {
+    return this.node.getRegister('time_now') || Date.now();
+  }
+
+  setTime(nowMs: number) {
+    this.node.setRegister('time_now', nowMs);
   }
 }

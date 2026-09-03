@@ -26,5 +26,6 @@ describe('DaoNode', () => {
     const received = await dao.deserializeOperation(bytes);
     dao.executeOperation(received);
     expect(dao.node.setContains('proposals', 'p1')).toBeTruthy();
+    expect(dao.getProposalOptionVotes('p1')).toEqual([0, 0]);
   });
 });
