@@ -318,10 +318,14 @@ export function rankCandidates(
   seats: number,
   allowRunoff: boolean
 ): { winners: string[]; runoffCandidates: string[]; runoffSeats: number } {
+  if (!Number.isInteger(seats) || seats <= 0) {
+    return { winners: [], runoffCandidates: [], runoffSeats: 0 };
+  }
+
   const ranked = candidates
     .map((candidate) => ({ candidate, votes: getVotes(candidate) }))
     .filter((entry) => entry.votes > 0)
-    .sort((a, b) => b.votes - a.votes || a.candidate.localeCompare(b.candidate));
+    .sort((a, b) => b.votes - a.votes || (a.candidate < b.candidate ? -1 : a.candidate > b.candidate ? 1 : 0));
 
   if (ranked.length <= seats) {
     return { winners: ranked.map((e) => e.candidate), runoffCandidates: [], runoffSeats: 0 };
@@ -342,6 +346,9 @@ export function rankCandidates(
   return { winners: clear, runoffCandidates: tied, runoffSeats: seats - clear.length };
 }
 
+// PoC limitation: a spawned runoff stays pending (parent finalized=2) until a
+// member calls finalize_election on the runoff after its expiry. The client UI
+// always offers this action once the runoff expires.
 export function makeFinalizeElectionHandler(
   node: { addORSet(name: string): void; addPNCounter(name: string): void; addRegister(name: string, initial?: number): void },
   config: { getTimeMs?: () => number } = {}
@@ -349,7 +356,12 @@ export function makeFinalizeElectionHandler(
   return (state: HandlerState, op: HandlerOperation): number => {
     const payload: FinalizeElectionPayload = JSON.parse(op.payload || '{}');
     const id = payload.electionId;
-    if (!isNonEmptyString(id) || !Array.isArray(payload.candidates) || !payload.candidates.every(isNonEmptyString)) {
+    if (
+      !isNonEmptyString(id) ||
+      !Array.isArray(payload.candidates) ||
+      !payload.candidates.every(isNonEmptyString) ||
+      new Set(payload.candidates).size !== payload.candidates.length
+    ) {
       return -1;
     }
     const expiresAt = state.getRegister(ELECTION_NAMES.expires(id)) || 0;
@@ -378,6 +390,7 @@ export function makeFinalizeElectionHandler(
     const getVotes = (candidate: string) => state.getPNCounter(ELECTION_NAMES.candVotes(id, candidate)) || 0;
     const result = rankCandidates(payload.candidates, getVotes, seats, !isRunoff);
 
+    try { node.addORSet(ELECTION_NAMES.winners(id)); } catch (err) { console.warn('finalize resource init warning:', err); }
     for (const winner of result.winners) {
       state.setAdd(ELECTION_NAMES.winners(id), winner, op.signerId);
     }
@@ -405,6 +418,7 @@ export function makeFinalizeElectionHandler(
 
     if (isRunoff) {
       const parentId = id.slice(0, -RUNOFF_SUFFIX.length);
+      try { node.addORSet(ELECTION_NAMES.winners(parentId)); } catch (err) { console.warn('finalize resource init warning:', err); }
       for (const winner of result.winners) {
         state.setAdd(ELECTION_NAMES.winners(parentId), winner, op.signerId);
       }

@@ -445,7 +445,7 @@ describe('Election handlers', () => {
 
     startElection('e2', ['alice', 'bob', 'carol', 'dave', 'erin', 'fred']);
     const ballot = makeCastBallotHandler({ getTimeMs: () => 0 });
-    // alice/dave/erin/fred clear the cutoff; bob and carol tie at 1 vote -> runoff for 1 seat
+    // alice 6, dave 6, erin 5, fred 4 clear the cutoff; bob & carol tie at 1 vote for the last seat
     expect(ballot(state, makeOp('cast_ballot', 'bob', { electionId: 'e2', picks: ['alice', 'bob'] }))).toBe(0);
     expect(ballot(state, makeOp('cast_ballot', 'carol', { electionId: 'e2', picks: ['alice', 'dave', 'carol'] }))).toBe(0);
     expect(ballot(state, makeOp('cast_ballot', 'dave', { electionId: 'e2', picks: ['alice', 'dave', 'erin'] }))).toBe(0);
