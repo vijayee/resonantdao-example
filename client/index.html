@@ -119,6 +119,37 @@
               </div>
               <ul id="proposals" class="proposal-list"></ul>
             </section>
+
+            <section class="section-card" aria-labelledby="election-title">
+              <div class="section-card__header">
+                <h2 id="election-title" class="section-card__title">Custodian election</h2>
+              </div>
+              <div id="custodians" class="custodian-list"></div>
+              <div class="proposal-form__actions">
+                <button id="start-election" class="button button--secondary" type="button">Start election</button>
+              </div>
+              <div id="election-area"></div>
+            </section>
+
+            <section class="section-card" aria-labelledby="custodian-admin-title">
+              <div class="section-card__header">
+                <h2 id="custodian-admin-title" class="section-card__title">Custodian controls</h2>
+              </div>
+              <form id="token-config-form" class="proposal-form hidden">
+                <div class="form-group">
+                  <label class="form-label" for="config-interval">Distribution interval (ms)</label>
+                  <input id="config-interval" class="form-input" type="number" min="1000" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="config-rate">Tokens per interval</label>
+                  <input id="config-rate" class="form-input" type="number" min="1" />
+                </div>
+                <div class="proposal-form__actions">
+                  <button class="button button--primary" type="submit">Apply settings</button>
+                </div>
+              </form>
+              <div id="remove-controls" class="remove-controls"></div>
+            </section>
           </div>
         </div>
       </main>

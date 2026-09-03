@@ -3,6 +3,8 @@ import {
   VotePayload,
   ExecutePayload,
   ServerMessage,
+  StartElectionPayload,
+  SetTokenConfigPayload,
 } from '@shared/types';
 import { BrowserDao, bytesToBase64, bytesToHex, base64ToBytes } from './dao';
 import { registerWallet, loginWallet } from './eauth-wallet';
@@ -72,6 +74,15 @@ export class AppUI {
       void this.onCreateProposal();
     });
 
+    const startElectionBtn = document.getElementById('start-election');
+    startElectionBtn?.addEventListener('click', () => void this.onStartElection());
+
+    const tokenConfigForm = document.getElementById('token-config-form') as HTMLFormElement | null;
+    tokenConfigForm?.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      void this.onSetTokenConfig();
+    });
+
     // Time-travel control for demo: advance the node clock at a fixed rate so
     // 5-minute expiry and 3-minute token distribution play out quickly.
     this.startDemoClock();
@@ -85,6 +96,9 @@ export class AppUI {
       this.renderTokenBalance();
       this.renderMembers();
       this.renderProposals();
+      this.renderElections();
+      this.renderCustodians();
+      this.renderCustodianControls();
     };
     update();
     setInterval(update, 1000);
@@ -225,6 +239,7 @@ export class AppUI {
 
       const dao = new BrowserDao();
       await dao.init(username, bytesToHex(bundle.keys.signingSeed), res.keyVersion);
+      dao.setWalletUser(username);
 
       for (const member of res.members) {
         if (member.username !== username) {
@@ -304,6 +319,7 @@ export class AppUI {
 
       const dao = new BrowserDao();
       await dao.init(username, bytesToHex(wallet.signingSeed), wallet.keyVersion);
+      dao.setWalletUser(username);
 
       this.dao = dao;
       this.wallet = wallet;
@@ -430,13 +446,15 @@ export class AppUI {
         this.setStatus(`Failed to apply update: ${message}`, 'error');
       }
     } else if (msg.kind === 'members') {
+      this.memberUsernames = new Set(msg.users.map((user) => user.username));
       for (const user of msg.users) {
-        if (user.username !== this.wallet?.username && !this.memberUsernames.has(user.username)) {
+        if (user.username !== this.wallet?.username) {
           this.dao?.registerMember(user.username, user.publicKeyHex);
-          this.memberUsernames.add(user.username);
         }
       }
       this.renderMembers();
+      this.renderCustodianControls();
+      this.renderCustodians();
     } else if (msg.kind === 'op_rejected') {
       this.setStatus(`Rejected: ${msg.reason}`, 'error');
     } else if (msg.kind === 'error') {
@@ -456,6 +474,9 @@ export class AppUI {
     this.renderTokenBalance();
     this.renderMembers();
     this.renderProposals();
+    this.renderElections();
+    this.renderCustodians();
+    this.renderCustodianControls();
   }
 
   private showAuth() {
@@ -633,6 +654,12 @@ export class AppUI {
     youBadge.textContent = 'you';
     youItem.appendChild(youName);
     youItem.appendChild(youBadge);
+    if (this.dao?.custodians.includes(this.wallet.username)) {
+      const custodianBadge = document.createElement('span');
+      custodianBadge.className = 'member-item__badge';
+      custodianBadge.textContent = 'custodian';
+      youItem.appendChild(custodianBadge);
+    }
     if (this.dao) {
       const tokenBadge = document.createElement('span');
       tokenBadge.className = 'member-item__tokens';
@@ -649,7 +676,300 @@ export class AppUI {
       name.className = 'member-item__name';
       name.textContent = username;
       item.appendChild(name);
+      if (this.dao?.custodians.includes(username)) {
+        const badge = document.createElement('span');
+        badge.className = 'member-item__badge';
+        badge.textContent = 'custodian';
+        item.appendChild(badge);
+      }
       list.appendChild(item);
+    }
+  }
+
+  private async onStartElection() {
+    if (!this.dao || !this.wallet || this.submitting) return;
+    const candidates = Array.from(this.memberUsernames).concat(this.wallet.username).sort();
+    const payload: StartElectionPayload = {
+      electionId: crypto.randomUUID(),
+      candidates,
+      expiresAt: this.dao.getNodeTimeMs() + 60 * 1000,
+    };
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.startElection(this.wallet.username, payload);
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('Election started.', 'success');
+      this.renderElections();
+    } catch (err) {
+      this.setStatus(`Election error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onCastBallot(electionId: string) {
+    if (!this.dao || !this.wallet || this.submitting) return;
+    const picks = Array.from(
+      document.querySelectorAll<HTMLInputElement>('.ballot-option:checked')
+    ).map((el) => el.dataset.member || '').filter((m) => m.length > 0);
+    if (picks.length < 1 || picks.length > 5) {
+      this.setStatus('Pick between 1 and 5 candidates.', 'error');
+      return;
+    }
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.castBallot(this.wallet.username, { electionId, picks });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('Ballot cast.', 'success');
+      this.renderElections();
+    } catch (err) {
+      this.setStatus(`Ballot error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onFinalizeElection(electionId: string) {
+    if (!this.dao || !this.wallet || this.submitting) return;
+    const election = this.dao.getElections().find((e) => e.electionId === electionId);
+    if (!election) return;
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.finalizeElection(this.wallet.username, {
+        electionId,
+        candidates: election.candidates,
+      });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('Election finalized.', 'success');
+      this.renderElections();
+      this.renderCustodians();
+      this.renderCustodianControls();
+    } catch (err) {
+      this.setStatus(`Finalize error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onCastRunoffVote(electionId: string, candidate: string) {
+    if (!this.dao || !this.wallet || this.submitting) return;
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.castRunoffVote(this.wallet.username, { electionId, candidate });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus(`Runoff vote cast for ${candidate}.`, 'success');
+      this.renderElections();
+    } catch (err) {
+      this.setStatus(`Runoff error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onSetTokenConfig() {
+    if (!this.dao || !this.wallet || this.submitting) return;
+    const intervalMs = parseInt(this.inputValue('config-interval'), 10);
+    const rate = parseInt(this.inputValue('config-rate'), 10);
+    if (!Number.isInteger(intervalMs) || intervalMs < 1000 || !Number.isInteger(rate) || rate < 1) {
+      this.setStatus('Interval must be >= 1000ms and rate >= 1.', 'error');
+      return;
+    }
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.setTokenConfig(this.wallet.username, { intervalMs, rate });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('Token settings updated.', 'success');
+    } catch (err) {
+      this.setStatus(`Config error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onRemoveMember(username: string) {
+    if (!this.dao || !this.wallet || this.submitting || username === this.wallet.username) return;
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.removeMember(this.wallet.username, { username });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.memberUsernames.delete(username);
+      this.renderMembers();
+      this.renderCustodianControls();
+      this.renderCustodians();
+      this.setStatus(`${username} removed from the DAO.`, 'success');
+    } catch (err) {
+      this.setStatus(`Remove error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private renderElections() {
+    const area = document.getElementById('election-area');
+    if (!area || !this.dao || !this.wallet) return;
+    area.innerHTML = '';
+    const elections = this.dao.getElections().slice().reverse();
+    if (elections.length === 0) return;
+
+    for (const election of elections) {
+      const card = document.createElement('div');
+      card.className = 'proposal-card';
+
+      const title = document.createElement('h3');
+      title.className = 'proposal-card__title';
+      title.textContent = election.isRunoff ? 'Custodian runoff (quadratic)' : 'Custodian election';
+      card.appendChild(title);
+
+      const state = this.dao.getElectionFinalized(election.electionId);
+      const badge = document.createElement('span');
+      badge.className = 'proposal-card__badge';
+      badge.textContent = state === 1 ? 'Finalized' : state === 2 ? 'Runoff pending' : 'Open';
+      card.appendChild(badge);
+
+      const votes = this.dao.getElectionVotes(election.electionId);
+      const ballots = this.dao.hasBallot(election.electionId);
+      const expiresAt = this.dao.getElectionExpiry(election.electionId);
+      const remainingMs = Math.max(0, expiresAt - this.dao.getNodeTimeMs());
+
+      const info = document.createElement('div');
+      info.className = 'proposal-card__type';
+      info.textContent = `Closes in ${Math.ceil(remainingMs / 1000)}s${ballots ? ' — you voted' : ''}`;
+      card.appendChild(info);
+
+      if (!election.isRunoff && state === 0 && !ballots) {
+        const form = document.createElement('div');
+        for (const candidate of election.candidates) {
+          const label = document.createElement('label');
+          label.style.display = 'block';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.className = 'ballot-option';
+          checkbox.dataset.member = candidate;
+          label.appendChild(checkbox);
+          label.appendChild(document.createTextNode(` ${candidate}`));
+          form.appendChild(label);
+        }
+        const submit = document.createElement('button');
+        submit.type = 'button';
+        submit.className = 'button button--primary';
+        submit.textContent = 'Submit ballot (1-5 picks)';
+        submit.disabled = this.submitting;
+        submit.addEventListener('click', () => void this.onCastBallot(election.electionId));
+        form.appendChild(submit);
+        card.appendChild(form);
+      } else {
+        const tally = document.createElement('div');
+        for (const [candidate, count] of Object.entries(votes)) {
+          const row = document.createElement('div');
+          row.className = 'vote-stat';
+          const labelEl = document.createElement('span');
+          labelEl.className = 'vote-stat__label';
+          labelEl.textContent = candidate;
+          const valueEl = document.createElement('span');
+          valueEl.className = 'vote-stat__value';
+          valueEl.textContent = String(count);
+          row.appendChild(labelEl);
+          row.appendChild(valueEl);
+          tally.appendChild(row);
+        }
+        card.appendChild(tally);
+      }
+
+      if (election.isRunoff && state === 0) {
+        const runoffForm = document.createElement('div');
+        for (const candidate of election.candidates) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'button button--secondary runoff-vote';
+          btn.textContent = `Vote ${candidate}`;
+          btn.disabled = this.submitting;
+          btn.addEventListener('click', () => void this.onCastRunoffVote(election.electionId, candidate));
+          runoffForm.appendChild(btn);
+        }
+        const cost = document.createElement('div');
+        cost.className = 'proposal-card__tokens';
+        cost.textContent = `Tokens used: ${this.dao.getRunoffUsage(election.electionId)} | Balance: ${this.dao.getTokenBalance(this.wallet.username)}`;
+        runoffForm.appendChild(cost);
+        card.appendChild(runoffForm);
+      }
+
+      if (state === 0 && remainingMs <= 0) {
+        const finalizeBtn = document.createElement('button');
+        finalizeBtn.type = 'button';
+        finalizeBtn.className = 'button button--primary finalize-election';
+        finalizeBtn.textContent = 'Finalize election';
+        finalizeBtn.disabled = this.submitting;
+        finalizeBtn.addEventListener('click', () => void this.onFinalizeElection(election.electionId));
+        card.appendChild(finalizeBtn);
+      }
+
+      area.appendChild(card);
+    }
+  }
+
+  private renderCustodians() {
+    const list = document.getElementById('custodians');
+    if (!list || !this.dao) return;
+    list.innerHTML = '';
+    const custodians = this.dao.custodians;
+    if (custodians.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty-state';
+      empty.textContent = 'No custodians elected yet.';
+      list.appendChild(empty);
+      return;
+    }
+    custodians.forEach((username, i) => {
+      const item = document.createElement('span');
+      item.className = 'member-item__badge';
+      item.textContent = `Seat ${i + 1}: ${username}`;
+      list.appendChild(item);
+    });
+  }
+
+  private renderCustodianControls() {
+    const controls = document.getElementById('remove-controls');
+    const configForm = document.getElementById('token-config-form');
+    if (!controls || !this.dao || !this.wallet) return;
+    const isCustodian = this.dao.custodians.includes(this.wallet.username);
+    configForm?.classList.toggle('hidden', !isCustodian);
+    controls.innerHTML = '';
+    if (!isCustodian) return;
+
+    const config = this.dao.getDistributionConfig();
+    const intervalInput = document.getElementById('config-interval') as HTMLInputElement | null;
+    const rateInput = document.getElementById('config-rate') as HTMLInputElement | null;
+    if (intervalInput && !intervalInput.value) intervalInput.value = String(config.intervalMs);
+    if (rateInput && !rateInput.value) rateInput.value = String(config.rate);
+
+    for (const username of this.memberUsernames) {
+      if (username === this.wallet.username) continue;
+      const row = document.createElement('div');
+      row.className = 'member-item';
+      const name = document.createElement('span');
+      name.className = 'member-item__name';
+      name.textContent = username;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'button button--secondary remove-member';
+      btn.textContent = 'Remove';
+      btn.disabled = this.submitting;
+      btn.addEventListener('click', () => void this.onRemoveMember(username));
+      row.appendChild(name);
+      row.appendChild(btn);
+      controls.appendChild(row);
     }
   }
 
