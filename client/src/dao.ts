@@ -93,7 +93,6 @@ export class BrowserDao {
     setOperationSignerKeyVersion(op, this.keyVersion);
     this.node.sign(op, this.signingKey);
     const bytes = op.serialize();
-    console.log('[DAO]', type, 'nodeId', op.nodeId, 'first16', bytesToHex(bytes.slice(0, 16)), 'uuid', bytesToHex(bytes.slice(16, 48)));
     op.destroy();
     return bytes;
   }
@@ -136,10 +135,10 @@ export class BrowserDao {
   }
 
   getProposalOptionVotes(id: string): number[] {
-    const optionCount = this.node.getRegister(`proposals:${id}:option_count`) || 0;
+    const optionCount = this.node.getRegister(TOKEN_NAMES.proposalOptionCount(id)) || 0;
     const counts: number[] = [];
     for (let i = 0; i < optionCount; i++) {
-      counts.push(this.node.getPNCounter(`votes:${id}:opt${i}_count`) || 0);
+      counts.push(this.node.getPNCounter(TOKEN_NAMES.optionVoteCount(id, i)) || 0);
     }
     return counts;
   }

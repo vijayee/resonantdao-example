@@ -477,6 +477,7 @@ export class AppUI {
     this.wallet = null;
     this.dao = null;
     this.memberUsernames.clear();
+    this.votedProposals.clear();
     this.showAuth();
     this.setStatus('');
   }
@@ -608,7 +609,7 @@ export class AppUI {
     executeBtn.type = 'button';
     executeBtn.className = 'button button--primary execute';
     executeBtn.textContent = 'Execute';
-    executeBtn.disabled = actionsDisabled;
+    executeBtn.disabled = executed || this.submitting;
     executeBtn.addEventListener('click', () => void this.onExecute(proposal.proposalId));
     actions.appendChild(executeBtn);
 
