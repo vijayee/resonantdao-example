@@ -66,6 +66,7 @@
         <div class="app-header__brand">Resonant<span>DAO</span></div>
         <div class="app-header__user">
           <span id="username"></span>
+          <span id="token-balance" class="token-balance"></span>
           <button id="logout" class="button button--secondary button--small" type="button">Logout</button>
         </div>
       </header>
@@ -94,6 +95,17 @@
                 <div class="form-group">
                   <label class="form-label" for="proposal-description">Description</label>
                   <input id="proposal-description" class="form-input" type="text" placeholder="Optional details" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="proposal-type">Voting type</label>
+                  <select id="proposal-type" class="form-input">
+                    <option value="direct">Direct Vote (one vote per user)</option>
+                    <option value="quadratic">Quadratic Vote (token-weighted, multiple votes)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="proposal-options">Options (comma-separated, optional)</label>
+                  <input id="proposal-options" class="form-input" type="text" placeholder="e.g. Alpha, Beta, Gamma — leave empty for Yes/No" />
                 </div>
                 <div class="proposal-form__actions">
                   <button class="button button--primary" type="submit">Create proposal</button>

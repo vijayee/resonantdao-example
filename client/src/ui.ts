@@ -15,7 +15,7 @@ import {
   WalletState,
 } from './storage';
 import { ServerClient } from './server-client';
-import { KeyPair as CRABSKeyPair } from './wasm';
+import { loadCRABS } from './wasm';
 
 export class AppUI {
   private client = new ServerClient();
@@ -24,6 +24,7 @@ export class AppUI {
   private submitting = false;
   private activeTab: 'register' | 'login' = 'register';
   private memberUsernames = new Set<string>();
+  private votedProposals = new Set<string>();
 
   constructor() {
     this.bindAuth();
@@ -70,6 +71,23 @@ export class AppUI {
       ev.preventDefault();
       void this.onCreateProposal();
     });
+
+    // Time-travel control for demo: advance the node clock at a fixed rate so
+    // 5-minute expiry and 3-minute token distribution play out quickly.
+    this.startDemoClock();
+  }
+
+  private startDemoClock() {
+    // Keep the local node clock synchronized with wall-clock time so the client
+    // and server agree on proposal expiry and token distribution.
+    const update = () => {
+      this.dao?.setTime(Date.now());
+      this.renderTokenBalance();
+      this.renderMembers();
+      this.renderProposals();
+    };
+    update();
+    setInterval(update, 1000);
   }
 
   private switchTab(tab: 'register' | 'login') {
@@ -106,7 +124,7 @@ export class AppUI {
   }
 
   private setButtonsDisabled(disabled: boolean) {
-    document.querySelectorAll<HTMLButtonElement>('#proposal-form button, .vote-yes, .vote-no, .execute').forEach((btn) => {
+    document.querySelectorAll<HTMLButtonElement>('#proposal-form button, .vote-option, .execute').forEach((btn) => {
       btn.disabled = disabled;
     });
   }
@@ -116,7 +134,10 @@ export class AppUI {
     try {
       await this.dao.executeRemote(bytes);
     } catch (err) {
-      if (err instanceof Error && err.message.includes('duplicate_operation')) {
+      if (
+        err instanceof Error &&
+        (err.message.includes('duplicate_operation') || err.message.includes('already_executed'))
+      ) {
         return;
       }
       throw err;
@@ -192,7 +213,8 @@ export class AppUI {
     try {
       this.setStatus('Registering wallet...', 'loading');
       const bundle = await registerWallet(username, password);
-      const publicKeyHex = await CRABSKeyPair.derivePublicHex(bytesToHex(bundle.keys.signingSeed));
+      const crabs = await loadCRABS();
+      const publicKeyHex = await crabs.KeyPair.derivePublicHex(bytesToHex(bundle.keys.signingSeed));
 
       this.setStatus('Registering with server...', 'loading');
       const res = await this.client.register(username, publicKeyHex);
@@ -315,10 +337,29 @@ export class AppUI {
       return;
     }
 
+    const rawOptions = this.inputValue('proposal-options');
+    const parsed = rawOptions.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+    let options: string[];
+    if (parsed.length === 0) {
+      options = ['Yes', 'No'];
+    } else if (parsed.length >= 2 && parsed.length <= 10 && new Set(parsed).size === parsed.length) {
+      options = parsed;
+    } else {
+      this.setStatus('Options must be 2-10 unique, non-empty comma-separated values.', 'error');
+      return;
+    }
+
+    const proposalType = this.inputValue('proposal-type') as 'direct' | 'quadratic';
+    // Use the DAO node time so expiry stays consistent with the local
+    // state machine clock.
+    const nowMs = this.dao.getNodeTimeMs();
     const payload: ProposalPayload = {
       proposalId: crypto.randomUUID(),
       title,
       description,
+      proposalType: proposalType === 'quadratic' ? 'quadratic' : 'direct',
+      options,
+      expiresAt: nowMs + 60 * 1000,
     };
 
     this.setSubmitting(true);
@@ -337,22 +378,26 @@ export class AppUI {
     }
   }
 
-  private async onVote(proposalId: string, vote: 'yes' | 'no') {
+  private async onVote(proposalId: string, choice: number) {
     if (!this.dao || !this.wallet || this.submitting) return;
 
-    const payload: VotePayload = { proposalId, vote };
+    const payload: VotePayload = { proposalId, choice };
     this.setSubmitting(true);
     try {
       const bytes = await this.dao.vote(this.wallet.username, payload);
       await this.client.submitOp(bytesToBase64(bytes));
       await this.safeExecuteRemote(bytes);
-      this.setStatus(`Voted ${vote}.`, 'success');
+      if (this.dao.getProposalType(proposalId) === 'direct') {
+        this.votedProposals.add(proposalId);
+      }
+      this.setStatus(`Voted.`, 'success');
       this.renderProposals();
     } catch (err) {
       this.setStatus(`Vote error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
     } finally {
       this.setSubmitting(false);
+      this.renderProposals();
     }
   }
 
@@ -408,6 +453,7 @@ export class AppUI {
       usernameSpan.textContent = this.wallet.username;
     }
 
+    this.renderTokenBalance();
     this.renderMembers();
     this.renderProposals();
   }
@@ -447,12 +493,9 @@ export class AppUI {
     }
 
     for (const proposal of proposals) {
-      const { yes, no } = this.dao.getProposalVotes(proposal.proposalId);
       const executed = this.dao.isProposalExecuted(proposal.proposalId);
-      list.appendChild(this.createProposalCard(proposal, yes, no, executed));
+      list.appendChild(this.createProposalCard(proposal, executed));
     }
-
-    this.setButtonsDisabled(this.submitting);
   }
 
   private createEmptyState(text: string): HTMLElement {
@@ -464,8 +507,6 @@ export class AppUI {
 
   private createProposalCard(
     proposal: ProposalPayload,
-    yes: number,
-    no: number,
     executed: boolean
   ): HTMLElement {
     const li = document.createElement('li');
@@ -501,44 +542,73 @@ export class AppUI {
     id.title = 'Proposal ID';
     li.appendChild(id);
 
-    const votes = document.createElement('div');
-    votes.className = 'proposal-card__votes';
+    const typeLabel = document.createElement('div');
+    typeLabel.className = 'proposal-card__type';
+    const pType = this.dao.getProposalType(proposal.proposalId);
+    typeLabel.textContent = pType === 'quadratic' ? 'Quadratic Vote' : 'Direct Vote';
+    li.appendChild(typeLabel);
 
-    const yesStat = document.createElement('div');
-    yesStat.className = 'vote-stat vote-stat--yes';
-    yesStat.innerHTML = `<span class="vote-stat__label">Yes</span><span class="vote-stat__value">${yes}</span>`;
-    votes.appendChild(yesStat);
+    const expiresAt = this.dao.getProposalExpiry(proposal.proposalId);
+    const remainingMs = Math.max(0, expiresAt - this.dao.getNodeTimeMs());
+    const timer = document.createElement('div');
+    timer.className = 'proposal-card__timer';
+    timer.textContent = executed ? 'Voting closed' : `Closes in ${Math.ceil(remainingMs / 1000)}s`;
+    li.appendChild(timer);
 
-    const noStat = document.createElement('div');
-    noStat.className = 'vote-stat vote-stat--no';
-    noStat.innerHTML = `<span class="vote-stat__label">No</span><span class="vote-stat__value">${no}</span>`;
-    votes.appendChild(noStat);
-    li.appendChild(votes);
+    const options = proposal.options ?? ['Yes', 'No'];
+    const counts = this.dao.getProposalOptionVotes(proposal.proposalId);
+
+    const voteRows = document.createElement('div');
+    voteRows.className = 'proposal-card__votes';
+    options.forEach((label, i) => {
+      const row = document.createElement('div');
+      row.className = 'vote-stat';
+      const labelEl = document.createElement('span');
+      labelEl.className = 'vote-stat__label';
+      labelEl.textContent = label;
+      const valueEl = document.createElement('span');
+      valueEl.className = 'vote-stat__value';
+      valueEl.textContent = String(counts[i] ?? 0);
+      row.appendChild(labelEl);
+      row.appendChild(valueEl);
+      voteRows.appendChild(row);
+    });
+    li.appendChild(voteRows);
+
+    let nextCumulativeCost = 0;
+    if (pType === 'quadratic' && this.wallet) {
+      const used = this.dao.getProposalTokenUsage(proposal.proposalId, this.wallet.username);
+      const voteCount = this.dao.getProposalVoteCount(proposal.proposalId, this.wallet.username);
+      nextCumulativeCost = ((voteCount + 1) * (voteCount + 2) * (2 * voteCount + 3)) / 6;
+      const balance = this.dao.getTokenBalance(this.wallet.username);
+      const tokenInfo = document.createElement('div');
+      tokenInfo.className = 'proposal-card__tokens';
+      tokenInfo.textContent = `Tokens used here: ${used} | Next vote cost: ${nextCumulativeCost} | Balance: ${balance}`;
+      li.appendChild(tokenInfo);
+    }
 
     const actions = document.createElement('div');
     actions.className = 'proposal-card__actions';
 
-    const yesBtn = document.createElement('button');
-    yesBtn.type = 'button';
-    yesBtn.className = 'button button--secondary vote-yes';
-    yesBtn.textContent = 'Yes';
-    yesBtn.disabled = executed;
-    yesBtn.addEventListener('click', () => void this.onVote(proposal.proposalId, 'yes'));
-    actions.appendChild(yesBtn);
+    const alreadyVoted = this.votedProposals.has(proposal.proposalId);
+    const canVoteQuadratic = pType === 'quadratic' && this.wallet && this.dao.getTokenBalance(this.wallet.username) >= nextCumulativeCost && nextCumulativeCost > 0;
+    const actionsDisabled = executed || this.submitting || (alreadyVoted && !canVoteQuadratic);
 
-    const noBtn = document.createElement('button');
-    noBtn.type = 'button';
-    noBtn.className = 'button button--secondary vote-no';
-    noBtn.textContent = 'No';
-    noBtn.disabled = executed;
-    noBtn.addEventListener('click', () => void this.onVote(proposal.proposalId, 'no'));
-    actions.appendChild(noBtn);
+    options.forEach((label, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'button button--secondary vote-option';
+      btn.textContent = label;
+      btn.disabled = actionsDisabled;
+      btn.addEventListener('click', () => void this.onVote(proposal.proposalId, i));
+      actions.appendChild(btn);
+    });
 
     const executeBtn = document.createElement('button');
     executeBtn.type = 'button';
     executeBtn.className = 'button button--primary execute';
     executeBtn.textContent = 'Execute';
-    executeBtn.disabled = executed;
+    executeBtn.disabled = actionsDisabled;
     executeBtn.addEventListener('click', () => void this.onExecute(proposal.proposalId));
     actions.appendChild(executeBtn);
 
@@ -562,6 +632,12 @@ export class AppUI {
     youBadge.textContent = 'you';
     youItem.appendChild(youName);
     youItem.appendChild(youBadge);
+    if (this.dao) {
+      const tokenBadge = document.createElement('span');
+      tokenBadge.className = 'member-item__tokens';
+      tokenBadge.textContent = `🪙 ${this.dao.getTokenBalance(this.wallet.username)}`;
+      youItem.appendChild(tokenBadge);
+    }
     list.appendChild(youItem);
 
     for (const username of this.memberUsernames) {
@@ -574,6 +650,13 @@ export class AppUI {
       item.appendChild(name);
       list.appendChild(item);
     }
+  }
+
+  private renderTokenBalance() {
+    const el = document.getElementById('token-balance');
+    if (!el || !this.dao || !this.wallet) return;
+    const balance = this.dao.getTokenBalance(this.wallet.username);
+    el.textContent = `🪙 ${balance} tokens`;
   }
 
   private inputValue(id: string): string {

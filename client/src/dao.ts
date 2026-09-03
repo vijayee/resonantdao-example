@@ -1,10 +1,5 @@
-import { Node, KeyPair, Operation } from './wasm';
-import type {
-  Node as CRABSNode,
-  KeyPair as CRABSKeyPair,
-  Operation as CRABSOperation,
-} from '/wasm/crabs/index.js';
-import { POLICIES, STATE_NAMES } from '@shared/policies';
+import { loadCRABS } from './wasm';
+import { POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import { ProposalPayload, VotePayload, ExecutePayload } from '@shared/types';
 import {
@@ -14,22 +9,38 @@ import {
   makeExecuteHandler,
 } from '@shared/handlers';
 
-const ADMIN_ID = 'admin';
-
 export class BrowserDao {
-  node!: CRABSNode;
+  private Node: any;
+  private KeyPair: any;
+  private Operation: any;
+  node: any;
   nodeId = 'browser';
-  private signingKey!: CRABSKeyPair;
+  private adminId = 'admin';
+  private signingKey: any;
   private keyVersion = 0;
 
   async init(username: string, signingSeedHex: string, keyVersion: number) {
-    this.nodeId = crypto.randomUUID();
-    this.signingKey = await KeyPair.fromPrivateHex(signingSeedHex);
+    const webCrypto = globalThis.crypto;
+    if (!webCrypto || !webCrypto.randomUUID) {
+      throw new Error('Web Crypto API is not available. Browser DAO requires a secure browser context.');
+    }
+    const crabs = await loadCRABS();
+    this.Node = crabs.Node;
+    this.KeyPair = crabs.KeyPair;
+    this.Operation = crabs.Operation;
+
+    this.nodeId = webCrypto.randomUUID();
+    // Use a unique adminId per browser node. CRABS' Node.sign stamps the
+    // operation with this id, so uniqueness avoids HLC collisions on the
+    // server mirror when multiple browsers submit operations.
+    this.adminId = this.nodeId;
+    this.signingKey = await this.KeyPair.fromPrivateHex(signingSeedHex);
     this.keyVersion = keyVersion;
-    this.node = await Node.create(ADMIN_ID, { ordering: 'hlc' });
+    this.node = await this.Node.create(this.adminId, { ordering: 'hlc' });
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addORSet(STATE_NAMES.executedProposals);
+    this.node.addRegister('time_now', 0);
 
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);
@@ -37,14 +48,15 @@ export class BrowserDao {
     this.node.setPolicy('add_member', POLICIES.add_member);
 
     this.node.registerHandlerJs('add_member', makeAddMemberHandler());
-    this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node));
-    this.node.registerHandlerJs('vote', makeVoteHandler());
-    this.node.registerHandlerJs('execute', makeExecuteHandler());
+    this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('vote', makeVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('execute', makeExecuteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
 
     this.node.registerUser(username, this.signingKey.publicKeyHex());
     // PoC bootstrap: the client locally grants its own membership attributes.
-    this.node.grantRole(username, 'role', 'member', ADMIN_ID);
-    this.node.grantRole(username, 'reputation', '1', ADMIN_ID);
+    this.node.grantRole(username, 'role', 'member', this.adminId);
+    this.node.grantRole(username, 'reputation', '1', this.adminId);
+    this.initTokenRegisters(username);
   }
 
   async createProposal(userId: string, payload: ProposalPayload): Promise<Uint8Array> {
@@ -62,12 +74,18 @@ export class BrowserDao {
   registerMember(username: string, publicKeyHex: string) {
     if (this.node.getUser(username)?.status === 'active') return;
     this.node.registerUser(username, publicKeyHex);
-    this.node.grantRole(username, 'role', 'member', ADMIN_ID);
-    this.node.grantRole(username, 'reputation', '1', ADMIN_ID);
+    this.node.grantRole(username, 'role', 'member', this.adminId);
+    this.node.grantRole(username, 'reputation', '1', this.adminId);
+    this.initTokenRegisters(username);
+  }
+
+  private initTokenRegisters(username: string) {
+    try { this.node.addRegister(TOKEN_NAMES.balance(username), TOKEN_CONFIG.initialTokens); } catch (err) { /* ignore duplicate */ }
+    try { this.node.addRegister(TOKEN_NAMES.lastDistribution(username), Date.now()); } catch (err) { /* ignore duplicate */ }
   }
 
   private async signAndSerialize(type: string, userId: string, payloadJson: string): Promise<Uint8Array> {
-    const op = await Operation.create(type);
+    const op = await this.Operation.create(type);
     op.signerId = userId;
     op.nodeId = this.nodeId;
     // The crabs-wasm handler payload getter expects a null-terminated buffer.
@@ -75,6 +93,7 @@ export class BrowserDao {
     setOperationSignerKeyVersion(op, this.keyVersion);
     this.node.sign(op, this.signingKey);
     const bytes = op.serialize();
+    console.log('[DAO]', type, 'nodeId', op.nodeId, 'first16', bytesToHex(bytes.slice(0, 16)), 'uuid', bytesToHex(bytes.slice(16, 48)));
     op.destroy();
     return bytes;
   }
@@ -86,7 +105,7 @@ export class BrowserDao {
   }
 
   async executeRemote(bytes: Uint8Array): Promise<void> {
-    const op = await Operation.deserialize(bytes);
+    const op = await this.Operation.deserialize(bytes);
     try {
       this.node.execute(op);
       const proposal = await this.parseCreateProposal(bytes);
@@ -99,7 +118,7 @@ export class BrowserDao {
   }
 
   private async parseCreateProposal(bytes: Uint8Array): Promise<ProposalPayload | null> {
-    const op = await Operation.deserialize(bytes);
+    const op = await this.Operation.deserialize(bytes);
     try {
       if (op.type !== 'create_proposal') return null;
       const raw = op.payload;
@@ -116,15 +135,60 @@ export class BrowserDao {
     return Array.from(this.proposals.values());
   }
 
-  getProposalVotes(id: string): { yes: number; no: number } {
-    return {
-      yes: this.node.getPNCounter(`votes:${id}:yes_count`) || 0,
-      no: this.node.getPNCounter(`votes:${id}:no_count`) || 0,
-    };
+  getProposalOptionVotes(id: string): number[] {
+    const optionCount = this.node.getRegister(`proposals:${id}:option_count`) || 0;
+    const counts: number[] = [];
+    for (let i = 0; i < optionCount; i++) {
+      counts.push(this.node.getPNCounter(`votes:${id}:opt${i}_count`) || 0);
+    }
+    return counts;
   }
 
   isProposalExecuted(id: string): boolean {
     return this.node.setContains(STATE_NAMES.executedProposals, id);
+  }
+
+  getTokenBalance(username: string): number {
+    return this.node.getRegister(`tokens:${username}`) || 0;
+  }
+
+  getProposalType(id: string): 'direct' | 'quadratic' | null {
+    const type = this.node.getRegister(`proposals:${id}:type`);
+    if (type === 1) return 'direct';
+    if (type === 2) return 'quadratic';
+    return null;
+  }
+
+  getProposalExpiry(id: string): number {
+    return this.node.getRegister(`proposals:${id}:expires`) || 0;
+  }
+
+  getProposalVoteCount(proposalId: string, username: string): number {
+    const mirrorSet = TOKEN_NAMES.proposalMirrorSet(proposalId);
+    let voteCount = 0;
+    const maxVoteCheck = 100;
+    for (let i = 1; i <= maxVoteCheck; i++) {
+      if (this.node.setContains(mirrorSet, TOKEN_NAMES.proposalMirrorElement(proposalId, username, i))) {
+        voteCount = i;
+      } else {
+        break;
+      }
+    }
+    return voteCount;
+  }
+
+  getProposalTokenUsage(proposalId: string, username: string): number {
+    const voteCount = this.getProposalVoteCount(proposalId, username);
+    // Cumulative quadratic cost: sum of i^2 for i=1..voteCount
+    return (voteCount * (voteCount + 1) * (2 * voteCount + 1)) / 6;
+  }
+
+  getNodeTimeMs(): number {
+    return this.node.getRegister('time_now') || Date.now();
+  }
+
+  setTime(nowMs: number) {
+    this.node.setRegister('time_now', nowMs);
   }
 
   destroy() {
