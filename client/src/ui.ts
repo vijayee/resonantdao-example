@@ -688,7 +688,7 @@ export class AppUI {
 
   private async onStartElection() {
     if (!this.dao || !this.wallet || this.submitting) return;
-    const candidates = Array.from(this.memberUsernames).concat(this.wallet.username).sort();
+    const candidates = Array.from(new Set([...this.memberUsernames, this.wallet.username])).sort();
     const payload: StartElectionPayload = {
       electionId: crypto.randomUUID(),
       candidates,
@@ -712,7 +712,9 @@ export class AppUI {
   private async onCastBallot(electionId: string) {
     if (!this.dao || !this.wallet || this.submitting) return;
     const picks = Array.from(
-      document.querySelectorAll<HTMLInputElement>('.ballot-option:checked')
+      document.querySelectorAll<HTMLInputElement>(
+        `.proposal-card[data-election-id="${electionId}"] .ballot-option:checked`
+      )
     ).map((el) => el.dataset.member || '').filter((m) => m.length > 0);
     if (picks.length < 1 || picks.length > 5) {
       this.setStatus('Pick between 1 and 5 candidates.', 'error');
@@ -826,6 +828,7 @@ export class AppUI {
     for (const election of elections) {
       const card = document.createElement('div');
       card.className = 'proposal-card';
+      card.dataset.electionId = election.electionId;
 
       const title = document.createElement('h3');
       title.className = 'proposal-card__title';
