@@ -1,5 +1,5 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, CastBallotPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, StartElectionPayload, VotePayload } from './types';
+import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, StartElectionPayload, VotePayload } from './types';
 import {
   CONFIG_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
@@ -425,6 +425,54 @@ export function makeFinalizeElectionHandler(
       state.setRegister(ELECTION_NAMES.finalized(parentId), 1, op.signerId);
     }
     state.setRegister(ELECTION_NAMES.finalized(id), 1, op.signerId);
+    return 0;
+  };
+}
+
+export function makeCastRunoffVoteHandler(
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: CastRunoffVotePayload = JSON.parse(op.payload || '{}');
+    const id = payload.electionId;
+    if (!isNonEmptyString(id) || !isNonEmptyString(payload.candidate)) {
+      return -1;
+    }
+    if (state.getRegister(ELECTION_NAMES.isRunoff(id)) !== 1) {
+      return -1;
+    }
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const expiresAt = state.getRegister(ELECTION_NAMES.expires(id)) || 0;
+    if (expiresAt <= 0 || nowMs > expiresAt) {
+      return -1;
+    }
+    if (state.getRegister(ELECTION_NAMES.finalized(id)) === 1) {
+      return -1;
+    }
+    if (!state.setContains(ELECTION_NAMES.candidates(id), payload.candidate)) {
+      return -1;
+    }
+
+    // Quadratic cost from the voter's global token balance, mirrored per runoff.
+    const balance = distributeTokens(state, op.signerId, nowMs);
+    const mirror = ELECTION_NAMES.mirrorSet(id);
+    let used = 0;
+    const maxVoteCheck = 100;
+    for (let i = 1; i <= maxVoteCheck; i++) {
+      const element = ELECTION_NAMES.mirrorElement(id, op.signerId, i);
+      if (state.setContains(mirror, element)) {
+        used = i;
+      } else {
+        break;
+      }
+    }
+    const nextVote = used + 1;
+    const cumulativeCost = (nextVote * (nextVote + 1) * (2 * nextVote + 1)) / 6;
+    if (balance < cumulativeCost) {
+      return -1;
+    }
+    state.setAdd(mirror, ELECTION_NAMES.mirrorElement(id, op.signerId, nextVote), `${op.signerId}:${nextVote}`);
+    state.incrementPNCounter(ELECTION_NAMES.candVotes(id, payload.candidate), 1, op.signerId);
     return 0;
   };
 }

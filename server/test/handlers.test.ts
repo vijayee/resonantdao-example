@@ -9,9 +9,10 @@ import {
   makeExecuteHandler,
   makeStartElectionHandler,
   makeCastBallotHandler,
+  makeCastRunoffVoteHandler,
   makeFinalizeElectionHandler,
 } from '../../shared/src/handlers';
-import { TOKEN_CONFIG, VOTE_THRESHOLD } from '../../shared/src/policies';
+import { CONFIG_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, TOKEN_CONFIG, VOTE_THRESHOLD, runoffId } from '../../shared/src/policies';
 
 class MockNode {
   orSets = new Set<string>();
@@ -485,5 +486,80 @@ describe('Election handlers', () => {
     expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: 'e4', candidates: ['alice', 'bob', 'carol'] }))).toBe(0);
     expect(state.getRegister('election:e4:finalized')).toBe(0);
     expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: 'zz', candidates: ['alice'] }))).toBe(-1);
+  });
+
+  function setupRunoff(parentId: string, tied: string[], seatsAtStake: number) {
+    // Spawn a runoff the same way the finalize handler does.
+    const rid = runoffId(parentId);
+    try { node.addORSet(ELECTION_NAMES.ballots(rid)); } catch (err) { /* ignore duplicate */ }
+    try { node.addORSet(ELECTION_NAMES.candidates(rid)); } catch (err) { /* ignore duplicate */ }
+    try { node.addORSet(ELECTION_NAMES.mirrorSet(rid)); } catch (err) { /* ignore duplicate */ }
+    for (const c of tied) {
+      try { node.addPNCounter(ELECTION_NAMES.candVotes(rid, c)); } catch (err) { /* ignore duplicate */ }
+      state.setAdd(ELECTION_NAMES.candidates(rid), c, 'system');
+    }
+    try { node.addRegister(ELECTION_NAMES.expires(rid), 0); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(ELECTION_NAMES.finalized(rid), 0); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(ELECTION_NAMES.isRunoff(rid), 0); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(ELECTION_NAMES.seats(rid), 0); } catch (err) { /* ignore duplicate */ }
+    state.setRegister(ELECTION_NAMES.expires(rid), 100000, 'system');
+    state.setRegister(ELECTION_NAMES.isRunoff(rid), 1, 'system');
+    state.setRegister(ELECTION_NAMES.seats(rid), seatsAtStake, 'system');
+    return rid;
+  }
+
+  it('charges n^2 for repeated runoff votes and resolves the seat', () => {
+    initUser(state, 'alice', 0);
+    initUser(state, 'bob', 0);
+    const rid = setupRunoff('e2', ['bob', 'carol'], 1);
+
+    const vote = makeCastRunoffVoteHandler({ getTimeMs: () => 0 });
+    // alice: cumulative 1, 5, 14 <= 20 -> three votes on bob
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
+    expect(state.getPNCounter(`election:${rid}:cand:bob:votes`)).toBe(3);
+
+    // bob: 1 vote for carol
+    expect(vote(state, makeOp('cast_runoff_vote', 'bob', { electionId: rid, candidate: 'carol' }))).toBe(0);
+    expect(state.getPNCounter(`election:${rid}:cand:carol:votes`)).toBe(1);
+
+    // alice's 4th vote would cost cumulative 30 > 20 -> rejected
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(-1);
+    expect(state.getPNCounter(`election:${rid}:cand:bob:votes`)).toBe(3);
+
+    // Unknown candidate rejected
+    expect(vote(state, makeOp('cast_runoff_vote', 'carol', { electionId: rid, candidate: 'alice' }))).toBe(-1);
+
+    // Runoff finalize: bob wins the single seat; parent finalized
+    const finalize = makeFinalizeElectionHandler(node, { getTimeMs: () => 100001 });
+    expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: rid, candidates: ['bob', 'carol'] }))).toBe(0);
+    expect(state.getRegister(`election:${rid}:finalized`)).toBe(1);
+    expect(state.setContains('election:e2:winners', 'bob')).toBe(true);
+    expect(state.getRegister('election:e2:finalized')).toBe(1);
+  });
+
+  it('breaks a tied runoff alphabetically (deadlock guard)', () => {
+    initUser(state, 'alice', 0);
+    const rid = setupRunoff('e2', ['bob', 'carol'], 1);
+    const vote = makeCastRunoffVoteHandler({ getTimeMs: () => 0 });
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'carol' }))).toBe(0);
+    // tie 1-1 for one seat -> alphabetical: 'bob' < 'carol'
+    const finalize = makeFinalizeElectionHandler(node, { getTimeMs: () => 100001 });
+    expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: rid, candidates: ['bob', 'carol'] }))).toBe(0);
+    expect(state.setContains('election:e2:winners', 'bob')).toBe(true);
+    expect(state.setContains('election:e2:winners', 'carol')).toBe(false);
+  });
+
+  it('rejects runoff votes on non-runoff or finalized elections', () => {
+    startElection('e5');
+    const vote = makeCastRunoffVoteHandler({ getTimeMs: () => 0 });
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: 'e5', candidate: 'bob' }))).toBe(-1);
+    initUser(state, 'alice', 0);
+    const rid = setupRunoff('e2', ['bob', 'carol'], 1);
+    const fin = makeFinalizeElectionHandler(node, { getTimeMs: () => 100001 });
+    fin(state, makeOp('finalize_election', 'alice', { electionId: rid, candidates: ['bob', 'carol'] }));
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(-1);
   });
 });
