@@ -76,6 +76,51 @@ async function voteOption(page, proposalId, optionLabel) {
     throw new Error(`Expected ['3','0','0'] on quadratic proposal, got ${JSON.stringify(qTallies)}`);
   }
 
+  // --- Custodian election flow ---
+  // carol and dave register; their registrations broadcast to alice/bob pages.
+  const carol = await runUser('carol_e2e_' + Math.floor(Math.random() * 10000));
+  await carol.browser.close();
+  const dave = await runUser('dave_e2e_' + Math.floor(Math.random() * 10000));
+  await dave.browser.close();
+
+  // Start the election from alice's page.
+  await alice.page.click('#start-election');
+  await alice.page.waitForTimeout(1500);
+
+  // Alice and bob each cast a ballot (checkboxes scoped to their election card).
+  await alice.page.locator('.ballot-option').first().waitFor({ state: 'visible', timeout: 30000 });
+  const checkboxes = await alice.page.$$('.ballot-option');
+  await checkboxes[0].click(); // alice picks first candidate
+  await alice.page.click('#election-area button.button--primary');
+  await alice.page.waitForTimeout(1500);
+
+  await bob.page.locator('.ballot-option').first().waitFor({ state: 'visible', timeout: 30000 });
+  const bobCheckboxes = await bob.page.$$('.ballot-option');
+  await bobCheckboxes[0].click();
+  await bob.page.click('#election-area button.button--primary');
+  await bob.page.waitForTimeout(1500);
+
+  // Wait for expiry (60s), then finalize.
+  await alice.page.waitForTimeout(62000);
+  await alice.page.click('.finalize-election');
+  await alice.page.waitForTimeout(2000);
+
+  // Custodian controls appear for alice (a winner with the most picks).
+  await alice.page.waitForSelector('#token-config-form:not(.hidden)', { timeout: 30000 });
+  await alice.page.fill('#config-interval', '1000');
+  await alice.page.fill('#config-rate', '5');
+  await alice.page.click('#token-config-form button[type="submit"]');
+  await alice.page.waitForTimeout(1500);
+
+  // Remove dave if alice is a custodian and dave is listed.
+  const removeBtn = alice.page.locator('.remove-member').first();
+  if (await removeBtn.count()) {
+    await removeBtn.click({ force: true });
+    await alice.page.waitForTimeout(1500);
+  }
+
+  console.log('Custodian election smoke flow completed');
+
   await alice.browser.close();
   await bob.browser.close();
   console.log('Smoke test passed');
