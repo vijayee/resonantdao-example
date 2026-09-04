@@ -245,7 +245,10 @@ export function makeStartElectionHandler(
     try { node.addORSet(ELECTION_NAMES.candidates(id)); } catch (err) { console.warn('start_election resource init warning:', err); }
     for (const candidate of payload.candidates) {
       try { node.addPNCounter(ELECTION_NAMES.candVotes(id, candidate)); } catch (err) { console.warn('start_election resource init warning:', err); }
-      state.setAdd(ELECTION_NAMES.candidates(id), candidate, op.signerId);
+      // Use the candidate name as the ORSet tag so every candidate gets a
+      // unique tag within this election (CRABS setAdd with a duplicate tag
+      // would only retain one element).
+      state.setAdd(ELECTION_NAMES.candidates(id), candidate, candidate);
     }
     try { node.addRegister(ELECTION_NAMES.expires(id), 0); } catch (err) { /* ignore duplicate */ }
     try { node.addRegister(ELECTION_NAMES.finalized(id), 0); } catch (err) { /* ignore duplicate */ }
@@ -392,7 +395,7 @@ export function makeFinalizeElectionHandler(
 
     try { node.addORSet(ELECTION_NAMES.winners(id)); } catch (err) { console.warn('finalize resource init warning:', err); }
     for (const winner of result.winners) {
-      state.setAdd(ELECTION_NAMES.winners(id), winner, op.signerId);
+      state.setAdd(ELECTION_NAMES.winners(id), winner, winner);
     }
 
     if (result.runoffCandidates.length > 0) {
@@ -402,7 +405,7 @@ export function makeFinalizeElectionHandler(
       try { node.addORSet(ELECTION_NAMES.mirrorSet(rid)); } catch (err) { console.warn('finalize resource init warning:', err); }
       for (const candidate of result.runoffCandidates) {
         try { node.addPNCounter(ELECTION_NAMES.candVotes(rid, candidate)); } catch (err) { console.warn('finalize resource init warning:', err); }
-        state.setAdd(ELECTION_NAMES.candidates(rid), candidate, op.signerId);
+        state.setAdd(ELECTION_NAMES.candidates(rid), candidate, candidate);
       }
       try { node.addRegister(ELECTION_NAMES.expires(rid), 0); } catch (err) { /* ignore duplicate */ }
       try { node.addRegister(ELECTION_NAMES.finalized(rid), 0); } catch (err) { /* ignore duplicate */ }
@@ -420,7 +423,7 @@ export function makeFinalizeElectionHandler(
       const parentId = id.slice(0, -RUNOFF_SUFFIX.length);
       try { node.addORSet(ELECTION_NAMES.winners(parentId)); } catch (err) { console.warn('finalize resource init warning:', err); }
       for (const winner of result.winners) {
-        state.setAdd(ELECTION_NAMES.winners(parentId), winner, op.signerId);
+        state.setAdd(ELECTION_NAMES.winners(parentId), winner, winner);
       }
       state.setRegister(ELECTION_NAMES.finalized(parentId), 1, op.signerId);
     }

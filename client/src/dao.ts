@@ -55,6 +55,10 @@ export class BrowserDao {
     this.adminId = this.nodeId;
     this.signingKey = await this.KeyPair.fromPrivateHex(signingSeedHex);
     this.keyVersion = keyVersion;
+    // The server returns the absolute key version after registration (register=1,
+    // plus member and reputation grants = 3). Track that as the baseline so later
+    // sync_roles target versions map one-to-one to key version bumps.
+    this.roleChangeCount.set(username, keyVersion);
     this.node = await this.Node.create(this.adminId, { ordering: 'hlc' });
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
@@ -93,6 +97,7 @@ export class BrowserDao {
     this.node.grantRole(username, 'role', 'member', this.adminId);
     this.node.grantRole(username, 'reputation', '1', this.adminId);
     this.initTokenRegisters(username);
+    try { this.node.setAdd(STATE_NAMES.members, username, this.signingKey.publicKeyHex()); } catch (err) { /* ignore duplicate */ }
   }
 
   async createProposal(userId: string, payload: ProposalPayload): Promise<Uint8Array> {
@@ -135,12 +140,16 @@ export class BrowserDao {
     return this.signAndSerialize('remove_member', userId, JSON.stringify(payload));
   }
 
-  registerMember(username: string, publicKeyHex: string) {
+  registerMember(username: string, publicKeyHex: string, keyVersion = 3) {
     if (this.node.getUser(username)?.status === 'active') return;
     this.node.registerUser(username, publicKeyHex);
     this.node.grantRole(username, 'role', 'member', this.adminId);
     this.node.grantRole(username, 'reputation', '1', this.adminId);
     this.initTokenRegisters(username);
+    try { this.node.setAdd(STATE_NAMES.members, username, publicKeyHex); } catch (err) { /* ignore duplicate */ }
+    // Seed the role-change baseline so sync_roles target versions map
+    // one-to-one to the key-version bumps applied by the server.
+    this.roleChangeCount.set(username, keyVersion);
   }
 
   private initTokenRegisters(username: string) {

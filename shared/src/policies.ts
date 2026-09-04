@@ -52,14 +52,23 @@ export const CONFIG_NAMES = {
 } as const;
 
 export const ELECTION_NAMES = {
-  candidates: (id: string) => `election:${id}:candidates`,
-  candVotes: (id: string, username: string) => `election:${id}:cand:${username}:votes`,
-  ballots: (id: string) => `election:${id}:ballots`,
-  expires: (id: string) => `election:${id}:expires`,
-  finalized: (id: string) => `election:${id}:finalized`,
-  isRunoff: (id: string) => `election:${id}:is_runoff`,
-  seats: (id: string) => `election:${id}:seats`,
-  winners: (id: string) => `election:${id}:winners`,
-  mirrorSet: (id: string) => `election:${id}:mirror`,
-  mirrorElement: (id: string, username: string, n: number) => `election:${id}:mirror:${username}:${n}`,
+  // Keep resource names under CRABS' 63-character key limit. A full UUID (36
+  // chars) plus verbose prefix/candidate pushes candidate-vote counters over
+  // the limit, so use single-letter delimiters.
+  //
+  // Worst-case lengths with a 36-char UUID id:
+  //   e:{id}:v:{username}      -> 41 + username  (max username 22)
+  //   e:{id}:m:{username}:{n} -> 43 + username  (max username 20)
+  //   e:{id}:runoff:v:{username} -> 48 + username (max username 15)
+  // Demo usernames are short; this is acceptable for the PoC.
+  candidates: (id: string) => `e:${id}:c`,
+  candVotes: (id: string, username: string) => `e:${id}:v:${username}`,
+  ballots: (id: string) => `e:${id}:b`,
+  expires: (id: string) => `e:${id}:x`,
+  finalized: (id: string) => `e:${id}:f`,
+  isRunoff: (id: string) => `e:${id}:r`,
+  seats: (id: string) => `e:${id}:s`,
+  winners: (id: string) => `e:${id}:w`,
+  mirrorSet: (id: string) => `e:${id}:m`,
+  mirrorElement: (id: string, username: string, n: number) => `e:${id}:m:${username}:${n}`,
 } as const;

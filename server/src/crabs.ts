@@ -22,6 +22,7 @@ const ADMIN_ID = 'admin';
 export class DaoNode {
   node!: Node;
   private nodeKey!: KeyPair;
+  private userKeyVersions: Record<string, number> = {};
 
   async init() {
     this.node = await Node.create(ADMIN_ID, { ordering: 'hlc' });
@@ -70,6 +71,9 @@ export class DaoNode {
     this.node.grantRole(username, 'role', 'member', ADMIN_ID);
     this.node.grantRole(username, 'reputation', '1', ADMIN_ID);
     this.initTokenRegisters(username);
+    try { this.node.setAdd(STATE_NAMES.members, username, publicKeyHex); } catch (err) { /* ignore duplicate */ }
+    // registerUser starts at key version 1; the two grantRole calls above bump it to 3.
+    this.userKeyVersions[username] = 3;
     return 3;
   }
 
@@ -127,6 +131,7 @@ export class DaoNode {
 
   grantCustodian(username: string) {
     this.node.grantRole(username, 'role', 'custodian', ADMIN_ID);
+    this.userKeyVersions[username] = (this.userKeyVersions[username] || 0) + 1;
     if (!this.currentCustodians.includes(username)) {
       this.currentCustodians.push(username);
     }
@@ -134,6 +139,7 @@ export class DaoNode {
 
   grantMemberRole(username: string) {
     this.node.grantRole(username, 'role', 'member', ADMIN_ID);
+    this.userKeyVersions[username] = (this.userKeyVersions[username] || 0) + 1;
     this.currentCustodians = this.currentCustodians.filter((u) => u !== username);
   }
 
@@ -150,7 +156,7 @@ export class DaoNode {
   }
 
   getUserRoleVersion(username: string): number {
-    return this.node.getUser(username)?.keyVersion ?? 0;
+    return this.userKeyVersions[username] ?? 0;
   }
 
   async createSyncRolesOperation(payload: SyncRolesPayload): Promise<Operation> {

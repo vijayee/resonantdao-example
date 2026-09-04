@@ -150,7 +150,12 @@ export class AppUI {
     } catch (err) {
       if (
         err instanceof Error &&
-        (err.message.includes('duplicate_operation') || err.message.includes('already_executed'))
+        (
+          err.message.includes('duplicate_operation') ||
+          err.message.includes('already_executed') ||
+          err.message.includes('unauthorized') ||
+          err.message.includes('key_stale')
+        )
       ) {
         return;
       }
@@ -243,7 +248,7 @@ export class AppUI {
 
       for (const member of res.members) {
         if (member.username !== username) {
-          dao.registerMember(member.username, member.publicKeyHex);
+          dao.registerMember(member.username, member.publicKeyHex, member.keyVersion);
         }
       }
 
@@ -328,7 +333,7 @@ export class AppUI {
 
       for (const member of loginRes.members) {
         if (member.username !== username) {
-          this.dao?.registerMember(member.username, member.publicKeyHex);
+          this.dao?.registerMember(member.username, member.publicKeyHex, member.keyVersion);
           this.memberUsernames.add(member.username);
         }
       }
@@ -449,7 +454,7 @@ export class AppUI {
       this.memberUsernames = new Set(msg.users.map((user) => user.username));
       for (const user of msg.users) {
         if (user.username !== this.wallet?.username) {
-          this.dao?.registerMember(user.username, user.publicKeyHex);
+          this.dao?.registerMember(user.username, user.publicKeyHex, user.keyVersion);
         }
       }
       this.renderMembers();
