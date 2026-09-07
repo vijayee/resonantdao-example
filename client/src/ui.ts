@@ -220,6 +220,11 @@ export class AppUI {
       this.setStatus('Username and password are required.', 'error');
       return;
     }
+    // CRABS user ids reject dots, spaces, and other punctuation.
+    if (!/^[A-Za-z0-9_-]+$/.test(username)) {
+      this.setStatus('Username may only contain letters, numbers, underscores, and dashes.', 'error');
+      return;
+    }
     if (password.length < 8) {
       this.setStatus('Password must be at least 8 characters.', 'error');
       return;
