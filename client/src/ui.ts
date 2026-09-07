@@ -826,6 +826,16 @@ export class AppUI {
   private renderElections() {
     const area = document.getElementById('election-area');
     if (!area || !this.dao || !this.wallet) return;
+    // The demo clock re-renders every second; snapshot ballot selections so
+    // the rebuild does not wipe them before the user submits.
+    const checkedByElection = new Map<string, Set<string>>();
+    for (const card of Array.from(area.querySelectorAll<HTMLDivElement>('.proposal-card[data-election-id]'))) {
+      const id = card.dataset.electionId;
+      if (!id) continue;
+      checkedByElection.set(id, new Set(
+        Array.from(card.querySelectorAll<HTMLInputElement>('.ballot-option:checked')).map((el) => el.dataset.member || '')
+      ));
+    }
     area.innerHTML = '';
     const elections = this.dao.getElections().slice().reverse();
     if (elections.length === 0) return;
@@ -858,6 +868,7 @@ export class AppUI {
 
       if (!election.isRunoff && state === 0 && !ballots) {
         const form = document.createElement('div');
+        const checked = checkedByElection.get(election.electionId);
         for (const candidate of election.candidates) {
           const label = document.createElement('label');
           label.style.display = 'block';
@@ -865,6 +876,9 @@ export class AppUI {
           checkbox.type = 'checkbox';
           checkbox.className = 'ballot-option';
           checkbox.dataset.member = candidate;
+          if (checked?.has(candidate)) {
+            checkbox.checked = true;
+          }
           label.appendChild(checkbox);
           label.appendChild(document.createTextNode(` ${candidate}`));
           form.appendChild(label);
