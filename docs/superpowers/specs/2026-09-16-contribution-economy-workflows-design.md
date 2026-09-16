@@ -133,6 +133,6 @@ Markdown index with Mermaid mirrors of each diagram (render on GitHub; no-JS fal
 ## Validation
 
 - Each `.bpmn` file validates as BPMN 2.0 (bpmn-js import without errors, bpmn-moddle parse check).
-- HTML page renders all 24 diagrams in a browser (verify locally).
+- HTML page renders all 25 diagrams in a browser (verify locally).
 - Cross-dimension arrows in the interaction map match the README dependency table 1:1.
 - Spec invariants checklist reviewed per diagram (null-preservation, outcome-only payment, human gates present, RCT never scales votes).
