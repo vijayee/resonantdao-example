@@ -32,7 +32,7 @@
     <bpmn:exclusiveGateway id="c09_gw_steer" name="Finding steers a vote?"/>
     <bpmn:userTask id="c09_task_verify" name="Verify decision-steering evidence"/>
     <bpmn:serviceTask id="c09_task_bonus" name="Adoption bonus"/>
-    <bpmn:exclusiveGateway id="c09_gw_join"/>
+    <bpmn:exclusiveGateway id="c09_gw_join" name="Merge paths"/>
     <bpmn:serviceTask id="c09_task_record" name="Emit explanation record"/>
     <bpmn:serviceTask id="c09_task_feed_c20" name="Feed C_20 Judgement: adoption evidence"/>
     <bpmn:endEvent id="c09_end_balance" name="C_9 balance updated"/>
@@ -109,7 +109,7 @@
         <di:waypoint x="540" y="546"/><di:waypoint x="560" y="546"/><di:waypoint x="560" y="360"/><di:waypoint x="580" y="360"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c09_f4_di" bpmnElement="c09_f4">
-        <di:waypoint x="630" y="360"/><di:waypoint x="644" y="360"/><di:waypoint x="644" y="418"/><di:waypoint x="670" y="418"/>
+        <di:waypoint x="605" y="385"/><di:waypoint x="605" y="418"/><di:waypoint x="670" y="418"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c09_f5_di" bpmnElement="c09_f5">
         <di:waypoint x="630" y="360"/><di:waypoint x="770" y="360"/>
@@ -118,7 +118,7 @@
         <di:waypoint x="820" y="360"/><di:waypoint x="900" y="360"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c09_f7_di" bpmnElement="c09_f7">
-        <di:waypoint x="795" y="385"/><di:waypoint x="795" y="610"/><di:waypoint x="1200" y="610"/><di:waypoint x="1200" y="556"/>
+        <di:waypoint x="795" y="385"/><di:waypoint x="795" y="610"/><di:waypoint x="1225" y="610"/><di:waypoint x="1225" y="556"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c09_f8_di" bpmnElement="c09_f8">
         <di:waypoint x="950" y="400"/><di:waypoint x="950" y="470"/><di:waypoint x="1050" y="470"/><di:waypoint x="1050" y="506"/>
