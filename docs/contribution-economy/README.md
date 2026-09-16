@@ -67,12 +67,14 @@ flowchart LR
   CL --> TI{Review tier}
   TI -->|Tier 0| T0[Automatic verification]
   TI -->|Tier 1| T1[Machine-proposed check] --> T1A[Random audit sample]
-  TI -->|Tier 2| T2[Conflict-of-interest check] --> T2A[Reviewer 1: written reasons] & T2B[Reviewer 2: written reasons]
+  TI -->|Tier 2+| T2[Conflict-of-interest check] --> T2A[Reviewer 1: written reasons] & T2B[Reviewer 2: written reasons]
   T0 --> V{Verified?}
   T1A --> V
   T2A --> V
   T2B --> V
-  V -->|no| AP[Appeal: deadline-bound, Tier 3 panel] --> V
+  V -->|no| AP[Appeal: deadline-bound, Tier 3 panel]
+  AP -->|verdict revised| V
+  AP --> PEND([Unverified - judgment stays pending, settles retroactively])
   V -->|yes| H[Harm check: verified harm reduces or voids outcome]
   H --> D[Delta C_i = Match x Outcome x Verification x Calibration_i]
   D --> B[(22 non-transferable balances)]
@@ -86,14 +88,21 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  S(([Cycle boundary: C_10 fair close + C_20 provenance settled])) --> N[Normalize N_i C_i - null preserving, null never becomes 0, never decays]
+  S([Cycle boundary: C_10 fair close + C_20 provenance settled]) --> F[Fetch C_i balances]
+  F --> MORE{More dimensions?}
+  MORE -->|next i, 0-21| F
+  MORE -->|done| N[Normalize N_i C_i - null preserving, null never becomes 0, never decays]
   N --> X{Capital-derived portion?}
-  X -->|yes| EX[Exclude from voting-relevant aggregation] --> W
-  X -->|no| W[Human governance: review alpha_i weights + version]
+  X -->|yes| EX[Exclude from voting-relevant aggregation] --> NJ{Merge norm paths}
+  X -->|no| NJ
+  NJ --> W[Human governance: review alpha_i weights + version]
   FA[C_11 Justice fairness audit] --> W
   DA[C_15 Devil distortion audit] --> W
   W --> CV[Emit calibration-version explanation record]
-  CV --> A[Aggregate: RCT = aggregate alpha_i x N_i C_i]
+  NJ --> BP[Chronic under-measurement check: back-pay / calibration / rule retirement]
+  CV --> PA{Merge calibration + back-pay before aggregation}
+  BP --> PA
+  PA --> A[Aggregate: RCT = aggregate alpha_i x N_i C_i]
   A --> P{Profile preserved - RCT summarizes, never erases?}
   P -->|no| A
   P -->|yes| U{Use gate}
