@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c16" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c16" name="C_16 Tower — Crisis Response" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c16">
+      <bpmn:lane id="c16_lane_member" name="Member">
+        <bpmn:flowNodeRef>c16_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c16_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c16_task_verify</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c16_gw_verified</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c16_gw_cause</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c16_task_size</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c16_end_notoken</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c16_end_cause</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c16_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c16_task_token</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c16_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c16_task_feed_c13</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c16_end_balance</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c16_start" name="Crisis event detected"/>
+    <bpmn:userTask id="c16_task_verify" name="Verify crisis via C_18 Moon"/>
+    <bpmn:exclusiveGateway id="c16_gw_verified" name="Crisis verified?"/>
+    <bpmn:endEvent id="c16_end_notoken" name="No token (detection alone pays nothing)"/>
+    <bpmn:exclusiveGateway id="c16_gw_cause" name="Caused by responder's own failure?"/>
+    <bpmn:endEvent id="c16_end_cause" name="No token (caused failure)"/>
+    <bpmn:userTask id="c16_task_size" name="Size token by severity"/>
+    <bpmn:serviceTask id="c16_task_token" name="Crisis token for stabilization"/>
+    <bpmn:serviceTask id="c16_task_record" name="Emit explanation record"/>
+    <bpmn:serviceTask id="c16_task_feed_c13" name="Feed C_13 Death: stabilization record"/>
+    <bpmn:endEvent id="c16_end_balance" name="C_16 balance updated"/>
+    <bpmn:sequenceFlow id="c16_f1" sourceRef="c16_start" targetRef="c16_task_verify"/>
+    <bpmn:sequenceFlow id="c16_f2" sourceRef="c16_task_verify" targetRef="c16_gw_verified"/>
+    <bpmn:sequenceFlow id="c16_f3" name="yes" sourceRef="c16_gw_verified" targetRef="c16_gw_cause"/>
+    <bpmn:sequenceFlow id="c16_f4" name="no" sourceRef="c16_gw_verified" targetRef="c16_end_notoken"/>
+    <bpmn:sequenceFlow id="c16_f5" name="yes" sourceRef="c16_gw_cause" targetRef="c16_end_cause"/>
+    <bpmn:sequenceFlow id="c16_f6" name="no" sourceRef="c16_gw_cause" targetRef="c16_task_size"/>
+    <bpmn:sequenceFlow id="c16_f7" sourceRef="c16_task_size" targetRef="c16_task_token"/>
+    <bpmn:sequenceFlow id="c16_f8" sourceRef="c16_task_token" targetRef="c16_task_record"/>
+    <bpmn:sequenceFlow id="c16_f9" sourceRef="c16_task_record" targetRef="c16_task_feed_c13"/>
+    <bpmn:sequenceFlow id="c16_f10" sourceRef="c16_task_feed_c13" targetRef="c16_end_balance"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c16">
+    <bpmndi:BPMNPlane id="Plane_c16" bpmnElement="Process_c16">
+      <bpmndi:BPMNShape id="c16_pool_di" bpmnElement="Process_c16" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1700" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_lane_member_di" bpmnElement="c16_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1670" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_lane_reviewer_di" bpmnElement="c16_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1670" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_lane_system_di" bpmnElement="c16_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1670" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_start_di" bpmnElement="c16_start">
+        <dc:Bounds x="180" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_task_verify_di" bpmnElement="c16_task_verify">
+        <dc:Bounds x="400" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_gw_verified_di" bpmnElement="c16_gw_verified">
+        <dc:Bounds x="560" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_end_notoken_di" bpmnElement="c16_end_notoken">
+        <dc:Bounds x="237" y="282" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_gw_cause_di" bpmnElement="c16_gw_cause">
+        <dc:Bounds x="760" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_end_cause_di" bpmnElement="c16_end_cause">
+        <dc:Bounds x="982" y="282" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_task_size_di" bpmnElement="c16_task_size">
+        <dc:Bounds x="1140" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_task_token_di" bpmnElement="c16_task_token">
+        <dc:Bounds x="1240" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_task_record_di" bpmnElement="c16_task_record">
+        <dc:Bounds x="1380" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_task_feed_c13_di" bpmnElement="c16_task_feed_c13">
+        <dc:Bounds x="1520" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c16_end_balance_di" bpmnElement="c16_end_balance">
+        <dc:Bounds x="1680" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c16_f1_di" bpmnElement="c16_f1">
+        <di:waypoint x="216" y="174"/><di:waypoint x="450" y="174"/><di:waypoint x="450" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f2_di" bpmnElement="c16_f2">
+        <di:waypoint x="500" y="360"/><di:waypoint x="560" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f3_di" bpmnElement="c16_f3">
+        <di:waypoint x="610" y="360"/><di:waypoint x="760" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f4_di" bpmnElement="c16_f4">
+        <di:waypoint x="585" y="385"/><di:waypoint x="585" y="415"/><di:waypoint x="115" y="415"/><di:waypoint x="115" y="300"/><di:waypoint x="237" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f5_di" bpmnElement="c16_f5">
+        <di:waypoint x="810" y="360"/><di:waypoint x="1110" y="360"/><di:waypoint x="1110" y="300"/><di:waypoint x="1018" y="300"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f6_di" bpmnElement="c16_f6">
+        <di:waypoint x="785" y="385"/><di:waypoint x="785" y="440"/><di:waypoint x="1190" y="440"/><di:waypoint x="1190" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f7_di" bpmnElement="c16_f7">
+        <di:waypoint x="1240" y="360"/><di:waypoint x="1290" y="360"/><di:waypoint x="1290" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f8_di" bpmnElement="c16_f8">
+        <di:waypoint x="1340" y="546"/><di:waypoint x="1380" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f9_di" bpmnElement="c16_f9">
+        <di:waypoint x="1480" y="546"/><di:waypoint x="1520" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c16_f10_di" bpmnElement="c16_f10">
+        <di:waypoint x="1620" y="546"/><di:waypoint x="1680" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

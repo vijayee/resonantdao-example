@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c18" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c18" name="C_18 Moon — Verifying" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c18">
+      <bpmn:lane id="c18_lane_member" name="Member">
+        <bpmn:flowNodeRef>c18_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c18_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c18_task_check</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c18_task_rotate</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c18_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c18_gw_queue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c18_end_drained</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c18_task_token</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c18_task_accuracy</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c18_gw_capture</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c18_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c18_task_feed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c18_end_balance</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c18_start" name="Pending claim enqueued"/>
+    <bpmn:exclusiveGateway id="c18_gw_queue" name="More pending claims?"/>
+    <bpmn:endEvent id="c18_end_drained" name="Queue drained"/>
+    <bpmn:userTask id="c18_task_check" name="Complete verification check"/>
+    <bpmn:serviceTask id="c18_task_token" name="Verification token per completed check (any direction)"/>
+    <bpmn:serviceTask id="c18_task_accuracy" name="Track accuracy vs chance"/>
+    <bpmn:exclusiveGateway id="c18_gw_capture" name="Reviewer capture suspected?"/>
+    <bpmn:userTask id="c18_task_rotate" name="Rotate reviewer pool (Tier 3)"/>
+    <bpmn:serviceTask id="c18_task_record" name="Emit explanation record"/>
+    <bpmn:serviceTask id="c18_task_feed" name="Verdicts feed all dimensions' pending claims"/>
+    <bpmn:endEvent id="c18_end_balance" name="C_18 balance updated"/>
+    <bpmn:sequenceFlow id="c18_f1" sourceRef="c18_start" targetRef="c18_gw_queue"/>
+    <bpmn:sequenceFlow id="c18_f2" name="no" sourceRef="c18_gw_queue" targetRef="c18_end_drained"/>
+    <bpmn:sequenceFlow id="c18_f3" name="yes" sourceRef="c18_gw_queue" targetRef="c18_task_check"/>
+    <bpmn:sequenceFlow id="c18_f4" sourceRef="c18_task_check" targetRef="c18_task_token"/>
+    <bpmn:sequenceFlow id="c18_f5" sourceRef="c18_task_token" targetRef="c18_task_accuracy"/>
+    <bpmn:sequenceFlow id="c18_f6" sourceRef="c18_task_accuracy" targetRef="c18_gw_capture"/>
+    <bpmn:sequenceFlow id="c18_f7" name="yes" sourceRef="c18_gw_capture" targetRef="c18_task_rotate"/>
+    <bpmn:sequenceFlow id="c18_f8" name="no" sourceRef="c18_gw_capture" targetRef="c18_task_record"/>
+    <bpmn:sequenceFlow id="c18_f9" sourceRef="c18_task_rotate" targetRef="c18_gw_queue"/>
+    <bpmn:sequenceFlow id="c18_f10" sourceRef="c18_task_record" targetRef="c18_task_feed"/>
+    <bpmn:sequenceFlow id="c18_f11" sourceRef="c18_task_feed" targetRef="c18_end_balance"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c18">
+    <bpmndi:BPMNPlane id="Plane_c18" bpmnElement="Process_c18">
+      <bpmndi:BPMNShape id="c18_pool_di" bpmnElement="Process_c18" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1480" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_lane_member_di" bpmnElement="c18_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1450" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_lane_reviewer_di" bpmnElement="c18_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1450" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_lane_system_di" bpmnElement="c18_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1450" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_start_di" bpmnElement="c18_start">
+        <dc:Bounds x="180" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_gw_queue_di" bpmnElement="c18_gw_queue">
+        <dc:Bounds x="340" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_end_drained_di" bpmnElement="c18_end_drained">
+        <dc:Bounds x="347" y="584" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_task_check_di" bpmnElement="c18_task_check">
+        <dc:Bounds x="450" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_task_token_di" bpmnElement="c18_task_token">
+        <dc:Bounds x="620" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_task_accuracy_di" bpmnElement="c18_task_accuracy">
+        <dc:Bounds x="790" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_gw_capture_di" bpmnElement="c18_gw_capture">
+        <dc:Bounds x="950" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_task_rotate_di" bpmnElement="c18_task_rotate">
+        <dc:Bounds x="1130" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_task_record_di" bpmnElement="c18_task_record">
+        <dc:Bounds x="1120" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_task_feed_di" bpmnElement="c18_task_feed">
+        <dc:Bounds x="1290" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c18_end_balance_di" bpmnElement="c18_end_balance">
+        <dc:Bounds x="1450" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c18_f1_di" bpmnElement="c18_f1">
+        <di:waypoint x="216" y="174"/><di:waypoint x="278" y="174"/><di:waypoint x="278" y="542"/><di:waypoint x="351" y="542"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f2_di" bpmnElement="c18_f2">
+        <di:waypoint x="365" y="556"/><di:waypoint x="365" y="584"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f3_di" bpmnElement="c18_f3">
+        <di:waypoint x="390" y="531"/><di:waypoint x="415" y="531"/><di:waypoint x="415" y="360"/><di:waypoint x="450" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f4_di" bpmnElement="c18_f4">
+        <di:waypoint x="500" y="400"/><di:waypoint x="500" y="470"/><di:waypoint x="670" y="470"/><di:waypoint x="670" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f5_di" bpmnElement="c18_f5">
+        <di:waypoint x="720" y="546"/><di:waypoint x="790" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f6_di" bpmnElement="c18_f6">
+        <di:waypoint x="890" y="546"/><di:waypoint x="965" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f7_di" bpmnElement="c18_f7">
+        <di:waypoint x="1000" y="531"/><di:waypoint x="1090" y="531"/><di:waypoint x="1090" y="360"/><di:waypoint x="1130" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f8_di" bpmnElement="c18_f8">
+        <di:waypoint x="975" y="556"/><di:waypoint x="975" y="578"/><di:waypoint x="1120" y="578"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f9_di" bpmnElement="c18_f9">
+        <di:waypoint x="1180" y="320"/><di:waypoint x="1180" y="290"/><di:waypoint x="292" y="290"/><di:waypoint x="292" y="531"/><di:waypoint x="340" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f10_di" bpmnElement="c18_f10">
+        <di:waypoint x="1220" y="546"/><di:waypoint x="1290" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c18_f11_di" bpmnElement="c18_f11">
+        <di:waypoint x="1390" y="546"/><di:waypoint x="1450" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

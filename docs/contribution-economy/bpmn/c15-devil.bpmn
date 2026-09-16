@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c15" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c15" name="C_15 Devil — Exposing" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c15">
+      <bpmn:lane id="c15_lane_member" name="Member">
+        <bpmn:flowNodeRef>c15_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c15_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c15_task_corrob</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c15_gw_corr</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c15_task_audit</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c15_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c15_task_penalty</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c15_end_penalty</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c15_task_bounty</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c15_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c15_task_feed_c11</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c15_end_balance</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c15_start" name="Incentive distortion claim filed"/>
+    <bpmn:userTask id="c15_task_corrob" name="Corroboration by independent member (≥ 1)"/>
+    <bpmn:exclusiveGateway id="c15_gw_corr" name="Claim corroborated?"/>
+    <bpmn:userTask id="c15_task_audit" name="Devil operator audit of weights (human-only bootstrap)"/>
+    <bpmn:serviceTask id="c15_task_penalty" name="False-claim penalty"/>
+    <bpmn:endEvent id="c15_end_penalty" name="Penalty applied"/>
+    <bpmn:serviceTask id="c15_task_bounty" name="Integrity bounty (among the largest payouts)"/>
+    <bpmn:serviceTask id="c15_task_record" name="Emit explanation record"/>
+    <bpmn:serviceTask id="c15_task_feed_c11" name="Feed C_11 Justice + aggregation: distortion finding"/>
+    <bpmn:endEvent id="c15_end_balance" name="C_15 balance updated"/>
+    <bpmn:sequenceFlow id="c15_f1" sourceRef="c15_start" targetRef="c15_task_corrob"/>
+    <bpmn:sequenceFlow id="c15_f2" sourceRef="c15_task_corrob" targetRef="c15_gw_corr"/>
+    <bpmn:sequenceFlow id="c15_f3" name="no" sourceRef="c15_gw_corr" targetRef="c15_task_penalty"/>
+    <bpmn:sequenceFlow id="c15_f4" sourceRef="c15_task_penalty" targetRef="c15_end_penalty"/>
+    <bpmn:sequenceFlow id="c15_f5" name="yes" sourceRef="c15_gw_corr" targetRef="c15_task_audit"/>
+    <bpmn:sequenceFlow id="c15_f6" sourceRef="c15_task_audit" targetRef="c15_task_bounty"/>
+    <bpmn:sequenceFlow id="c15_f7" sourceRef="c15_task_bounty" targetRef="c15_task_record"/>
+    <bpmn:sequenceFlow id="c15_f8" sourceRef="c15_task_record" targetRef="c15_task_feed_c11"/>
+    <bpmn:sequenceFlow id="c15_f9" sourceRef="c15_task_feed_c11" targetRef="c15_end_balance"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c15">
+    <bpmndi:BPMNPlane id="Plane_c15" bpmnElement="Process_c15">
+      <bpmndi:BPMNShape id="c15_pool_di" bpmnElement="Process_c15" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1240" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_lane_member_di" bpmnElement="c15_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1210" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_lane_reviewer_di" bpmnElement="c15_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1210" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_lane_system_di" bpmnElement="c15_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1210" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_start_di" bpmnElement="c15_start">
+        <dc:Bounds x="200" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_task_corrob_di" bpmnElement="c15_task_corrob">
+        <dc:Bounds x="300" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_gw_corr_di" bpmnElement="c15_gw_corr">
+        <dc:Bounds x="460" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_task_audit_di" bpmnElement="c15_task_audit">
+        <dc:Bounds x="560" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_task_penalty_di" bpmnElement="c15_task_penalty">
+        <dc:Bounds x="435" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_end_penalty_di" bpmnElement="c15_end_penalty">
+        <dc:Bounds x="590" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_task_bounty_di" bpmnElement="c15_task_bounty">
+        <dc:Bounds x="725" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_task_record_di" bpmnElement="c15_task_record">
+        <dc:Bounds x="865" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_task_feed_c11_di" bpmnElement="c15_task_feed_c11">
+        <dc:Bounds x="1005" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c15_end_balance_di" bpmnElement="c15_end_balance">
+        <dc:Bounds x="1180" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c15_f1_di" bpmnElement="c15_f1">
+        <di:waypoint x="236" y="174"/><di:waypoint x="350" y="174"/><di:waypoint x="350" y="320"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c15_f2_di" bpmnElement="c15_f2">
+        <di:waypoint x="400" y="360"/><di:waypoint x="460" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c15_f3_di" bpmnElement="c15_f3">
+        <di:waypoint x="485" y="385"/><di:waypoint x="485" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c15_f4_di" bpmnElement="c15_f4">
+        <di:waypoint x="535" y="546"/><di:waypoint x="590" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c15_f5_di" bpmnElement="c15_f5">
+        <di:waypoint x="510" y="360"/><di:waypoint x="560" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c15_f6_di" bpmnElement="c15_f6">
+        <di:waypoint x="610" y="400"/><di:waypoint x="610" y="466"/><di:waypoint x="775" y="466"/><di:waypoint x="775" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c15_f7_di" bpmnElement="c15_f7">
+        <di:waypoint x="825" y="546"/><di:waypoint x="865" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c15_f8_di" bpmnElement="c15_f8">
+        <di:waypoint x="965" y="546"/><di:waypoint x="1005" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c15_f9_di" bpmnElement="c15_f9">
+        <di:waypoint x="1105" y="546"/><di:waypoint x="1180" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
