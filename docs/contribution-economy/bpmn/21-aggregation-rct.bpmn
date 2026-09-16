@@ -26,9 +26,9 @@
         <bpmn:flowNodeRef>rct_task_fairness</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>rct_task_devil</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>rct_gw_gov_join</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>rct_gov_review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>rct_task_review</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>rct_task_calib</bpmn:flowNodeRef>
-        <bpmn:flowNodeRef>rct_gov_backpay</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>rct_task_backpay</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>rct_gw_preagg</bpmn:flowNodeRef>
       </bpmn:lane>
       <bpmn:lane id="rct_lane_pub" name="Publication">
@@ -39,25 +39,25 @@
         <bpmn:flowNodeRef>rct_end</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="rct_start" name="Cycle boundary — C_10 Wheel fair close + C_20 Judgement provenance settled"/>
+    <bpmn:startEvent id="rct_start" name="Cycle boundary — C_10 fair close, C_20 settled"/>
     <bpmn:task id="rct_task_fetch" name="Fetch C_i balances"/>
     <bpmn:exclusiveGateway id="rct_gw_more" name="More dimensions?"/>
     <bpmn:serviceTask id="rct_task_norm" name="Normalize N_i(C_i) — null-preserving: null stays null, never becomes 0, never decays"/>
     <bpmn:exclusiveGateway id="rct_gw_exclusion" name="Capital-derived portion?"/>
     <bpmn:serviceTask id="rct_task_exclude" name="Exclude from voting-relevant aggregation (capital never becomes voting power)"/>
-    <bpmn:parallelGateway id="rct_gw_norm_join" name="Merge normalization paths; fork governance + back-pay branches"/>
+    <bpmn:parallelGateway id="rct_gw_norm_join" name="Merge norm paths"/>
     <bpmn:parallelGateway id="rct_gw_gov_split" name="Spawn independent governance audits"/>
     <bpmn:userTask id="rct_task_fairness" name="C_11 Justice fairness audit: under-recognized care / mediation / maintenance"/>
     <bpmn:userTask id="rct_task_devil" name="C_15 Devil distortion audit of dimension weights"/>
     <bpmn:parallelGateway id="rct_gw_gov_join" name="Merge governance audits"/>
-    <bpmn:userTask id="rct_gov_review" name="Governance review of alpha_i weights + versioning"/>
+    <bpmn:userTask id="rct_task_review" name="Governance review of alpha_i weights + versioning"/>
     <bpmn:serviceTask id="rct_task_calib" name="Emit calibration-version explanation record"/>
-    <bpmn:userTask id="rct_gov_backpay" name="Chronic under-measurement check → back-pay / calibration / rule retirement"/>
+    <bpmn:userTask id="rct_task_backpay" name="Chronic under-measurement check → back-pay / calibration / rule retirement"/>
     <bpmn:parallelGateway id="rct_gw_preagg" name="Join calibration + back-pay branches before aggregation"/>
     <bpmn:serviceTask id="rct_task_aggregate" name="RCT = aggregate(alpha_i × N_i(C_i))"/>
-    <bpmn:exclusiveGateway id="rct_gw_preserve" name="Profile preserved (RCT summarizes, never erases 22-vector)?"/>
+    <bpmn:exclusiveGateway id="rct_gw_preserve" name="Profile preserved?"/>
     <bpmn:exclusiveGateway id="rct_gw_use" name="Use gate: eligibility/quorum only"/>
-    <bpmn:endEvent id="rct_end_forbidden" name="FORBIDDEN: RCT never scales voting weight — rejected"/>
+    <bpmn:endEvent id="rct_end_forbidden" name="FORBIDDEN — RCT never scales votes"/>
     <bpmn:parallelGateway id="rct_gw_pub_split" name="Spawn publication tasks"/>
     <bpmn:serviceTask id="rct_task_publish" name="Publish summary"/>
     <bpmn:serviceTask id="rct_task_source" name="Update 22-vector as source record"/>
@@ -72,21 +72,21 @@
     <bpmn:sequenceFlow id="rct_f7" name="no" sourceRef="rct_gw_exclusion" targetRef="rct_gw_norm_join"/>
     <bpmn:sequenceFlow id="rct_f8" sourceRef="rct_task_exclude" targetRef="rct_gw_norm_join"/>
     <bpmn:sequenceFlow id="rct_f9" sourceRef="rct_gw_norm_join" targetRef="rct_gw_gov_split"/>
-    <bpmn:sequenceFlow id="rct_f10" sourceRef="rct_gw_norm_join" targetRef="rct_gov_backpay"/>
+    <bpmn:sequenceFlow id="rct_f10" sourceRef="rct_gw_norm_join" targetRef="rct_task_backpay"/>
     <bpmn:sequenceFlow id="rct_f11" sourceRef="rct_gw_gov_split" targetRef="rct_task_fairness"/>
     <bpmn:sequenceFlow id="rct_f12" sourceRef="rct_gw_gov_split" targetRef="rct_task_devil"/>
     <bpmn:sequenceFlow id="rct_f13" sourceRef="rct_task_fairness" targetRef="rct_gw_gov_join"/>
     <bpmn:sequenceFlow id="rct_f14" sourceRef="rct_task_devil" targetRef="rct_gw_gov_join"/>
-    <bpmn:sequenceFlow id="rct_f15" sourceRef="rct_gw_gov_join" targetRef="rct_gov_review"/>
-    <bpmn:sequenceFlow id="rct_f16" sourceRef="rct_gov_review" targetRef="rct_task_calib"/>
+    <bpmn:sequenceFlow id="rct_f15" sourceRef="rct_gw_gov_join" targetRef="rct_task_review"/>
+    <bpmn:sequenceFlow id="rct_f16" sourceRef="rct_task_review" targetRef="rct_task_calib"/>
     <bpmn:sequenceFlow id="rct_f17" sourceRef="rct_task_calib" targetRef="rct_gw_preagg"/>
-    <bpmn:sequenceFlow id="rct_f18" sourceRef="rct_gov_backpay" targetRef="rct_gw_preagg"/>
+    <bpmn:sequenceFlow id="rct_f18" sourceRef="rct_task_backpay" targetRef="rct_gw_preagg"/>
     <bpmn:sequenceFlow id="rct_f19" sourceRef="rct_gw_preagg" targetRef="rct_task_aggregate"/>
     <bpmn:sequenceFlow id="rct_f20" sourceRef="rct_task_aggregate" targetRef="rct_gw_preserve"/>
     <bpmn:sequenceFlow id="rct_f21" name="no" sourceRef="rct_gw_preserve" targetRef="rct_task_aggregate"/>
     <bpmn:sequenceFlow id="rct_f22" name="yes" sourceRef="rct_gw_preserve" targetRef="rct_gw_use"/>
     <bpmn:sequenceFlow id="rct_f23" name="scale voting weight" sourceRef="rct_gw_use" targetRef="rct_end_forbidden"/>
-    <bpmn:sequenceFlow id="rct_f24" name="gate eligibility/quorum (human-attributed portions in salient dimensions, hard caps)" sourceRef="rct_gw_use" targetRef="rct_gw_pub_split"/>
+    <bpmn:sequenceFlow id="rct_f24" name="gate eligibility/quorum — human-attributed portions, salient dims, hard caps" sourceRef="rct_gw_use" targetRef="rct_gw_pub_split"/>
     <bpmn:sequenceFlow id="rct_f25" sourceRef="rct_gw_pub_split" targetRef="rct_task_publish"/>
     <bpmn:sequenceFlow id="rct_f26" sourceRef="rct_gw_pub_split" targetRef="rct_task_source"/>
     <bpmn:sequenceFlow id="rct_f27" sourceRef="rct_task_publish" targetRef="rct_gw_pub_join"/>
@@ -143,13 +143,13 @@
       <bpmndi:BPMNShape id="rct_gw_gov_join_di" bpmnElement="rct_gw_gov_join">
         <dc:Bounds x="1480" y="560" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="rct_gov_review_di" bpmnElement="rct_gov_review">
+      <bpmndi:BPMNShape id="rct_task_review_di" bpmnElement="rct_task_review">
         <dc:Bounds x="1570" y="545" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="rct_task_calib_di" bpmnElement="rct_task_calib">
         <dc:Bounds x="1720" y="545" width="100" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="rct_gov_backpay_di" bpmnElement="rct_gov_backpay">
+      <bpmndi:BPMNShape id="rct_task_backpay_di" bpmnElement="rct_task_backpay">
         <dc:Bounds x="1180" y="660" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="rct_gw_preagg_di" bpmnElement="rct_gw_preagg">
