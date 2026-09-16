@@ -233,7 +233,7 @@
         <di:waypoint x="1400" y="795"/><di:waypoint x="1450" y="795"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f17_di" bpmnElement="ml_f17">
-        <di:waypoint x="1500" y="795"/><di:waypoint x="1625" y="795"/><di:waypoint x="1625" y="715"/>
+        <di:waypoint x="1500" y="795"/><di:waypoint x="1610" y="795"/><di:waypoint x="1610" y="700"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f18_di" bpmnElement="ml_f18">
         <di:waypoint x="1650" y="690"/><di:waypoint x="1700" y="690"/>
@@ -242,10 +242,10 @@
         <di:waypoint x="1800" y="690"/><di:waypoint x="1830" y="690"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f20_di" bpmnElement="ml_f20">
-        <di:waypoint x="1750" y="730"/><di:waypoint x="1750" y="760"/><di:waypoint x="1610" y="760"/><di:waypoint x="1610" y="715"/>
+        <di:waypoint x="1750" y="730"/><di:waypoint x="1750" y="760"/><di:waypoint x="1635" y="760"/><di:waypoint x="1635" y="705"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f21_di" bpmnElement="ml_f21">
-        <di:waypoint x="1650" y="670"/><di:waypoint x="1675" y="670"/><di:waypoint x="1675" y="880"/><di:waypoint x="1600" y="880"/><di:waypoint x="1600" y="895"/>
+        <di:waypoint x="1625" y="715"/><di:waypoint x="1625" y="895"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f22_di" bpmnElement="ml_f22">
         <di:waypoint x="1650" y="935"/><di:waypoint x="1700" y="935"/>
