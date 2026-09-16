@@ -200,13 +200,13 @@
         <di:waypoint x="690" y="455"/><di:waypoint x="720" y="455"/><di:waypoint x="720" y="690"/><di:waypoint x="750" y="690"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f6_di" bpmnElement="ml_f6">
-        <di:waypoint x="800" y="690"/><di:waypoint x="860" y="690"/><di:waypoint x="860" y="585"/><di:waypoint x="900" y="585"/>
+        <di:waypoint x="775" y="665"/><di:waypoint x="775" y="585"/><di:waypoint x="900" y="585"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f7_di" bpmnElement="ml_f7">
         <di:waypoint x="800" y="690"/><di:waypoint x="900" y="690"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f8_di" bpmnElement="ml_f8">
-        <di:waypoint x="800" y="690"/><di:waypoint x="880" y="690"/><di:waypoint x="880" y="795"/><di:waypoint x="900" y="795"/>
+        <di:waypoint x="775" y="715"/><di:waypoint x="775" y="795"/><di:waypoint x="900" y="795"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f9_di" bpmnElement="ml_f9">
         <di:waypoint x="1000" y="585"/><di:waypoint x="1625" y="585"/><di:waypoint x="1625" y="665"/>
@@ -245,7 +245,7 @@
         <di:waypoint x="1750" y="730"/><di:waypoint x="1750" y="760"/><di:waypoint x="1610" y="760"/><di:waypoint x="1610" y="715"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f21_di" bpmnElement="ml_f21">
-        <di:waypoint x="1650" y="680"/><di:waypoint x="1675" y="680"/><di:waypoint x="1675" y="880"/><di:waypoint x="1600" y="880"/><di:waypoint x="1600" y="895"/>
+        <di:waypoint x="1650" y="670"/><di:waypoint x="1675" y="670"/><di:waypoint x="1675" y="880"/><di:waypoint x="1600" y="880"/><di:waypoint x="1600" y="895"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="ml_f22_di" bpmnElement="ml_f22">
         <di:waypoint x="1650" y="935"/><di:waypoint x="1700" y="935"/>
