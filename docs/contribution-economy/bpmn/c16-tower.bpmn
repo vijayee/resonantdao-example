@@ -103,7 +103,7 @@
         <di:waypoint x="610" y="360"/><di:waypoint x="760" y="360"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c16_f4_di" bpmnElement="c16_f4">
-        <di:waypoint x="585" y="385"/><di:waypoint x="585" y="415"/><di:waypoint x="115" y="415"/><di:waypoint x="115" y="300"/><di:waypoint x="237" y="300"/>
+        <di:waypoint x="585" y="385"/><di:waypoint x="585" y="415"/><di:waypoint x="190" y="415"/><di:waypoint x="190" y="300"/><di:waypoint x="237" y="300"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c16_f5_di" bpmnElement="c16_f5">
         <di:waypoint x="810" y="360"/><di:waypoint x="1110" y="360"/><di:waypoint x="1110" y="300"/><di:waypoint x="1018" y="300"/>
