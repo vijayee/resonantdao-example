@@ -23,7 +23,7 @@
         <bpmn:flowNodeRef>c00_end_value</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c00_start" name="Entry action into unworked territory"/>
+    <bpmn:startEvent id="c00_start" name="Entry into unworked territory"/>
     <bpmn:userTask id="c00_task_evidence" name="Submit entry evidence"/>
     <bpmn:exclusiveGateway id="c00_gw_sybil" name="Sybil check passed?"/>
     <bpmn:endEvent id="c00_end_sybil" name="No entry credit (Sybil)"/>
@@ -32,7 +32,7 @@
     <bpmn:endEvent id="c00_end_zero" name="Entry event = verified zero (recorded, no payment)"/>
     <bpmn:serviceTask id="c00_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
     <bpmn:serviceTask id="c00_task_feed_c17" name="Feed C_17 Star: orientation progress"/>
-    <bpmn:endEvent id="c00_end_value" name="Validated crossing earns non-zero value"/>
+    <bpmn:endEvent id="c00_end_value" name="Validated crossing earns value"/>
     <bpmn:sequenceFlow id="c00_f1" sourceRef="c00_start" targetRef="c00_task_evidence"/>
     <bpmn:sequenceFlow id="c00_f2" sourceRef="c00_task_evidence" targetRef="c00_gw_sybil"/>
     <bpmn:sequenceFlow id="c00_f3" name="no" sourceRef="c00_gw_sybil" targetRef="c00_end_sybil"/>
@@ -46,19 +46,19 @@
   <bpmndi:BPMNDiagram id="Diagram_c00">
     <bpmndi:BPMNPlane id="Plane_c00" bpmnElement="Process_c00">
       <bpmndi:BPMNShape id="c00_pool_di" bpmnElement="Process_c00" isHorizontal="true">
-        <dc:Bounds x="80" y="80" width="1160" height="560"/>
+        <dc:Bounds x="80" y="80" width="1250" height="560"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c00_lane_member_di" bpmnElement="c00_lane_member" isHorizontal="true">
-        <dc:Bounds x="110" y="80" width="1130" height="186"/>
+        <dc:Bounds x="110" y="80" width="1220" height="186"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c00_lane_reviewer_di" bpmnElement="c00_lane_reviewer" isHorizontal="true">
-        <dc:Bounds x="110" y="266" width="1130" height="186"/>
+        <dc:Bounds x="110" y="266" width="1220" height="186"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c00_lane_system_di" bpmnElement="c00_lane_system" isHorizontal="true">
-        <dc:Bounds x="110" y="452" width="1130" height="188"/>
+        <dc:Bounds x="110" y="452" width="1220" height="188"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c00_start_di" bpmnElement="c00_start">
-        <dc:Bounds x="150" y="156" width="36" height="36"/>
+        <dc:Bounds x="150" y="190" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c00_task_evidence_di" bpmnElement="c00_task_evidence">
         <dc:Bounds x="230" y="134" width="100" height="80"/>
@@ -85,10 +85,10 @@
         <dc:Bounds x="970" y="506" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c00_end_value_di" bpmnElement="c00_end_value">
-        <dc:Bounds x="1120" y="528" width="36" height="36"/>
+        <dc:Bounds x="1140" y="528" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="c00_f1_di" bpmnElement="c00_f1">
-        <di:waypoint x="186" y="174"/><di:waypoint x="230" y="174"/>
+        <di:waypoint x="186" y="208"/><di:waypoint x="230" y="208"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c00_f2_di" bpmnElement="c00_f2">
         <di:waypoint x="280" y="214"/><di:waypoint x="280" y="531"/><di:waypoint x="370" y="531"/>
@@ -112,7 +112,7 @@
         <di:waypoint x="920" y="546"/><di:waypoint x="970" y="546"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c00_f9_di" bpmnElement="c00_f9">
-        <di:waypoint x="1070" y="546"/><di:waypoint x="1120" y="546"/>
+        <di:waypoint x="1070" y="546"/><di:waypoint x="1140" y="546"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
