@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c08" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c08" name="C_8 Strength — Resolving" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c08">
+      <bpmn:lane id="c08_lane_member" name="Member">
+        <bpmn:flowNodeRef>c08_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c08_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c08_task_assign</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_gw_split2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_task_acc_a</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_task_acc_b</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_gw_join2</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_gw_accepts</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_end_nores</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c08_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c08_gw_split1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_task_verify</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_gw_join1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_gw_qual</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_end_disqual</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_task_token</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_task_feed_c18</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c08_end_balance</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c08_start" name="Live dispute opened"/>
+    <bpmn:parallelGateway id="c08_gw_split1"/>
+    <bpmn:userTask id="c08_task_assign" name="Assign non-party resolver"/>
+    <bpmn:serviceTask id="c08_task_verify" name="Verify resolver is not a party"/>
+    <bpmn:parallelGateway id="c08_gw_join1"/>
+    <bpmn:exclusiveGateway id="c08_gw_qual" name="Resolver qualified?"/>
+    <bpmn:endEvent id="c08_end_disqual" name="Resolver disqualified"/>
+    <bpmn:serviceTask id="c08_task_token" name="Resolution token sized by severity"/>
+    <bpmn:parallelGateway id="c08_gw_split2"/>
+    <bpmn:userTask id="c08_task_acc_a" name="Party A written acceptance"/>
+    <bpmn:userTask id="c08_task_acc_b" name="Party B written acceptance"/>
+    <bpmn:parallelGateway id="c08_gw_join2"/>
+    <bpmn:exclusiveGateway id="c08_gw_accepts" name="Both acceptances received?"/>
+    <bpmn:endEvent id="c08_end_nores" name="No resolution token (both acceptances required)"/>
+    <bpmn:serviceTask id="c08_task_record" name="Emit explanation record"/>
+    <bpmn:serviceTask id="c08_task_feed_c18" name="Feed C_18 Moon: resolution record for verification"/>
+    <bpmn:endEvent id="c08_end_balance" name="C_8 balance updated"/>
+    <bpmn:sequenceFlow id="c08_f1" sourceRef="c08_start" targetRef="c08_gw_split1"/>
+    <bpmn:sequenceFlow id="c08_f2" sourceRef="c08_gw_split1" targetRef="c08_task_assign"/>
+    <bpmn:sequenceFlow id="c08_f3" sourceRef="c08_gw_split1" targetRef="c08_task_verify"/>
+    <bpmn:sequenceFlow id="c08_f4" sourceRef="c08_task_assign" targetRef="c08_gw_join1"/>
+    <bpmn:sequenceFlow id="c08_f5" sourceRef="c08_task_verify" targetRef="c08_gw_join1"/>
+    <bpmn:sequenceFlow id="c08_f6" sourceRef="c08_gw_join1" targetRef="c08_gw_qual"/>
+    <bpmn:sequenceFlow id="c08_f7" name="no" sourceRef="c08_gw_qual" targetRef="c08_end_disqual"/>
+    <bpmn:sequenceFlow id="c08_f8" name="yes" sourceRef="c08_gw_qual" targetRef="c08_task_token"/>
+    <bpmn:sequenceFlow id="c08_f9" sourceRef="c08_task_token" targetRef="c08_gw_split2"/>
+    <bpmn:sequenceFlow id="c08_f10" sourceRef="c08_gw_split2" targetRef="c08_task_acc_a"/>
+    <bpmn:sequenceFlow id="c08_f11" sourceRef="c08_gw_split2" targetRef="c08_task_acc_b"/>
+    <bpmn:sequenceFlow id="c08_f12" sourceRef="c08_task_acc_a" targetRef="c08_gw_join2"/>
+    <bpmn:sequenceFlow id="c08_f13" sourceRef="c08_task_acc_b" targetRef="c08_gw_join2"/>
+    <bpmn:sequenceFlow id="c08_f14" sourceRef="c08_gw_join2" targetRef="c08_gw_accepts"/>
+    <bpmn:sequenceFlow id="c08_f15" name="no" sourceRef="c08_gw_accepts" targetRef="c08_end_nores"/>
+    <bpmn:sequenceFlow id="c08_f16" name="yes" sourceRef="c08_gw_accepts" targetRef="c08_task_record"/>
+    <bpmn:sequenceFlow id="c08_f17" sourceRef="c08_task_record" targetRef="c08_task_feed_c18"/>
+    <bpmn:sequenceFlow id="c08_f18" sourceRef="c08_task_feed_c18" targetRef="c08_end_balance"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c08">
+    <bpmndi:BPMNPlane id="Plane_c08" bpmnElement="Process_c08">
+      <bpmndi:BPMNShape id="c08_pool_di" bpmnElement="Process_c08" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1780" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_lane_member_di" bpmnElement="c08_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1750" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_lane_reviewer_di" bpmnElement="c08_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1750" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_lane_system_di" bpmnElement="c08_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1750" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_start_di" bpmnElement="c08_start">
+        <dc:Bounds x="150" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_gw_split1_di" bpmnElement="c08_gw_split1">
+        <dc:Bounds x="280" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_task_assign_di" bpmnElement="c08_task_assign">
+        <dc:Bounds x="380" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_task_verify_di" bpmnElement="c08_task_verify">
+        <dc:Bounds x="380" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_gw_join1_di" bpmnElement="c08_gw_join1">
+        <dc:Bounds x="530" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_gw_qual_di" bpmnElement="c08_gw_qual">
+        <dc:Bounds x="640" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_end_disqual_di" bpmnElement="c08_end_disqual">
+        <dc:Bounds x="740" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_task_token_di" bpmnElement="c08_task_token">
+        <dc:Bounds x="860" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_gw_split2_di" bpmnElement="c08_gw_split2">
+        <dc:Bounds x="1020" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_task_acc_a_di" bpmnElement="c08_task_acc_a">
+        <dc:Bounds x="1120" y="270" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_task_acc_b_di" bpmnElement="c08_task_acc_b">
+        <dc:Bounds x="1120" y="366" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_gw_join2_di" bpmnElement="c08_gw_join2">
+        <dc:Bounds x="1280" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_gw_accepts_di" bpmnElement="c08_gw_accepts">
+        <dc:Bounds x="1390" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_end_nores_di" bpmnElement="c08_end_nores">
+        <dc:Bounds x="1600" y="342" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_task_record_di" bpmnElement="c08_task_record">
+        <dc:Bounds x="1440" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_task_feed_c18_di" bpmnElement="c08_task_feed_c18">
+        <dc:Bounds x="1590" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c08_end_balance_di" bpmnElement="c08_end_balance">
+        <dc:Bounds x="1740" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c08_f1_di" bpmnElement="c08_f1">
+        <di:waypoint x="186" y="174"/><di:waypoint x="240" y="174"/><di:waypoint x="240" y="531"/><di:waypoint x="280" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f2_di" bpmnElement="c08_f2">
+        <di:waypoint x="305" y="506"/><di:waypoint x="305" y="360"/><di:waypoint x="380" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f3_di" bpmnElement="c08_f3">
+        <di:waypoint x="330" y="531"/><di:waypoint x="380" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f4_di" bpmnElement="c08_f4">
+        <di:waypoint x="480" y="360"/><di:waypoint x="555" y="360"/><di:waypoint x="555" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f5_di" bpmnElement="c08_f5">
+        <di:waypoint x="480" y="531"/><di:waypoint x="530" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f6_di" bpmnElement="c08_f6">
+        <di:waypoint x="580" y="531"/><di:waypoint x="640" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f7_di" bpmnElement="c08_f7">
+        <di:waypoint x="690" y="531"/><di:waypoint x="740" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f8_di" bpmnElement="c08_f8">
+        <di:waypoint x="665" y="556"/><di:waypoint x="665" y="610"/><di:waypoint x="910" y="610"/><di:waypoint x="910" y="586"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f9_di" bpmnElement="c08_f9">
+        <di:waypoint x="960" y="546"/><di:waypoint x="985" y="546"/><di:waypoint x="985" y="360"/><di:waypoint x="1020" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f10_di" bpmnElement="c08_f10">
+        <di:waypoint x="1045" y="335"/><di:waypoint x="1045" y="310"/><di:waypoint x="1120" y="310"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f11_di" bpmnElement="c08_f11">
+        <di:waypoint x="1070" y="360"/><di:waypoint x="1095" y="360"/><di:waypoint x="1095" y="406"/><di:waypoint x="1120" y="406"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f12_di" bpmnElement="c08_f12">
+        <di:waypoint x="1220" y="310"/><di:waypoint x="1305" y="310"/><di:waypoint x="1305" y="335"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f13_di" bpmnElement="c08_f13">
+        <di:waypoint x="1220" y="406"/><di:waypoint x="1255" y="406"/><di:waypoint x="1255" y="360"/><di:waypoint x="1280" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f14_di" bpmnElement="c08_f14">
+        <di:waypoint x="1330" y="360"/><di:waypoint x="1390" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f15_di" bpmnElement="c08_f15">
+        <di:waypoint x="1440" y="360"/><di:waypoint x="1600" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f16_di" bpmnElement="c08_f16">
+        <di:waypoint x="1415" y="385"/><di:waypoint x="1415" y="470"/><di:waypoint x="1490" y="470"/><di:waypoint x="1490" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f17_di" bpmnElement="c08_f17">
+        <di:waypoint x="1540" y="546"/><di:waypoint x="1590" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c08_f18_di" bpmnElement="c08_f18">
+        <di:waypoint x="1690" y="546"/><di:waypoint x="1740" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

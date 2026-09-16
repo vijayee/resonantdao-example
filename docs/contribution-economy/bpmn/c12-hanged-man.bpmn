@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c12" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c12" name="C_12 Hanged Man — Re-seeing" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c12">
+      <bpmn:lane id="c12_lane_member" name="Member">
+        <bpmn:flowNodeRef>c12_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c12_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c12_task_delta</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c12_gw_changed</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c12_end_nochg</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c12_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c12_gw_pause</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c12_end_nocredit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c12_task_credit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c12_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c12_task_feed_c20</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c12_end_balance</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c12_start" name="Reframe proposed"/>
+    <bpmn:exclusiveGateway id="c12_gw_pause" name="Pause duration only?"/>
+    <bpmn:endEvent id="c12_end_nocredit" name="No credit (never pays on pause)"/>
+    <bpmn:userTask id="c12_task_delta" name="Review decision-delta evidence"/>
+    <bpmn:exclusiveGateway id="c12_gw_changed" name="Decision actually changed?"/>
+    <bpmn:endEvent id="c12_end_nochg" name="No decision change — no credit"/>
+    <bpmn:serviceTask id="c12_task_credit" name="Decision-changed credit"/>
+    <bpmn:serviceTask id="c12_task_record" name="Emit explanation record"/>
+    <bpmn:serviceTask id="c12_task_feed_c20" name="Feed C_20 Judgement: decision-change record"/>
+    <bpmn:endEvent id="c12_end_balance" name="C_12 balance updated"/>
+    <bpmn:sequenceFlow id="c12_f1" sourceRef="c12_start" targetRef="c12_gw_pause"/>
+    <bpmn:sequenceFlow id="c12_f2" name="yes" sourceRef="c12_gw_pause" targetRef="c12_end_nocredit"/>
+    <bpmn:sequenceFlow id="c12_f3" name="no" sourceRef="c12_gw_pause" targetRef="c12_task_delta"/>
+    <bpmn:sequenceFlow id="c12_f4" sourceRef="c12_task_delta" targetRef="c12_gw_changed"/>
+    <bpmn:sequenceFlow id="c12_f5" name="no" sourceRef="c12_gw_changed" targetRef="c12_end_nochg"/>
+    <bpmn:sequenceFlow id="c12_f6" name="yes" sourceRef="c12_gw_changed" targetRef="c12_task_credit"/>
+    <bpmn:sequenceFlow id="c12_f7" sourceRef="c12_task_credit" targetRef="c12_task_record"/>
+    <bpmn:sequenceFlow id="c12_f8" sourceRef="c12_task_record" targetRef="c12_task_feed_c20"/>
+    <bpmn:sequenceFlow id="c12_f9" sourceRef="c12_task_feed_c20" targetRef="c12_end_balance"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c12">
+    <bpmndi:BPMNPlane id="Plane_c12" bpmnElement="Process_c12">
+      <bpmndi:BPMNShape id="c12_pool_di" bpmnElement="Process_c12" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1320" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_lane_member_di" bpmnElement="c12_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1290" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_lane_reviewer_di" bpmnElement="c12_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1290" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_lane_system_di" bpmnElement="c12_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1290" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_start_di" bpmnElement="c12_start">
+        <dc:Bounds x="150" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_gw_pause_di" bpmnElement="c12_gw_pause">
+        <dc:Bounds x="330" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_end_nocredit_di" bpmnElement="c12_end_nocredit">
+        <dc:Bounds x="430" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_task_delta_di" bpmnElement="c12_task_delta">
+        <dc:Bounds x="510" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_gw_changed_di" bpmnElement="c12_gw_changed">
+        <dc:Bounds x="700" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_end_nochg_di" bpmnElement="c12_end_nochg">
+        <dc:Bounds x="840" y="342" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_task_credit_di" bpmnElement="c12_task_credit">
+        <dc:Bounds x="675" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_task_record_di" bpmnElement="c12_task_record">
+        <dc:Bounds x="930" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_task_feed_c20_di" bpmnElement="c12_task_feed_c20">
+        <dc:Bounds x="1130" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c12_end_balance_di" bpmnElement="c12_end_balance">
+        <dc:Bounds x="1300" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c12_f1_di" bpmnElement="c12_f1">
+        <di:waypoint x="186" y="174"/><di:waypoint x="240" y="174"/><di:waypoint x="240" y="531"/><di:waypoint x="330" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c12_f2_di" bpmnElement="c12_f2">
+        <di:waypoint x="380" y="531"/><di:waypoint x="430" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c12_f3_di" bpmnElement="c12_f3">
+        <di:waypoint x="355" y="506"/><di:waypoint x="355" y="360"/><di:waypoint x="510" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c12_f4_di" bpmnElement="c12_f4">
+        <di:waypoint x="610" y="360"/><di:waypoint x="700" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c12_f5_di" bpmnElement="c12_f5">
+        <di:waypoint x="750" y="360"/><di:waypoint x="840" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c12_f6_di" bpmnElement="c12_f6">
+        <di:waypoint x="725" y="385"/><di:waypoint x="725" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c12_f7_di" bpmnElement="c12_f7">
+        <di:waypoint x="775" y="546"/><di:waypoint x="930" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c12_f8_di" bpmnElement="c12_f8">
+        <di:waypoint x="1030" y="546"/><di:waypoint x="1130" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c12_f9_di" bpmnElement="c12_f9">
+        <di:waypoint x="1230" y="546"/><di:waypoint x="1300" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

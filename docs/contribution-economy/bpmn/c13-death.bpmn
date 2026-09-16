@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c13" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c13" name="C_13 Death — Ending" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c13">
+      <bpmn:lane id="c13_lane_member" name="Member">
+        <bpmn:flowNodeRef>c13_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c13_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c13_gw_split</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c13_task_learning</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c13_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c13_task_release</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c13_gw_join</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c13_gw_real</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c13_end_reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c13_task_token</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c13_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c13_task_feed_c14</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c13_end_balance</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c13_start" name="Closure chosen"/>
+    <bpmn:parallelGateway id="c13_gw_split"/>
+    <bpmn:userTask id="c13_task_learning" name="Review preserved learning"/>
+    <bpmn:serviceTask id="c13_task_release" name="Verify resource release"/>
+    <bpmn:parallelGateway id="c13_gw_join"/>
+    <bpmn:exclusiveGateway id="c13_gw_real" name="Real closure (not abandonment)?"/>
+    <bpmn:endEvent id="c13_end_reject" name="Rejected (closure theater)"/>
+    <bpmn:serviceTask id="c13_task_token" name="Closure token"/>
+    <bpmn:serviceTask id="c13_task_record" name="Emit explanation record"/>
+    <bpmn:serviceTask id="c13_task_feed_c14" name="Feed C_14 Temperance: released resources"/>
+    <bpmn:endEvent id="c13_end_balance" name="C_13 balance updated"/>
+    <bpmn:sequenceFlow id="c13_f1" sourceRef="c13_start" targetRef="c13_gw_split"/>
+    <bpmn:sequenceFlow id="c13_f2" sourceRef="c13_gw_split" targetRef="c13_task_learning"/>
+    <bpmn:sequenceFlow id="c13_f3" sourceRef="c13_gw_split" targetRef="c13_task_release"/>
+    <bpmn:sequenceFlow id="c13_f4" sourceRef="c13_task_learning" targetRef="c13_gw_join"/>
+    <bpmn:sequenceFlow id="c13_f5" sourceRef="c13_task_release" targetRef="c13_gw_join"/>
+    <bpmn:sequenceFlow id="c13_f6" sourceRef="c13_gw_join" targetRef="c13_gw_real"/>
+    <bpmn:sequenceFlow id="c13_f7" name="no" sourceRef="c13_gw_real" targetRef="c13_end_reject"/>
+    <bpmn:sequenceFlow id="c13_f8" name="yes" sourceRef="c13_gw_real" targetRef="c13_task_token"/>
+    <bpmn:sequenceFlow id="c13_f9" sourceRef="c13_task_token" targetRef="c13_task_record"/>
+    <bpmn:sequenceFlow id="c13_f10" sourceRef="c13_task_record" targetRef="c13_task_feed_c14"/>
+    <bpmn:sequenceFlow id="c13_f11" sourceRef="c13_task_feed_c14" targetRef="c13_end_balance"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c13">
+    <bpmndi:BPMNPlane id="Plane_c13" bpmnElement="Process_c13">
+      <bpmndi:BPMNShape id="c13_pool_di" bpmnElement="Process_c13" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1320" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_lane_member_di" bpmnElement="c13_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1290" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_lane_reviewer_di" bpmnElement="c13_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1290" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_lane_system_di" bpmnElement="c13_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1290" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_start_di" bpmnElement="c13_start">
+        <dc:Bounds x="150" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_gw_split_di" bpmnElement="c13_gw_split">
+        <dc:Bounds x="300" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_task_learning_di" bpmnElement="c13_task_learning">
+        <dc:Bounds x="420" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_task_release_di" bpmnElement="c13_task_release">
+        <dc:Bounds x="420" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_gw_join_di" bpmnElement="c13_gw_join">
+        <dc:Bounds x="580" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_gw_real_di" bpmnElement="c13_gw_real">
+        <dc:Bounds x="690" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_end_reject_di" bpmnElement="c13_end_reject">
+        <dc:Bounds x="697" y="580" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_task_token_di" bpmnElement="c13_task_token">
+        <dc:Bounds x="830" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_task_record_di" bpmnElement="c13_task_record">
+        <dc:Bounds x="980" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_task_feed_c14_di" bpmnElement="c13_task_feed_c14">
+        <dc:Bounds x="1130" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c13_end_balance_di" bpmnElement="c13_end_balance">
+        <dc:Bounds x="1300" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c13_f1_di" bpmnElement="c13_f1">
+        <di:waypoint x="186" y="174"/><di:waypoint x="240" y="174"/><di:waypoint x="240" y="360"/><di:waypoint x="300" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f2_di" bpmnElement="c13_f2">
+        <di:waypoint x="350" y="360"/><di:waypoint x="420" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f3_di" bpmnElement="c13_f3">
+        <di:waypoint x="325" y="385"/><di:waypoint x="325" y="546"/><di:waypoint x="420" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f4_di" bpmnElement="c13_f4">
+        <di:waypoint x="520" y="360"/><di:waypoint x="605" y="360"/><di:waypoint x="605" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f5_di" bpmnElement="c13_f5">
+        <di:waypoint x="520" y="531"/><di:waypoint x="580" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f6_di" bpmnElement="c13_f6">
+        <di:waypoint x="630" y="531"/><di:waypoint x="690" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f7_di" bpmnElement="c13_f7">
+        <di:waypoint x="715" y="556"/><di:waypoint x="715" y="580"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f8_di" bpmnElement="c13_f8">
+        <di:waypoint x="740" y="531"/><di:waypoint x="830" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f9_di" bpmnElement="c13_f9">
+        <di:waypoint x="930" y="546"/><di:waypoint x="980" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f10_di" bpmnElement="c13_f10">
+        <di:waypoint x="1080" y="546"/><di:waypoint x="1130" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c13_f11_di" bpmnElement="c13_f11">
+        <di:waypoint x="1230" y="546"/><di:waypoint x="1300" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
