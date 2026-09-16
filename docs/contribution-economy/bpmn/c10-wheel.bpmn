@@ -17,6 +17,7 @@
         <bpmn:flowNodeRef>c10_task_debt</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c10_end_retrial</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c10_task_credit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c10_task_record</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c10_task_fire</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c10_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
@@ -27,6 +28,7 @@
     <bpmn:serviceTask id="c10_task_debt" name="Log cycle debt (measurement failure is the system's debt)"/>
     <bpmn:endEvent id="c10_end_retrial" name="Retrial next cycle"/>
     <bpmn:serviceTask id="c10_task_credit" name="Cycle-completion credit"/>
+    <bpmn:serviceTask id="c10_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
     <bpmn:serviceTask id="c10_task_fire" name="Fire cycle-boundary event (to 21-aggregation-rct.bpmn)"/>
     <bpmn:endEvent id="c10_end_balance" name="C_10 balance updated"/>
     <bpmn:sequenceFlow id="c10_f1" sourceRef="c10_start" targetRef="c10_task_audit"/>
@@ -34,22 +36,23 @@
     <bpmn:sequenceFlow id="c10_f3" name="no" sourceRef="c10_gw_fair" targetRef="c10_task_debt"/>
     <bpmn:sequenceFlow id="c10_f4" sourceRef="c10_task_debt" targetRef="c10_end_retrial"/>
     <bpmn:sequenceFlow id="c10_f5" name="yes" sourceRef="c10_gw_fair" targetRef="c10_task_credit"/>
-    <bpmn:sequenceFlow id="c10_f6" sourceRef="c10_task_credit" targetRef="c10_task_fire"/>
+    <bpmn:sequenceFlow id="c10_f6" sourceRef="c10_task_credit" targetRef="c10_task_record"/>
+    <bpmn:sequenceFlow id="c10_f8" sourceRef="c10_task_record" targetRef="c10_task_fire"/>
     <bpmn:sequenceFlow id="c10_f7" sourceRef="c10_task_fire" targetRef="c10_end_balance"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="Diagram_c10">
     <bpmndi:BPMNPlane id="Plane_c10" bpmnElement="Process_c10">
       <bpmndi:BPMNShape id="c10_pool_di" bpmnElement="Process_c10" isHorizontal="true">
-        <dc:Bounds x="80" y="80" width="980" height="560"/>
+        <dc:Bounds x="80" y="80" width="1080" height="560"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c10_lane_member_di" bpmnElement="c10_lane_member" isHorizontal="true">
-        <dc:Bounds x="110" y="80" width="950" height="186"/>
+        <dc:Bounds x="110" y="80" width="1050" height="186"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c10_lane_reviewer_di" bpmnElement="c10_lane_reviewer" isHorizontal="true">
-        <dc:Bounds x="110" y="266" width="950" height="186"/>
+        <dc:Bounds x="110" y="266" width="1050" height="186"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c10_lane_system_di" bpmnElement="c10_lane_system" isHorizontal="true">
-        <dc:Bounds x="110" y="452" width="950" height="188"/>
+        <dc:Bounds x="110" y="452" width="1050" height="188"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c10_start_di" bpmnElement="c10_start">
         <dc:Bounds x="154" y="156" width="36" height="36"/>
@@ -69,11 +72,14 @@
       <bpmndi:BPMNShape id="c10_task_credit_di" bpmnElement="c10_task_credit">
         <dc:Bounds x="660" y="506" width="100" height="80"/>
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c10_task_record_di" bpmnElement="c10_task_record">
+        <dc:Bounds x="790" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c10_task_fire_di" bpmnElement="c10_task_fire">
-        <dc:Bounds x="800" y="506" width="100" height="80"/>
+        <dc:Bounds x="920" y="506" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="c10_end_balance_di" bpmnElement="c10_end_balance">
-        <dc:Bounds x="960" y="528" width="36" height="36"/>
+        <dc:Bounds x="1080" y="528" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="c10_f1_di" bpmnElement="c10_f1">
         <di:waypoint x="190" y="174"/><di:waypoint x="240" y="174"/><di:waypoint x="240" y="360"/><di:waypoint x="300" y="360"/>
@@ -91,10 +97,13 @@
         <di:waypoint x="500" y="360"/><di:waypoint x="640" y="360"/><di:waypoint x="640" y="546"/><di:waypoint x="660" y="546"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c10_f6_di" bpmnElement="c10_f6">
-        <di:waypoint x="760" y="546"/><di:waypoint x="800" y="546"/>
+        <di:waypoint x="760" y="546"/><di:waypoint x="790" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c10_f8_di" bpmnElement="c10_f8">
+        <di:waypoint x="890" y="546"/><di:waypoint x="920" y="546"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="c10_f7_di" bpmnElement="c10_f7">
-        <di:waypoint x="900" y="546"/><di:waypoint x="960" y="546"/>
+        <di:waypoint x="1020" y="546"/><di:waypoint x="1080" y="546"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
