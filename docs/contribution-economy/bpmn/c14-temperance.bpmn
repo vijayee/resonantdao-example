@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c14" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c14" name="C_14 Temperance — Health in Range" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c14">
+      <bpmn:lane id="c14_lane_member" name="Member">
+        <bpmn:flowNodeRef>c14_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c14_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c14_task_stall</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c14_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c14_gw_range</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c14_task_hold</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c14_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c14_task_consume</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c14_end_balance</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c14_gw_stall</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c14_end_none</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c14_start" name="Health metric monitoring cycle"/>
+    <bpmn:exclusiveGateway id="c14_gw_range" name="Metric in range?"/>
+    <bpmn:serviceTask id="c14_task_hold" name="Holding credit per in-range interval"/>
+    <bpmn:serviceTask id="c14_task_record" name="Emit explanation record"/>
+    <bpmn:serviceTask id="c14_task_consume" name="Consumes resources released by C_13 Death"/>
+    <bpmn:endEvent id="c14_end_balance" name="C_14 balance updated"/>
+    <bpmn:exclusiveGateway id="c14_gw_stall" name="Stall detected?"/>
+    <bpmn:userTask id="c14_task_stall" name="Stall remediation (human)"/>
+    <bpmn:endEvent id="c14_end_none" name="No credit (out of range)"/>
+    <bpmn:sequenceFlow id="c14_f1" sourceRef="c14_start" targetRef="c14_gw_range"/>
+    <bpmn:sequenceFlow id="c14_f2" name="yes" sourceRef="c14_gw_range" targetRef="c14_task_hold"/>
+    <bpmn:sequenceFlow id="c14_f3" sourceRef="c14_task_hold" targetRef="c14_task_record"/>
+    <bpmn:sequenceFlow id="c14_f4" sourceRef="c14_task_record" targetRef="c14_task_consume"/>
+    <bpmn:sequenceFlow id="c14_f5" sourceRef="c14_task_consume" targetRef="c14_end_balance"/>
+    <bpmn:sequenceFlow id="c14_f6" name="no" sourceRef="c14_gw_range" targetRef="c14_gw_stall"/>
+    <bpmn:sequenceFlow id="c14_f7" name="yes" sourceRef="c14_gw_stall" targetRef="c14_task_stall"/>
+    <bpmn:sequenceFlow id="c14_f8" sourceRef="c14_task_stall" targetRef="c14_gw_range"/>
+    <bpmn:sequenceFlow id="c14_f9" name="no" sourceRef="c14_gw_stall" targetRef="c14_end_none"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c14">
+    <bpmndi:BPMNPlane id="Plane_c14" bpmnElement="Process_c14">
+      <bpmndi:BPMNShape id="c14_pool_di" bpmnElement="Process_c14" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1240" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_lane_member_di" bpmnElement="c14_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1210" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_lane_reviewer_di" bpmnElement="c14_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1210" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_lane_system_di" bpmnElement="c14_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1210" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_start_di" bpmnElement="c14_start">
+        <dc:Bounds x="220" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_gw_range_di" bpmnElement="c14_gw_range">
+        <dc:Bounds x="320" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_task_hold_di" bpmnElement="c14_task_hold">
+        <dc:Bounds x="470" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_task_record_di" bpmnElement="c14_task_record">
+        <dc:Bounds x="630" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_task_consume_di" bpmnElement="c14_task_consume">
+        <dc:Bounds x="790" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_end_balance_di" bpmnElement="c14_end_balance">
+        <dc:Bounds x="960" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_gw_stall_di" bpmnElement="c14_gw_stall">
+        <dc:Bounds x="1090" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_task_stall_di" bpmnElement="c14_task_stall">
+        <dc:Bounds x="1065" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c14_end_none_di" bpmnElement="c14_end_none">
+        <dc:Bounds x="1200" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c14_f1_di" bpmnElement="c14_f1">
+        <di:waypoint x="256" y="174"/><di:waypoint x="280" y="174"/><di:waypoint x="280" y="531"/><di:waypoint x="320" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c14_f2_di" bpmnElement="c14_f2">
+        <di:waypoint x="370" y="531"/><di:waypoint x="470" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c14_f3_di" bpmnElement="c14_f3">
+        <di:waypoint x="570" y="546"/><di:waypoint x="630" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c14_f4_di" bpmnElement="c14_f4">
+        <di:waypoint x="730" y="546"/><di:waypoint x="790" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c14_f5_di" bpmnElement="c14_f5">
+        <di:waypoint x="890" y="546"/><di:waypoint x="960" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c14_f6_di" bpmnElement="c14_f6">
+        <di:waypoint x="345" y="556"/><di:waypoint x="345" y="612"/><di:waypoint x="1115" y="612"/><di:waypoint x="1115" y="556"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c14_f7_di" bpmnElement="c14_f7">
+        <di:waypoint x="1115" y="506"/><di:waypoint x="1115" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c14_f8_di" bpmnElement="c14_f8">
+        <di:waypoint x="1065" y="360"/><di:waypoint x="345" y="360"/><di:waypoint x="345" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c14_f9_di" bpmnElement="c14_f9">
+        <di:waypoint x="1140" y="531"/><di:waypoint x="1170" y="531"/><di:waypoint x="1170" y="546"/><di:waypoint x="1200" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
