@@ -44,7 +44,7 @@
 const CORE = [
   { file: 'bpmn/00-master-lifecycle.bpmn', title: 'Master Contribution Lifecycle', badge: 'core',
     desc: 'Action → evidence → classification P(a) → tiered verification (T0–T3) → harm check → delta formula → 22 balances → cycle boundary → $RCT aggregation.',
-    humans: ['Random audit (T1)', 'Two independent reviewers with written reasons (T2)', 'Appeal panel (T3, deadline-bound)'] },
+    humans: ['Random audit (T1)', 'Conflict-of-interest check + two independent reviewers with written reasons (T2)', 'Appeal panel (T3, deadline-bound)'] },
   { file: 'bpmn/20-interaction-map.bpmn', title: 'Dimension Interaction Map', badge: 'core',
     desc: 'Rails (C_2 records, C_18 verification, C_4 rules, C_11 audits, C_15 distortion audits) + cross-dimension flow dependencies + cycle spine C_10 → C_20 → C_21 → aggregation.',
     humans: [] },
@@ -55,10 +55,10 @@ const CORE = [
 const DIMS = [
   { file: 'bpmn/c00-fool.bpmn', n: 'C_0', title: 'Fool — Entry', badge: 'specified',
     desc: 'Entry/pioneering step. Entry event is a verified zero; validated crossings earn non-zero value.',
-    humans: ['Validate crossing (reviewer)', 'Sybil check'] },
+    humans: ['Validate crossing (reviewer)'] },
   { file: 'bpmn/c01-magician.bpmn', n: 'C_1', title: 'Magician — Building', badge: 'specified',
     desc: 'Delivery bounty on acceptance, sized by scope; never on submission.',
-    humans: ['Artifact acceptance review (Tier 2)'] },
+    humans: ['Artifact acceptance review (Tier 2)', 'Size delivery bounty by scope'] },
   { file: 'bpmn/c02-priestess.bpmn', n: 'C_2', title: 'Priestess — Recording', badge: 'specified',
     desc: 'Base credit on publication + usage bonus per verified retrieval. Evidence rails for all dimensions.',
     humans: ['Retrieval verification'] },

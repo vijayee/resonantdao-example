@@ -27,7 +27,7 @@
     <bpmn:startEvent id="c13_start" name="Closure chosen"/>
     <bpmn:parallelGateway id="c13_gw_split"/>
     <bpmn:userTask id="c13_task_learning" name="Review preserved learning"/>
-    <bpmn:serviceTask id="c13_task_release" name="Verify resource release"/>
+    <bpmn:userTask id="c13_task_release" name="Verify resource release"/>
     <bpmn:parallelGateway id="c13_gw_join"/>
     <bpmn:exclusiveGateway id="c13_gw_real" name="Real closure (not abandonment)?"/>
     <bpmn:endEvent id="c13_end_reject" name="Rejected (closure theater)"/>
