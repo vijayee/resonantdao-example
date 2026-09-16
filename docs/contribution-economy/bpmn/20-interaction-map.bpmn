@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_im" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_im" name="Dimension Interaction Map" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_im">
+      <bpmn:lane id="im_lane_rails" name="Rails (serve everyone)">
+        <bpmn:flowNodeRef>im_task_c02</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c18</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c04</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c11</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c15</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="im_lane_flows" name="Flow dependencies">
+        <bpmn:flowNodeRef>im_task_c17</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c00</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c01</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c03</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c05</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c09</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c12</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c13</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c06</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c16</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c08</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c07</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="im_lane_cycle" name="Cycle spine">
+        <bpmn:flowNodeRef>im_task_c10</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c20</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c21</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c14</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_c19</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>im_task_rct</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:task id="im_task_c17" name="C_17 Star"/>
+    <bpmn:task id="im_task_c00" name="C_0 Fool"/>
+    <bpmn:task id="im_task_c01" name="C_1 Magician"/>
+    <bpmn:task id="im_task_c03" name="C_3 Empress"/>
+    <bpmn:task id="im_task_c05" name="C_5 Hierophant"/>
+    <bpmn:task id="im_task_c09" name="C_9 Hermit"/>
+    <bpmn:task id="im_task_c12" name="C_12 Hanged Man"/>
+    <bpmn:task id="im_task_c13" name="C_13 Death"/>
+    <bpmn:task id="im_task_c06" name="C_6 Lovers"/>
+    <bpmn:task id="im_task_c16" name="C_16 Tower"/>
+    <bpmn:task id="im_task_c08" name="C_8 Strength"/>
+    <bpmn:task id="im_task_c07" name="C_7 Chariot"/>
+    <bpmn:task id="im_task_c02" name="C_2 Priestess"/>
+    <bpmn:task id="im_task_c18" name="C_18 Moon"/>
+    <bpmn:task id="im_task_c04" name="C_4 Emperor"/>
+    <bpmn:task id="im_task_c11" name="C_11 Justice"/>
+    <bpmn:task id="im_task_c15" name="C_15 Devil"/>
+    <bpmn:task id="im_task_c10" name="C_10 Wheel"/>
+    <bpmn:task id="im_task_c20" name="C_20 Judgement"/>
+    <bpmn:task id="im_task_c21" name="C_21 World"/>
+    <bpmn:task id="im_task_c14" name="C_14 Temperance"/>
+    <bpmn:task id="im_task_c19" name="C_19 Sun"/>
+    <bpmn:task id="im_task_rct" name="$RCT aggregation"/>
+    <bpmn:sequenceFlow id="im_f1" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c00"/>
+    <bpmn:sequenceFlow id="im_f2" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c01"/>
+    <bpmn:sequenceFlow id="im_f3" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c05"/>
+    <bpmn:sequenceFlow id="im_f4" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c09"/>
+    <bpmn:sequenceFlow id="im_f5" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c19"/>
+    <bpmn:sequenceFlow id="im_f6" name="crisis verification verdict" sourceRef="im_task_c18" targetRef="im_task_c16"/>
+    <bpmn:sequenceFlow id="im_f7" name="verification of resolution acceptance" sourceRef="im_task_c18" targetRef="im_task_c08"/>
+    <bpmn:sequenceFlow id="im_f8" name="verify resource release" sourceRef="im_task_c18" targetRef="im_task_c13"/>
+    <bpmn:sequenceFlow id="im_f9" name="mentee's accepted artifact = multiplier input" sourceRef="im_task_c01" targetRef="im_task_c03"/>
+    <bpmn:sequenceFlow id="im_f10" name="demonstrated competence = nurture evidence" sourceRef="im_task_c05" targetRef="im_task_c03"/>
+    <bpmn:sequenceFlow id="im_f11" name="decision-steering evidence (adoption bonus)" sourceRef="im_task_c09" targetRef="im_task_c20"/>
+    <bpmn:sequenceFlow id="im_f12" name="decision-changed evidence" sourceRef="im_task_c12" targetRef="im_task_c20"/>
+    <bpmn:sequenceFlow id="im_f13" name="released resources feed health metric" sourceRef="im_task_c13" targetRef="im_task_c14"/>
+    <bpmn:sequenceFlow id="im_f14" name="orientation feeds entry" sourceRef="im_task_c17" targetRef="im_task_c00"/>
+    <bpmn:sequenceFlow id="im_f15" name="orientee's first verified contribution" sourceRef="im_task_c17" targetRef="im_task_c01"/>
+    <bpmn:sequenceFlow id="im_f16" name="weight distortion findings" sourceRef="im_task_c15" targetRef="im_task_c11"/>
+    <bpmn:sequenceFlow id="im_f17" name="distortion audit precondition" sourceRef="im_task_c15" targetRef="im_task_rct"/>
+    <bpmn:sequenceFlow id="im_f18" name="calibration updates + fairness audit" sourceRef="im_task_c11" targetRef="im_task_rct"/>
+    <bpmn:sequenceFlow id="im_f19" name="fair cycle close" sourceRef="im_task_c10" targetRef="im_task_c20"/>
+    <bpmn:sequenceFlow id="im_f20" name="provenance settled" sourceRef="im_task_c20" targetRef="im_task_c21"/>
+    <bpmn:sequenceFlow id="im_f21" name="whole-cycle completion" sourceRef="im_task_c21" targetRef="im_task_rct"/>
+    <bpmn:sequenceFlow id="im_f22" name="adopted rules / calibration versions" sourceRef="im_task_c04" targetRef="im_task_rct"/>
+    <bpmn:sequenceFlow id="im_f23" name="recognition must tie to verified record" sourceRef="im_task_c19" targetRef="im_task_c02"/>
+    <bpmn:sequenceFlow id="im_f24" name="crisis verification request" sourceRef="im_task_c16" targetRef="im_task_c18"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_im">
+    <bpmndi:BPMNPlane id="Plane_im" bpmnElement="Process_im">
+      <bpmndi:BPMNShape id="im_pool_di" bpmnElement="Process_im" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="2420" height="600"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_lane_rails_di" bpmnElement="im_lane_rails" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="2390" height="200"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_lane_flows_di" bpmnElement="im_lane_flows" isHorizontal="true">
+        <dc:Bounds x="110" y="280" width="2390" height="200"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_lane_cycle_di" bpmnElement="im_lane_cycle" isHorizontal="true">
+        <dc:Bounds x="110" y="480" width="2390" height="200"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c02_di" bpmnElement="im_task_c02">
+        <dc:Bounds x="480" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c18_di" bpmnElement="im_task_c18">
+        <dc:Bounds x="1740" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c04_di" bpmnElement="im_task_c04">
+        <dc:Bounds x="2340" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c11_di" bpmnElement="im_task_c11">
+        <dc:Bounds x="2140" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c15_di" bpmnElement="im_task_c15">
+        <dc:Bounds x="1940" y="140" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c17_di" bpmnElement="im_task_c17">
+        <dc:Bounds x="150" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c00_di" bpmnElement="im_task_c00">
+        <dc:Bounds x="350" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c01_di" bpmnElement="im_task_c01">
+        <dc:Bounds x="550" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c03_di" bpmnElement="im_task_c03">
+        <dc:Bounds x="750" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c05_di" bpmnElement="im_task_c05">
+        <dc:Bounds x="950" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c09_di" bpmnElement="im_task_c09">
+        <dc:Bounds x="1150" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c12_di" bpmnElement="im_task_c12">
+        <dc:Bounds x="1350" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c13_di" bpmnElement="im_task_c13">
+        <dc:Bounds x="1550" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c06_di" bpmnElement="im_task_c06">
+        <dc:Bounds x="1750" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c16_di" bpmnElement="im_task_c16">
+        <dc:Bounds x="1950" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c08_di" bpmnElement="im_task_c08">
+        <dc:Bounds x="2150" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c07_di" bpmnElement="im_task_c07">
+        <dc:Bounds x="2350" y="340" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c10_di" bpmnElement="im_task_c10">
+        <dc:Bounds x="350" y="540" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c20_di" bpmnElement="im_task_c20">
+        <dc:Bounds x="550" y="540" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c21_di" bpmnElement="im_task_c21">
+        <dc:Bounds x="750" y="540" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c14_di" bpmnElement="im_task_c14">
+        <dc:Bounds x="950" y="540" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_c19_di" bpmnElement="im_task_c19">
+        <dc:Bounds x="1250" y="540" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="im_task_rct_di" bpmnElement="im_task_rct">
+        <dc:Bounds x="2350" y="540" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="im_f1_di" bpmnElement="im_f1">
+        <di:waypoint x="490" y="220"/><di:waypoint x="490" y="305"/><di:waypoint x="400" y="305"/><di:waypoint x="400" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f2_di" bpmnElement="im_f2">
+        <di:waypoint x="515" y="220"/><di:waypoint x="515" y="300"/><di:waypoint x="600" y="300"/><di:waypoint x="600" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f3_di" bpmnElement="im_f3">
+        <di:waypoint x="565" y="220"/><di:waypoint x="565" y="310"/><di:waypoint x="1000" y="310"/><di:waypoint x="1000" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f4_di" bpmnElement="im_f4">
+        <di:waypoint x="580" y="180"/><di:waypoint x="1200" y="180"/><di:waypoint x="1200" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f5_di" bpmnElement="im_f5">
+        <di:waypoint x="580" y="200"/><di:waypoint x="1280" y="200"/><di:waypoint x="1280" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f6_di" bpmnElement="im_f6">
+        <di:waypoint x="1790" y="220"/><di:waypoint x="1790" y="300"/><di:waypoint x="2000" y="300"/><di:waypoint x="2000" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f7_di" bpmnElement="im_f7">
+        <di:waypoint x="1830" y="220"/><di:waypoint x="1830" y="305"/><di:waypoint x="2200" y="305"/><di:waypoint x="2200" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f8_di" bpmnElement="im_f8">
+        <di:waypoint x="1740" y="180"/><di:waypoint x="1600" y="180"/><di:waypoint x="1600" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f9_di" bpmnElement="im_f9">
+        <di:waypoint x="650" y="380"/><di:waypoint x="750" y="380"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f10_di" bpmnElement="im_f10">
+        <di:waypoint x="950" y="380"/><di:waypoint x="850" y="380"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f11_di" bpmnElement="im_f11">
+        <di:waypoint x="1200" y="420"/><di:waypoint x="1200" y="460"/><di:waypoint x="600" y="460"/><di:waypoint x="600" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f12_di" bpmnElement="im_f12">
+        <di:waypoint x="1400" y="420"/><di:waypoint x="1400" y="470"/><di:waypoint x="580" y="470"/><di:waypoint x="580" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f13_di" bpmnElement="im_f13">
+        <di:waypoint x="1600" y="420"/><di:waypoint x="1600" y="475"/><di:waypoint x="1000" y="475"/><di:waypoint x="1000" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f14_di" bpmnElement="im_f14">
+        <di:waypoint x="250" y="380"/><di:waypoint x="350" y="380"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f15_di" bpmnElement="im_f15">
+        <di:waypoint x="200" y="420"/><di:waypoint x="200" y="450"/><di:waypoint x="570" y="450"/><di:waypoint x="570" y="420"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f16_di" bpmnElement="im_f16">
+        <di:waypoint x="2040" y="180"/><di:waypoint x="2140" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f17_di" bpmnElement="im_f17">
+        <di:waypoint x="1990" y="220"/><di:waypoint x="1990" y="260"/><di:waypoint x="1900" y="260"/><di:waypoint x="1900" y="505"/><di:waypoint x="2380" y="505"/><di:waypoint x="2380" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f18_di" bpmnElement="im_f18">
+        <di:waypoint x="2190" y="220"/><di:waypoint x="2190" y="270"/><di:waypoint x="2100" y="270"/><di:waypoint x="2100" y="510"/><di:waypoint x="2400" y="510"/><di:waypoint x="2400" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f19_di" bpmnElement="im_f19">
+        <di:waypoint x="450" y="580"/><di:waypoint x="550" y="580"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f20_di" bpmnElement="im_f20">
+        <di:waypoint x="650" y="580"/><di:waypoint x="750" y="580"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f21_di" bpmnElement="im_f21">
+        <di:waypoint x="850" y="580"/><di:waypoint x="880" y="580"/><di:waypoint x="880" y="650"/><di:waypoint x="2320" y="650"/><di:waypoint x="2320" y="580"/><di:waypoint x="2350" y="580"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f22_di" bpmnElement="im_f22">
+        <di:waypoint x="2380" y="220"/><di:waypoint x="2380" y="285"/><di:waypoint x="2300" y="285"/><di:waypoint x="2300" y="500"/><di:waypoint x="2420" y="500"/><di:waypoint x="2420" y="540"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f23_di" bpmnElement="im_f23">
+        <di:waypoint x="1300" y="540"/><di:waypoint x="1300" y="490"/><di:waypoint x="700" y="490"/><di:waypoint x="700" y="265"/><di:waypoint x="550" y="265"/><di:waypoint x="550" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="im_f24_di" bpmnElement="im_f24">
+        <di:waypoint x="1960" y="340"/><di:waypoint x="1960" y="255"/><di:waypoint x="1815" y="255"/><di:waypoint x="1815" y="220"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
