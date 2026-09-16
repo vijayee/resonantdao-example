@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c00" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c00" name="C_0 Fool — Entry" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c00">
+      <bpmn:lane id="c00_lane_member" name="Member">
+        <bpmn:flowNodeRef>c00_start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c00_task_evidence</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c00_end_zero</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c00_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c00_task_review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c00_gw_crossing</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c00_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c00_gw_sybil</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c00_end_sybil</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c00_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c00_task_feed_c17</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c00_end_value</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c00_start" name="Entry action into unworked territory"/>
+    <bpmn:userTask id="c00_task_evidence" name="Submit entry evidence"/>
+    <bpmn:exclusiveGateway id="c00_gw_sybil" name="Sybil check passed?"/>
+    <bpmn:endEvent id="c00_end_sybil" name="No entry credit (Sybil)"/>
+    <bpmn:userTask id="c00_task_review" name="Validate crossing (reviewer)"/>
+    <bpmn:exclusiveGateway id="c00_gw_crossing" name="Crossing validated?"/>
+    <bpmn:endEvent id="c00_end_zero" name="Entry event = verified zero (recorded, no payment)"/>
+    <bpmn:serviceTask id="c00_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
+    <bpmn:serviceTask id="c00_task_feed_c17" name="Feed C_17 Star: orientation progress"/>
+    <bpmn:endEvent id="c00_end_value" name="Validated crossing earns non-zero value"/>
+    <bpmn:sequenceFlow id="c00_f1" sourceRef="c00_start" targetRef="c00_task_evidence"/>
+    <bpmn:sequenceFlow id="c00_f2" sourceRef="c00_task_evidence" targetRef="c00_gw_sybil"/>
+    <bpmn:sequenceFlow id="c00_f3" name="no" sourceRef="c00_gw_sybil" targetRef="c00_end_sybil"/>
+    <bpmn:sequenceFlow id="c00_f4" name="yes" sourceRef="c00_gw_sybil" targetRef="c00_task_review"/>
+    <bpmn:sequenceFlow id="c00_f5" sourceRef="c00_task_review" targetRef="c00_gw_crossing"/>
+    <bpmn:sequenceFlow id="c00_f6" name="no" sourceRef="c00_gw_crossing" targetRef="c00_end_zero"/>
+    <bpmn:sequenceFlow id="c00_f7" name="yes" sourceRef="c00_gw_crossing" targetRef="c00_task_record"/>
+    <bpmn:sequenceFlow id="c00_f8" sourceRef="c00_task_record" targetRef="c00_task_feed_c17"/>
+    <bpmn:sequenceFlow id="c00_f9" sourceRef="c00_task_feed_c17" targetRef="c00_end_value"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c00">
+    <bpmndi:BPMNPlane id="Plane_c00" bpmnElement="Process_c00">
+      <bpmndi:BPMNShape id="c00_pool_di" bpmnElement="Process_c00" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1160" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_lane_member_di" bpmnElement="c00_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1130" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_lane_reviewer_di" bpmnElement="c00_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1130" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_lane_system_di" bpmnElement="c00_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1130" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_start_di" bpmnElement="c00_start">
+        <dc:Bounds x="150" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_task_evidence_di" bpmnElement="c00_task_evidence">
+        <dc:Bounds x="230" y="134" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_gw_sybil_di" bpmnElement="c00_gw_sybil">
+        <dc:Bounds x="370" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_end_sybil_di" bpmnElement="c00_end_sybil">
+        <dc:Bounds x="470" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_task_review_di" bpmnElement="c00_task_review">
+        <dc:Bounds x="510" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_gw_crossing_di" bpmnElement="c00_gw_crossing">
+        <dc:Bounds x="650" y="335" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_end_zero_di" bpmnElement="c00_end_zero">
+        <dc:Bounds x="720" y="134" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_task_record_di" bpmnElement="c00_task_record">
+        <dc:Bounds x="820" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_task_feed_c17_di" bpmnElement="c00_task_feed_c17">
+        <dc:Bounds x="970" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c00_end_value_di" bpmnElement="c00_end_value">
+        <dc:Bounds x="1120" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c00_f1_di" bpmnElement="c00_f1">
+        <di:waypoint x="186" y="174"/><di:waypoint x="230" y="174"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c00_f2_di" bpmnElement="c00_f2">
+        <di:waypoint x="280" y="214"/><di:waypoint x="280" y="531"/><di:waypoint x="370" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c00_f3_di" bpmnElement="c00_f3">
+        <di:waypoint x="420" y="531"/><di:waypoint x="470" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c00_f4_di" bpmnElement="c00_f4">
+        <di:waypoint x="395" y="506"/><di:waypoint x="395" y="360"/><di:waypoint x="510" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c00_f5_di" bpmnElement="c00_f5">
+        <di:waypoint x="610" y="360"/><di:waypoint x="650" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c00_f6_di" bpmnElement="c00_f6">
+        <di:waypoint x="675" y="335"/><di:waypoint x="675" y="152"/><di:waypoint x="720" y="152"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c00_f7_di" bpmnElement="c00_f7">
+        <di:waypoint x="700" y="360"/><di:waypoint x="865" y="360"/><di:waypoint x="865" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c00_f8_di" bpmnElement="c00_f8">
+        <di:waypoint x="920" y="546"/><di:waypoint x="970" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c00_f9_di" bpmnElement="c00_f9">
+        <di:waypoint x="1070" y="546"/><di:waypoint x="1120" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

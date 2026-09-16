@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  id="Definitions_c05" targetNamespace="http://resonantdao.com/bpmn">
+  <bpmn:process id="Process_c05" name="C_5 Hierophant — Teaching" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_c05">
+      <bpmn:lane id="c05_lane_member" name="Member">
+        <bpmn:flowNodeRef>c05_start</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c05_lane_reviewer" name="Human Reviewer">
+        <bpmn:flowNodeRef>c05_task_review</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="c05_lane_system" name="System / Automation">
+        <bpmn:flowNodeRef>c05_gw_lecture</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c05_end_nocredit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c05_task_credit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c05_task_record</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c05_task_feed_c03</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>c05_end_balance</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="c05_start" name="Teaching claimed"/>
+    <bpmn:exclusiveGateway id="c05_gw_lecture" name="Lecture or attendance only?"/>
+    <bpmn:endEvent id="c05_end_nocredit" name="No credit (never pays on lectures or attendance)"/>
+    <bpmn:userTask id="c05_task_review" name="Review demonstrated competence in another member"/>
+    <bpmn:serviceTask id="c05_task_credit" name="Competence credit"/>
+    <bpmn:serviceTask id="c05_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
+    <bpmn:serviceTask id="c05_task_feed_c03" name="Feed C_3 Empress: competence as nurture evidence"/>
+    <bpmn:endEvent id="c05_end_balance" name="C_5 balance updated"/>
+    <bpmn:sequenceFlow id="c05_f1" sourceRef="c05_start" targetRef="c05_gw_lecture"/>
+    <bpmn:sequenceFlow id="c05_f2" name="yes" sourceRef="c05_gw_lecture" targetRef="c05_end_nocredit"/>
+    <bpmn:sequenceFlow id="c05_f3" name="no" sourceRef="c05_gw_lecture" targetRef="c05_task_review"/>
+    <bpmn:sequenceFlow id="c05_f4" sourceRef="c05_task_review" targetRef="c05_task_credit"/>
+    <bpmn:sequenceFlow id="c05_f5" sourceRef="c05_task_credit" targetRef="c05_task_record"/>
+    <bpmn:sequenceFlow id="c05_f6" sourceRef="c05_task_record" targetRef="c05_task_feed_c03"/>
+    <bpmn:sequenceFlow id="c05_f7" sourceRef="c05_task_feed_c03" targetRef="c05_end_balance"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_c05">
+    <bpmndi:BPMNPlane id="Plane_c05" bpmnElement="Process_c05">
+      <bpmndi:BPMNShape id="c05_pool_di" bpmnElement="Process_c05" isHorizontal="true">
+        <dc:Bounds x="80" y="80" width="1160" height="560"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_lane_member_di" bpmnElement="c05_lane_member" isHorizontal="true">
+        <dc:Bounds x="110" y="80" width="1130" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_lane_reviewer_di" bpmnElement="c05_lane_reviewer" isHorizontal="true">
+        <dc:Bounds x="110" y="266" width="1130" height="186"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_lane_system_di" bpmnElement="c05_lane_system" isHorizontal="true">
+        <dc:Bounds x="110" y="452" width="1130" height="188"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_start_di" bpmnElement="c05_start">
+        <dc:Bounds x="150" y="156" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_gw_lecture_di" bpmnElement="c05_gw_lecture">
+        <dc:Bounds x="280" y="506" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_end_nocredit_di" bpmnElement="c05_end_nocredit">
+        <dc:Bounds x="380" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_task_review_di" bpmnElement="c05_task_review">
+        <dc:Bounds x="510" y="320" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_task_credit_di" bpmnElement="c05_task_credit">
+        <dc:Bounds x="660" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_task_record_di" bpmnElement="c05_task_record">
+        <dc:Bounds x="830" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_task_feed_c03_di" bpmnElement="c05_task_feed_c03">
+        <dc:Bounds x="980" y="506" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="c05_end_balance_di" bpmnElement="c05_end_balance">
+        <dc:Bounds x="1130" y="528" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="c05_f1_di" bpmnElement="c05_f1">
+        <di:waypoint x="186" y="174"/><di:waypoint x="240" y="174"/><di:waypoint x="240" y="531"/><di:waypoint x="280" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c05_f2_di" bpmnElement="c05_f2">
+        <di:waypoint x="330" y="531"/><di:waypoint x="380" y="531"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c05_f3_di" bpmnElement="c05_f3">
+        <di:waypoint x="305" y="506"/><di:waypoint x="305" y="360"/><di:waypoint x="510" y="360"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c05_f4_di" bpmnElement="c05_f4">
+        <di:waypoint x="610" y="360"/><di:waypoint x="710" y="360"/><di:waypoint x="710" y="506"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c05_f5_di" bpmnElement="c05_f5">
+        <di:waypoint x="760" y="546"/><di:waypoint x="830" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c05_f6_di" bpmnElement="c05_f6">
+        <di:waypoint x="930" y="546"/><di:waypoint x="980" y="546"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="c05_f7_di" bpmnElement="c05_f7">
+        <di:waypoint x="1080" y="546"/><di:waypoint x="1130" y="546"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
