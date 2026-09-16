@@ -1,0 +1,9 @@
+{
+  "name": "resonantdao-contribution-economy-docs",
+  "private": true,
+  "description": "Tooling for validating contribution-economy BPMN diagrams",
+  "type": "module",
+  "dependencies": {
+    "bpmn-moddle": "^10.2.0"
+  }
+}
