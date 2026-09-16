@@ -11,17 +11,27 @@ if (files.length === 0) {
   process.exit(1);
 }
 
+const moddle = new BpmnModdle();
+
+function formatWarning(w) {
+  if (w && typeof w.message === 'string' && w.message) return w.message;
+  try {
+    return JSON.stringify(w);
+  } catch {
+    return String(w);
+  }
+}
+
 let failed = 0;
 for (const f of files) {
   try {
     const xml = await readFile(path.join(dir, f), 'utf8');
-    const moddle = new BpmnModdle();
     const { rootElement, warnings } = await moddle.fromXML(xml);
     if (!rootElement || rootElement.$type !== 'bpmn:Definitions') {
       throw new Error(`root is ${rootElement && rootElement.$type}, expected bpmn:Definitions`);
     }
     if (warnings && warnings.length) {
-      console.warn(`WARN ${f}: ${warnings.map(String).join('; ')}`);
+      throw new Error(warnings.map(formatWarning).join('; '));
     }
     console.log(`OK   ${f}`);
   } catch (e) {

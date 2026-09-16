@@ -3,6 +3,9 @@
   "private": true,
   "description": "Tooling for validating contribution-economy BPMN diagrams",
   "type": "module",
+  "scripts": {
+    "validate": "node validate.mjs"
+  },
   "dependencies": {
     "bpmn-moddle": "^10.2.0"
   }
