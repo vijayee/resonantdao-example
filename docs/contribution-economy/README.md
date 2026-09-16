@@ -2,7 +2,7 @@
 
 This directory contains BPMN 2.0 models of the ResonantDAO contribution economy: the 22 contribution dimensions (Major Arcana, C_0–C_21), their cross-dimension interactions, and the $RCT aggregation workflow that summarizes them. The models mirror the design spec at [`docs/superpowers/specs/2026-09-16-contribution-economy-workflows-design.md`](../superpowers/specs/2026-09-16-contribution-economy-workflows-design.md) and the source page at https://resonantdao.com/contribution-economy/ .
 
-**How to view:** open `index.html` in a browser (or serve this directory with `python3 -m http.server` and browse to the served page). Diagrams also validate structurally via `npm run validate`.
+**How to view:** serve this directory with `python3 -m http.server` and open the served `index.html` in a browser (opening `index.html` directly via `file://` will not render the diagrams — browsers block the XML fetches). Diagrams also validate structurally via `npm run validate`.
 
 ## File index
 

@@ -38,6 +38,16 @@
      $RCT summarizes the profile but never erases it and never scales votes.</p>
 </header>
 <nav id="nav"></nav>
+<section class="card" id="anti-gaming">
+  <h2>Anti-gaming summary</h2>
+  <p class="desc">Named failure modes and where their countermeasures appear in the diagrams:
+    Sybil entry (C_0 identity check) · metric capture (every payment requires an outcome-verified gateway, never submission/attendance/length/pause) ·
+    conflict farming (C_3, C_6 conflict-farming gateways) · closure theater (C_13 real-closure check) ·
+    reviewer capture (C_18 accuracy-vs-chance tracking and reviewer rotation) ·
+    AI-leverage capture (scope sizing and calibration review by human operators) ·
+    reviewer self-interest (C_8 non-party resolver check, C_15 false-claim penalty, C_16 caused-failure rejection) ·
+    system-weight capture (C_15 Devil audits all dimension weights; C_11 Justice fairness audits feed back-pay/calibration/rule retirement).</p>
+</section>
 <main id="cards"></main>
 <script src="https://unpkg.com/bpmn-js@17.11.1/dist/bpmn-navigated-viewer.development.js"></script>
 <script>
@@ -131,7 +141,7 @@ ALL.forEach((d, i) => {
   const card = document.createElement('section');
   card.className = 'card'; card.id = id;
   card.innerHTML =
-    `<h2>${d.n ? d.n + ' — ' : ''}${d.title} <span class="badge ${d.badge}">${d.badge}</span></h2>` +
+    `<h2>${d.n ? d.n + ' — ' : ''}${d.title} <span class="badge ${d.badge}">${d.badge === 'proposed' ? 'proposed interpretation' : d.badge}</span></h2>` +
     `<p class="desc">${d.desc}</p><div class="canvas" id="${id}_c"></div>` +
     (d.humans.length ? `<p class="humans"><b>Human interactions:</b> ${d.humans.join(' · ')}</p>` : '') +
     `<div class="actions"><button id="${id}_dl">Download SVG</button></div>`;
