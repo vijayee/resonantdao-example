@@ -20,7 +20,7 @@
   .badge.proposed { background: #4a3a12; color: #e6c25a; }
   .badge.core { background: #1d3550; color: #7fb4d6; }
   .desc { color: #9aa7b1; font-size: 14px; margin: 8px 0; }
-  .canvas { height: 420px; border: 1px solid #2a3138; border-radius: 4px; background: #fff; }
+  .canvas { height: 1176px; border: 1px solid #2a3138; border-radius: 4px; background: #fff; }
   .humans { font-size: 13px; margin: 10px 0 0; }
   .humans b { color: #d0b26a; }
   .actions { margin-top: 8px; }
@@ -144,12 +144,22 @@ ALL.forEach((d, i) => {
     `<h2>${d.n ? d.n + ' — ' : ''}${d.title} <span class="badge ${d.badge}">${d.badge === 'proposed' ? 'proposed interpretation' : d.badge}</span></h2>` +
     `<p class="desc">${d.desc}</p><div class="canvas" id="${id}_c"></div>` +
     (d.humans.length ? `<p class="humans"><b>Human interactions:</b> ${d.humans.join(' · ')}</p>` : '') +
-    `<div class="actions"><button id="${id}_dl">Download SVG</button></div>`;
+    `<div class="actions"><button id="${id}_zin">Zoom +</button> <button id="${id}_zout">Zoom −</button> <button id="${id}_fit">Fit</button> <button id="${id}_dl">Download SVG</button></div>`;
   cards.appendChild(card);
   const viewer = new BpmnJS({ container: document.getElementById(id + '_c') });
   fetch(d.file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
     .then(xml => viewer.importXML(xml))
     .catch(err => { document.getElementById(id + '_c').textContent = 'Failed to render: ' + err.message; });
+  const canvasEl = () => viewer.get('canvas');
+  document.getElementById(id + '_zin').addEventListener('click', () => {
+    const canvas = canvasEl();
+    canvas.zoom(canvas.zoom() * 1.25);
+  });
+  document.getElementById(id + '_zout').addEventListener('click', () => {
+    const canvas = canvasEl();
+    canvas.zoom(canvas.zoom() * 0.8);
+  });
+  document.getElementById(id + '_fit').addEventListener('click', () => canvasEl().zoom('fit-viewport', 'auto'));
   document.getElementById(id + '_dl').addEventListener('click', async () => {
     const { svg } = await viewer.saveSVG({ format: true });
     const blob = new Blob([svg], { type: 'image/svg+xml' });
