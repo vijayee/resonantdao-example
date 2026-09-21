@@ -1,10 +1,14 @@
 {
-  "sections": ["Core workflows", "Specified dimensions", "Proposed interpretation"],
+  "sections": [
+    "Core workflows",
+    "Specified dimensions",
+    "Proposed interpretation"
+  ],
   "overview": {
     "title": "How contribution works here",
     "intro": "Every contribution is scored across 22 dimensions. Work only counts when it produces a verified result — showing up, talking, or pausing never earns anything. Each score is adjusted by how well the work matched the intent, what it actually achieved, how strongly it was verified, and the DAO's latest tuning. Scores can't be transferred between people, and the overall score gates access and quorum but never makes votes heavier.",
     "antigaming": "The system watches for its own failure modes: fake identities (C_0), trying to be paid for attendance or talk instead of results (every diagram), staged disputes (C_3, C_6), fake endings (C_13), reviewers getting captured (C_18 rotates them out), people exploiting system settings (C_15 exposes them and C_11 audits), and work being systematically missed (triggers back-pay, retuning, or rule retirement).",
-    "dependencies": "Who feeds whom: C_2 records support every dimension; C_18 verifies pending claims everywhere; C_1's accepted work feeds C_3 nurturing; C_5's proven skills also feed C_3; C_9 and C_12 findings reach C_20 at round end; C_13's released resources feed C_14's health measure; C_17 orientation feeds C_0 entry; C_15 distortion reports reach C_11 and scoring; C_11 tuning updates reach scoring; the round spine C_10 → C_21 opens scoring; C_4's adopted rules update tuning; C_19 recognition must link to a proven record; C_16 crises must be verified by C_18."
+    "dependencies": "C_2 records support every dimension; C_18 verifies pending claims everywhere; C_1's accepted work feeds C_3 nurturing; C_5's proven skills also feed C_3; C_9 and C_12 findings reach C_20 at round end; C_13's released resources feed C_14's health measure; C_17 orientation feeds C_0 entry; C_15 distortion reports reach C_11 and scoring; C_11 tuning updates reach scoring; the round spine C_10 → C_21 opens scoring; C_4's adopted rules update tuning; C_19 recognition must link to a proven record; C_16 crises must be verified by C_18."
   },
   "diagrams": [
     {
@@ -19,18 +23,54 @@
         "A rotating panel handles appeals on a deadline"
       ],
       "glossary": [
-        { "plain": "Record what happened and prove it is real", "technical": "evidence record with action, context, provenance, outcome" },
-        { "plain": "Score the action across all 22 dimensions", "technical": "classify into sparse vector P(a) = [p_0 … p_21]" },
-        { "plain": "No evidence — no score", "technical": "null stays null — never becomes 0" },
-        { "plain": "Spot-check a random sample", "technical": "random audit sample" },
-        { "plain": "Appeal to the rotating panel", "technical": "appeal — deadline-bound, Tier 3 rotating panel" },
-        { "plain": "No change — stays open", "technical": "unverified — no delta; judgment stays pending and settles retroactively" },
-        { "plain": "Check for harm and reduce the score", "technical": "verified harm reduces or voids the outcome" },
-        { "plain": "Score each dimension and update 22 tallies", "technical": "delta C_i(a) = Match × Outcome × Verification × Calibration → 22 non-transferable balances" },
-        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" },
-        { "plain": "Close the round", "technical": "cycle boundary: C_10 Wheel → C_20 Judgement → C_21 World" },
-        { "plain": "Combine into the overall score", "technical": "$RCT aggregation (see 21-aggregation-rct.bpmn)" },
-        { "plain": "Tallies updated — full breakdown kept", "technical": "balances updated — the 22-vector remains the source record" }
+        {
+          "plain": "Record what happened and prove it is real",
+          "technical": "evidence record with action, context, provenance, outcome"
+        },
+        {
+          "plain": "Score the action across all 22 dimensions",
+          "technical": "classify into sparse vector P(a) = [p_0 … p_21]"
+        },
+        {
+          "plain": "No evidence — no score",
+          "technical": "null stays null — never becomes 0"
+        },
+        {
+          "plain": "Spot-check a random sample",
+          "technical": "random audit sample"
+        },
+        {
+          "plain": "Appeal to the rotating panel",
+          "technical": "appeal — deadline-bound, Tier 3 rotating panel"
+        },
+        {
+          "plain": "No change — stays open",
+          "technical": "unverified — no delta; judgment stays pending and settles retroactively"
+        },
+        {
+          "plain": "Check for harm and reduce the score",
+          "technical": "verified harm reduces or voids the outcome"
+        },
+        {
+          "plain": "Score each dimension and update 22 tallies",
+          "technical": "delta C_i(a) = Match × Outcome × Verification × Calibration → 22 non-transferable balances"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record — action ID, dimensions, intensities, calibration version"
+        },
+        {
+          "plain": "Close the round",
+          "technical": "cycle boundary: C_10 Wheel → C_20 Judgement → C_21 World"
+        },
+        {
+          "plain": "Combine into the overall score",
+          "technical": "$RCT aggregation (see 21-aggregation-rct.bpmn)"
+        },
+        {
+          "plain": "Tallies updated — full breakdown kept",
+          "technical": "balances updated — the 22-vector remains the source record"
+        }
       ]
     },
     {
@@ -41,15 +81,42 @@
       "description": "How the 22 dimensions feed each other. Records and reviews support everything, handoffs pass evidence between dimensions, and the round's closing steps lead to scoring.",
       "whoActs": [],
       "glossary": [
-        { "plain": "mentee's accepted work feeds Empress", "technical": "feeds C_3's multiplier input" },
-        { "plain": "proven skill feeds Empress", "technical": "demonstrated competence as C_3 nurture evidence" },
-        { "plain": "released resources feed Temperance", "technical": "released resources feed C_14's health metric" },
-        { "plain": "new member's first proven work", "technical": "orientee's first verified contribution" },
-        { "plain": "records settled", "technical": "provenance settled" },
-        { "plain": "adopted rules and tuning versions", "technical": "adopted rules / calibration versions" },
-        { "plain": "tuning updates and fairness audit", "technical": "calibration updates + fairness audit" },
-        { "plain": "evidence a decision steered", "technical": "decision-steering evidence (adoption bonus)" },
-        { "plain": "Overall score", "technical": "$RCT aggregation" }
+        {
+          "plain": "mentee's accepted work feeds Empress",
+          "technical": "feeds C_3's multiplier input"
+        },
+        {
+          "plain": "proven skill feeds Empress",
+          "technical": "demonstrated competence as C_3 nurture evidence"
+        },
+        {
+          "plain": "released resources feed Temperance",
+          "technical": "released resources feed C_14's health metric"
+        },
+        {
+          "plain": "new member's first proven work",
+          "technical": "orientee's first verified contribution"
+        },
+        {
+          "plain": "records settled",
+          "technical": "provenance settled"
+        },
+        {
+          "plain": "adopted rules and tuning versions",
+          "technical": "adopted rules / calibration versions"
+        },
+        {
+          "plain": "tuning updates and fairness audit",
+          "technical": "calibration updates + fairness audit"
+        },
+        {
+          "plain": "evidence a decision steered",
+          "technical": "decision-steering evidence (adoption bonus)"
+        },
+        {
+          "plain": "Overall score",
+          "technical": "$RCT aggregation"
+        }
       ]
     },
     {
@@ -65,20 +132,62 @@
         "Members decide back-pay or re-tuning when measurement keeps failing"
       ],
       "glossary": [
-        { "plain": "Overall Score Aggregation", "technical": "$RCT aggregation" },
-        { "plain": "Round closed and records settled", "technical": "cycle boundary — C_10 fair close, C_20 settled" },
-        { "plain": "Fetch each dimension's tally", "technical": "fetch C_i balances" },
-        { "plain": "Even out the tallies — blanks stay blank", "technical": "normalize N_i(C_i) — null-preserving; null never becomes 0 and never decays" },
-        { "plain": "Fairness audit for care, mediation, upkeep", "technical": "C_11 Justice fairness audit: under-recognized care / mediation / maintenance" },
-        { "plain": "Audit weights for distortion", "technical": "C_15 Devil distortion audit of dimension weights" },
-        { "plain": "Members review and version the weights", "technical": "governance review of alpha_i weights + versioning" },
-        { "plain": "Save which tuning version was used", "technical": "calibration-version explanation record" },
-        { "plain": "Fix systematic under-measurement", "technical": "chronic under-measurement check → back-pay / calibration / rule retirement" },
-        { "plain": "Combine into the overall score", "technical": "RCT = aggregate(alpha_i × N_i(C_i))" },
-        { "plain": "May the score gate access?", "technical": "use gate: eligibility/quorum only" },
-        { "plain": "access and quorum only", "technical": "gate eligibility/quorum — human-attributed portions, salient dims, hard caps" },
-        { "plain": "Not allowed — scores never scale votes", "technical": "FORBIDDEN — RCT never scales votes" },
-        { "plain": "Keep the 22-score breakdown", "technical": "update the 22-vector as the source record" }
+        {
+          "plain": "Overall Score Aggregation",
+          "technical": "$RCT aggregation"
+        },
+        {
+          "plain": "Round closed and records settled",
+          "technical": "cycle boundary — C_10 fair close, C_20 settled"
+        },
+        {
+          "plain": "Fetch each dimension's tally",
+          "technical": "fetch C_i balances"
+        },
+        {
+          "plain": "Even out the tallies — blanks stay blank",
+          "technical": "normalize N_i(C_i) — null-preserving; null never becomes 0 and never decays"
+        },
+        {
+          "plain": "Fairness audit for care, mediation, upkeep",
+          "technical": "C_11 Justice fairness audit: under-recognized care / mediation / maintenance"
+        },
+        {
+          "plain": "Audit weights for distortion",
+          "technical": "C_15 Devil distortion audit of dimension weights"
+        },
+        {
+          "plain": "Members review and version the weights",
+          "technical": "governance review of alpha_i weights + versioning"
+        },
+        {
+          "plain": "Save which tuning version was used",
+          "technical": "calibration-version explanation record"
+        },
+        {
+          "plain": "Fix systematic under-measurement",
+          "technical": "chronic under-measurement check → back-pay / calibration / rule retirement"
+        },
+        {
+          "plain": "Combine into the overall score",
+          "technical": "RCT = aggregate(alpha_i × N_i(C_i))"
+        },
+        {
+          "plain": "May the score gate access?",
+          "technical": "use gate: eligibility/quorum only"
+        },
+        {
+          "plain": "access and quorum only",
+          "technical": "gate eligibility/quorum — human-attributed portions, salient dims, hard caps"
+        },
+        {
+          "plain": "Not allowed — scores never scale votes",
+          "technical": "FORBIDDEN — RCT never scales votes"
+        },
+        {
+          "plain": "Keep the 22-score breakdown",
+          "technical": "update the 22-vector as the source record"
+        }
       ]
     },
     {
@@ -91,11 +200,26 @@
         "A reviewer checks the first step"
       ],
       "glossary": [
-        { "plain": "Is the entrant's identity genuine?", "technical": "Sybil check" },
-        { "plain": "A reviewer checks the first step", "technical": "validate the crossing" },
-        { "plain": "Recorded but pays nothing", "technical": "verified zero — recorded, no payment" },
-        { "plain": "Share progress with orientation", "technical": "feeds C_17's entry-progress input" },
-        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+        {
+          "plain": "Is the entrant's identity genuine?",
+          "technical": "Sybil check"
+        },
+        {
+          "plain": "A reviewer checks the first step",
+          "technical": "validate the crossing"
+        },
+        {
+          "plain": "Recorded but pays nothing",
+          "technical": "verified zero — recorded, no payment"
+        },
+        {
+          "plain": "Share progress with orientation",
+          "technical": "feeds C_17's entry-progress input"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record — action ID, dimensions, intensities, calibration version"
+        }
       ]
     },
     {
@@ -109,11 +233,26 @@
         "The credit is set by scope"
       ],
       "glossary": [
-        { "plain": "Record what was made and prove it is real", "technical": "evidence record with action, context, provenance, outcome" },
-        { "plain": "Two reviewers check the work", "technical": "Tier 2 review — two independent reviewers" },
-        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" },
-        { "plain": "Share accepted work with Empress", "technical": "feeds C_3's mentor multiplier input" },
-        { "plain": "Credit the builder's tally", "technical": "delivery bounty credited to the C_1 balance" }
+        {
+          "plain": "Record what was made and prove it is real",
+          "technical": "evidence record with action, context, provenance, outcome"
+        },
+        {
+          "plain": "Two reviewers check the work",
+          "technical": "Tier 2 review — two independent reviewers"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record — action ID, dimensions, intensities, calibration version"
+        },
+        {
+          "plain": "Share accepted work with Empress",
+          "technical": "feeds C_3's mentor multiplier input"
+        },
+        {
+          "plain": "Credit the builder's tally",
+          "technical": "delivery bounty credited to the C_1 balance"
+        }
       ]
     },
     {
@@ -126,10 +265,22 @@
         "A reviewer confirms each real use of the record"
       ],
       "glossary": [
-        { "plain": "Credit for publishing", "technical": "base credit on publication" },
-        { "plain": "A reviewer confirms each real use", "technical": "verified retrieval — usage bonus per confirmed use" },
-        { "plain": "These records support all dimensions", "technical": "rails for all dimensions — evidence records" },
-        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+        {
+          "plain": "Credit for publishing",
+          "technical": "base credit on publication"
+        },
+        {
+          "plain": "A reviewer confirms each real use",
+          "technical": "verified retrieval — usage bonus per confirmed use"
+        },
+        {
+          "plain": "These records support all dimensions",
+          "technical": "rails for all dimensions — evidence records"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record — action ID, dimensions, intensities, calibration version"
+        }
       ]
     },
     {
@@ -142,10 +293,22 @@
         "A reviewer confirms the mentee's work was accepted"
       ],
       "glossary": [
-        { "plain": "A mentee's work was accepted", "technical": "mentee's accepted output (from C_1)" },
-        { "plain": "Free of staged disputes?", "technical": "conflict-farming check" },
-        { "plain": "Credit a share of the mentee's work", "technical": "nurture multiplier — percentage of mentee's accepted output" },
-        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+        {
+          "plain": "A mentee's work was accepted",
+          "technical": "mentee's accepted output (from C_1)"
+        },
+        {
+          "plain": "Free of staged disputes?",
+          "technical": "conflict-farming check"
+        },
+        {
+          "plain": "Credit a share of the mentee's work",
+          "technical": "nurture multiplier — percentage of mentee's accepted output"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record — action ID, dimensions, intensities, calibration version"
+        }
       ]
     },
     {
@@ -158,10 +321,22 @@
         "Members vote to adopt the change"
       ],
       "glossary": [
-        { "plain": "Members vote to adopt it", "technical": "ratification vote" },
-        { "plain": "Credit the adopted change", "technical": "governance bounty on the adopted change" },
-        { "plain": "New rule becomes a tuning version", "technical": "adopted rule → calibration version, fed to aggregation" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Members vote to adopt it",
+          "technical": "ratification vote"
+        },
+        {
+          "plain": "Credit the adopted change",
+          "technical": "governance bounty on the adopted change"
+        },
+        {
+          "plain": "New rule becomes a tuning version",
+          "technical": "adopted rule → calibration version, fed to aggregation"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -174,9 +349,18 @@
         "A reviewer confirms someone can now do it"
       ],
       "glossary": [
-        { "plain": "A reviewer confirms someone can do it", "technical": "demonstrated competence in another member" },
-        { "plain": "Share as nurture evidence with Empress", "technical": "feeds C_3's nurture-evidence input" },
-        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+        {
+          "plain": "A reviewer confirms someone can do it",
+          "technical": "demonstrated competence in another member"
+        },
+        {
+          "plain": "Share as nurture evidence with Empress",
+          "technical": "feeds C_3's nurture-evidence input"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record — action ID, dimensions, intensities, calibration version"
+        }
       ]
     },
     {
@@ -189,10 +373,22 @@
         "A reviewer confirms it was a real joint build"
       ],
       "glossary": [
-        { "plain": "Declare who built what", "technical": "declare joint build with attribution shares" },
-        { "plain": "Free of staged disputes?", "technical": "conflict-farming check" },
-        { "plain": "Link the accepted work to Magician", "technical": "feeds C_1's joint artifact acceptance" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Declare who built what",
+          "technical": "declare joint build with attribution shares"
+        },
+        {
+          "plain": "Free of staged disputes?",
+          "technical": "conflict-farming check"
+        },
+        {
+          "plain": "Link the accepted work to Magician",
+          "technical": "feeds C_1's joint artifact acceptance"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -205,10 +401,22 @@
         "A reviewer confirms the milestone is done"
       ],
       "glossary": [
-        { "plain": "Credit the milestone", "technical": "milestone token" },
-        { "plain": "Reduce or void for harm", "technical": "net-of-harm adjustment" },
-        { "plain": "Share milestone health with Temperance", "technical": "feeds C_14's milestone-health context" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Credit the milestone",
+          "technical": "milestone token"
+        },
+        {
+          "plain": "Reduce or void for harm",
+          "technical": "net-of-harm adjustment"
+        },
+        {
+          "plain": "Share milestone health with Temperance",
+          "technical": "feeds C_14's milestone-health context"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -222,9 +430,18 @@
         "Both parties accept the outcome in writing"
       ],
       "glossary": [
-        { "plain": "Credit sized by severity", "technical": "resolution token sized by severity" },
-        { "plain": "Send the resolution for verification", "technical": "feeds C_18's verification queue" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Credit sized by severity",
+          "technical": "resolution token sized by severity"
+        },
+        {
+          "plain": "Send the resolution for verification",
+          "technical": "feeds C_18's verification queue"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -238,9 +455,18 @@
         "A reviewer confirms the finding steered a decision"
       ],
       "glossary": [
-        { "plain": "Pay at proven milestones", "technical": "deep-work bounty at milestones" },
-        { "plain": "Share adoption evidence with Judgement", "technical": "feeds C_20's adoption evidence" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Pay at proven milestones",
+          "technical": "deep-work bounty at milestones"
+        },
+        {
+          "plain": "Share adoption evidence with Judgement",
+          "technical": "feeds C_20's adoption evidence"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -253,9 +479,18 @@
         "A person audits the round's fairness"
       ],
       "glossary": [
-        { "plain": "Record the round's debt", "technical": "cycle debt — measurement failure is the system's debt" },
-        { "plain": "Start the overall scoring", "technical": "fires the cycle-boundary event to aggregation" },
-        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+        {
+          "plain": "Record the round's debt",
+          "technical": "cycle debt — measurement failure is the system's debt"
+        },
+        {
+          "plain": "Start the overall scoring",
+          "technical": "fires the cycle-boundary event to aggregation"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record — action ID, dimensions, intensities, calibration version"
+        }
       ]
     },
     {
@@ -268,10 +503,22 @@
         "A person runs the fairness audit"
       ],
       "glossary": [
-        { "plain": "Run the fairness audit by hand", "technical": "human-only bootstrap" },
-        { "plain": "Were quiet kinds of work missed?", "technical": "under-recognition of care / mediation / maintenance" },
-        { "plain": "Credit per finished audit", "technical": "audit token per completed audit" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Run the fairness audit by hand",
+          "technical": "human-only bootstrap"
+        },
+        {
+          "plain": "Were quiet kinds of work missed?",
+          "technical": "under-recognition of care / mediation / maintenance"
+        },
+        {
+          "plain": "Credit per finished audit",
+          "technical": "audit token per completed audit"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -284,9 +531,18 @@
         "A reviewer checks that the decision really changed"
       ],
       "glossary": [
-        { "plain": "A reviewer checks the decision changed", "technical": "decision-delta evidence" },
-        { "plain": "Record the change for Judgement", "technical": "feeds C_20's decision-change record" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "A reviewer checks the decision changed",
+          "technical": "decision-delta evidence"
+        },
+        {
+          "plain": "Record the change for Judgement",
+          "technical": "feeds C_20's decision-change record"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -300,10 +556,22 @@
         "A person confirms resources were released"
       ],
       "glossary": [
-        { "plain": "Rejected — it was theater", "technical": "closure theater" },
-        { "plain": "Credit the one who closed it", "technical": "closure token" },
-        { "plain": "Released resources feed Temperance", "technical": "feeds C_14's resource-release input" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Rejected — it was theater",
+          "technical": "closure theater"
+        },
+        {
+          "plain": "Credit the one who closed it",
+          "technical": "closure token"
+        },
+        {
+          "plain": "Released resources feed Temperance",
+          "technical": "feeds C_14's resource-release input"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -316,10 +584,22 @@
         "A person fixes the stall"
       ],
       "glossary": [
-        { "plain": "Each round checks the health measure", "technical": "health metric monitoring cycle" },
-        { "plain": "Credit for holding it in range", "technical": "holding credit per in-range interval" },
-        { "plain": "Uses resources released by Death", "technical": "consumes resources released by C_13" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Each round checks the health measure",
+          "technical": "health metric monitoring cycle"
+        },
+        {
+          "plain": "Credit for holding it in range",
+          "technical": "holding credit per in-range interval"
+        },
+        {
+          "plain": "Uses resources released by Death",
+          "technical": "consumes resources released by C_13"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -333,11 +613,26 @@
         "A person audits the dimension weights"
       ],
       "glossary": [
-        { "plain": "A second person confirms it", "technical": "corroboration by at least one independent member" },
-        { "plain": "A person audits the dimension weights", "technical": "Devil operator audit of weights (human-only bootstrap)" },
-        { "plain": "Integrity credit — one of the largest", "technical": "integrity bounty — among the largest payouts" },
-        { "plain": "Report the distortion to Justice", "technical": "feeds C_11 and aggregation's distortion finding" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "A second person confirms it",
+          "technical": "corroboration by at least one independent member"
+        },
+        {
+          "plain": "A person audits the dimension weights",
+          "technical": "Devil operator audit of weights (human-only bootstrap)"
+        },
+        {
+          "plain": "Integrity credit — one of the largest",
+          "technical": "integrity bounty — among the largest payouts"
+        },
+        {
+          "plain": "Report the distortion to Justice",
+          "technical": "feeds C_11 and aggregation's distortion finding"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -351,10 +646,22 @@
         "The credit is sized by severity"
       ],
       "glossary": [
-        { "plain": "Moon verifies the crisis", "technical": "verified via C_18 Moon" },
-        { "plain": "Credit for stabilizing", "technical": "crisis token for stabilization" },
-        { "plain": "Share the record with Death", "technical": "feeds C_13's stabilization record" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Moon verifies the crisis",
+          "technical": "verified via C_18 Moon"
+        },
+        {
+          "plain": "Credit for stabilizing",
+          "technical": "crisis token for stabilization"
+        },
+        {
+          "plain": "Share the record with Death",
+          "technical": "feeds C_13's stabilization record"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -367,9 +674,18 @@
         "A person runs the orientation"
       ],
       "glossary": [
-        { "plain": "Did the new member finish first proven work?", "technical": "orientee completed first verified contribution" },
-        { "plain": "Share entry progress with the Fool", "technical": "feeds C_0's entry-progress input" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Did the new member finish first proven work?",
+          "technical": "orientee completed first verified contribution"
+        },
+        {
+          "plain": "Share entry progress with the Fool",
+          "technical": "feeds C_0's entry-progress input"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -383,10 +699,22 @@
         "Reviewers get swapped if capture is suspected"
       ],
       "glossary": [
-        { "plain": "Credit per finished check", "technical": "verification token per completed check, either direction" },
-        { "plain": "Do reviewers look captured?", "technical": "reviewer capture suspected" },
-        { "plain": "Swap in new reviewers", "technical": "rotate the reviewer pool (Tier 3)" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Credit per finished check",
+          "technical": "verification token per completed check, either direction"
+        },
+        {
+          "plain": "Do reviewers look captured?",
+          "technical": "reviewer capture suspected"
+        },
+        {
+          "plain": "Swap in new reviewers",
+          "technical": "rotate the reviewer pool (Tier 3)"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -399,8 +727,14 @@
         "A reviewer checks the record"
       ],
       "glossary": [
-        { "plain": "Link the recognition to the record", "technical": "feeds C_2's recognized-record link" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Link the recognition to the record",
+          "technical": "feeds C_2's recognized-record link"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -413,10 +747,22 @@
         "People settle the records"
       ],
       "glossary": [
-        { "plain": "People settle the records", "technical": "provenance settlement (human-only bootstrap)" },
-        { "plain": "Leave open until evidence arrives", "technical": "settles retroactively when evidence arrives" },
-        { "plain": "Mark the records settled", "technical": "fires aggregation precondition — provenance settled" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "People settle the records",
+          "technical": "provenance settlement (human-only bootstrap)"
+        },
+        {
+          "plain": "Leave open until evidence arrives",
+          "technical": "settles retroactively when evidence arrives"
+        },
+        {
+          "plain": "Mark the records settled",
+          "technical": "fires aggregation precondition — provenance settled"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     },
     {
@@ -429,8 +775,14 @@
         "A person confirms the round completed"
       ],
       "glossary": [
-        { "plain": "Close the round so scores can be published", "technical": "closes the cycle spine, enables $RCT publication" },
-        { "plain": "Save a decision record", "technical": "explanation record" }
+        {
+          "plain": "Close the round so scores can be published",
+          "technical": "closes the cycle spine, enables $RCT publication"
+        },
+        {
+          "plain": "Save a decision record",
+          "technical": "explanation record"
+        }
       ]
     }
   ]
