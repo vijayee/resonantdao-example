@@ -4,7 +4,7 @@
                   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
                   id="Definitions_c11" targetNamespace="http://resonantdao.com/bpmn">
-  <bpmn:process id="Process_c11" name="C_11 Justice — Audits / Calibration" isExecutable="false">
+  <bpmn:process id="Process_c11" name="C_11 Justice — Audits" isExecutable="false">
     <bpmn:laneSet id="LaneSet_c11">
       <bpmn:lane id="c11_lane_member" name="Member">
         <bpmn:flowNodeRef>c11_start</bpmn:flowNodeRef>
