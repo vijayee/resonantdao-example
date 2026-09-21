@@ -220,7 +220,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record — action ID, dimensions, intensities, calibration version"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Crossing",
+        "definition": "The act of crossing a threshold: entering the community, or pioneering a path before precedent or guarantee.",
+        "boundary": "Every other class presupposes a path; the Fool opens one. Entry alone may be zero; a verified crossing others follow is contribution, once per path."
+      }
     },
     {
       "id": "c01",
@@ -253,7 +258,12 @@
           "plain": "Credit the builder's tally",
           "technical": "delivery bounty credited to the C_1 balance"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Building",
+        "definition": "The act of making: transforming intention into a real, shipped artifact.",
+        "boundary": "Against Chariot: making from nothing versus driving existing work toward a goal. The signature is the artifact, not the momentum."
+      }
     },
     {
       "id": "c02",
@@ -281,7 +291,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record — action ID, dimensions, intensities, calibration version"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Recording",
+        "definition": "The act of capturing and preserving knowledge: making the known findable and attributable.",
+        "boundary": "The three knowledge classes divide by operation: Priestess records, Hierophant transmits, Hermit discovers. The verb here is preservation."
+      }
     },
     {
       "id": "c03",
@@ -309,7 +324,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record — action ID, dimensions, intensities, calibration version"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Nurturing",
+        "definition": "The act of tending to other members: creating the conditions in which growth is possible.",
+        "boundary": "The object is a person’s growth, not an artifact or a rule. Frequently produces no deliverable, which is why the scale must be configured to weigh it (Justice)."
+      }
     },
     {
       "id": "c04",
@@ -337,7 +357,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Structuring",
+        "definition": "The act of creating or changing the rules of the game: the frame, not a move inside it.",
+        "boundary": "Against Strength: changing the rules versus resolving a live conflict. Against Justice: setting the rule of measurement versus performing a measurement."
+      }
     },
     {
       "id": "c05",
@@ -361,7 +386,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record — action ID, dimensions, intensities, calibration version"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Teaching",
+        "definition": "The act of transmitting knowledge: making another person able without re-deriving.",
+        "boundary": "Against Priestess: records make knowledge findable; teaching makes a person able. The output is competence in another member, not a document."
+      }
     },
     {
       "id": "c06",
@@ -389,7 +419,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Joining",
+        "definition": "The act of creating an alignment: a union of two that exceeds the parts.",
+        "boundary": "Against Chariot: joining two into something neither had alone versus driving one force. The signature is the union, not the motion."
+      }
     },
     {
       "id": "c07",
@@ -417,7 +452,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Driving",
+        "definition": "The act of directed momentum: pushing existing work toward a goal under constraints.",
+        "boundary": "Against Magician: driving existing work toward a goal versus making from nothing. Harm caused along the way counts against it."
+      }
     },
     {
       "id": "c08",
@@ -442,7 +482,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Resolving",
+        "definition": "The act of dissolving a live conflict through patience rather than force or decree.",
+        "boundary": "Against Emperor: relational tension resolved without a rule change. Against Temperance: a specific conflict versus an ongoing balance."
+      }
     },
     {
       "id": "c09",
@@ -467,7 +512,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Discovering",
+        "definition": "The act of finding the not-yet-known: deep, long-horizon inquiry.",
+        "boundary": "Hermit discovers the unknown; Priestess records the known; Hierophant transmits it. Against Fool: delivering understanding is a finding; mapping a route others can walk is a crossing. New understanding may never ship."
+      }
     },
     {
       "id": "c10",
@@ -491,7 +541,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record — action ID, dimensions, intensities, calibration version"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Cycling",
+        "definition": "The act of keeping the recurring flow turning: the rhythm, not a one-shot.",
+        "boundary": "The signature is recurrence. A one-shot build is the Magician; the thing that keeps coming around is the Wheel."
+      }
     },
     {
       "id": "c11",
@@ -519,7 +574,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Weighing",
+        "definition": "The act of fair accounting: measuring merit and distributing according to cause and effect.",
+        "boundary": "Justice weighs merit for one contribution; Judgement reckons the round as a whole at its end; Moon verifies whether a claim is real."
+      }
     },
     {
       "id": "c12",
@@ -543,7 +603,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Re-seeing",
+        "definition": "The act of pausing to see a thing from a new angle: a deliberate reframe, not an ending.",
+        "boundary": "Against Death: pauses and reframes versus ends. Against Hermit: re-sees the known from a new side versus finds the unknown."
+      }
     },
     {
       "id": "c13",
@@ -572,7 +637,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Ending",
+        "definition": "The act of a chosen ending: closing something and keeping what was learned.",
+        "boundary": "Against Tower: a chosen ending versus an unplanned collapse. Against World: closes a part or a failure versus the successful completion of the whole."
+      }
     },
     {
       "id": "c14",
@@ -600,7 +670,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Balancing",
+        "definition": "The act of holding an ongoing blend: sustainability and the long-term health of the whole.",
+        "boundary": "Against Strength: maintains an ongoing balance versus resolves a specific conflict. Against Wheel: the health of the system versus the rhythm of the money."
+      }
     },
     {
       "id": "c15",
@@ -633,7 +708,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Exposing",
+        "definition": "The act of naming and watching the system’s own skewed incentives: corruption made visible.",
+        "boundary": "Against Moon: exposes an incentive vector versus verifies a claim. Against Tower: the slow corruption the community believes in versus the sudden collapse."
+      }
     },
     {
       "id": "c16",
@@ -662,7 +742,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Responding",
+        "definition": "The act of responding to an unplanned collapse: the incident, the black swan.",
+        "boundary": "Against Death: unplanned collapse versus chosen ending. The trigger must be verified as truth rather than manipulation."
+      }
     },
     {
       "id": "c17",
@@ -686,7 +771,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Meaning",
+        "definition": "The act of making meaning and vision public: the why that orients the whole.",
+        "boundary": "Against Sun: the why, forward-looking meaning, versus the what-we-did, backward-looking success made public."
+      }
     },
     {
       "id": "c18",
@@ -715,7 +805,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Verifying",
+        "definition": "The act of illuminating the unverified: separating the true from the false before the community acts.",
+        "boundary": "Against Justice: verifies truth versus weighs merit. Against Devil: checks a claim versus exposes an incentive vector."
+      }
     },
     {
       "id": "c19",
@@ -735,7 +830,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Celebrating",
+        "definition": "The act of making success public: recognition visible to everyone.",
+        "boundary": "Against Star: the what-worked versus the why. Visibility is both contribution and reward at once."
+      }
     },
     {
       "id": "c20",
@@ -763,7 +863,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Reckoning",
+        "definition": "The act of end-of-round evaluation: calling the record and firing the reward.",
+        "boundary": "Against Justice: the round reckoning, the whole at its end, versus the per-action weighing."
+      }
     },
     {
       "id": "c21",
@@ -783,7 +888,12 @@
           "plain": "Save a decision record",
           "technical": "explanation record"
         }
-      ]
+      ],
+      "ontology": {
+        "cls": "Integrating",
+        "definition": "The act of completing the whole: the successful end-to-end integration, and the seed of the next round.",
+        "boundary": "Against Death: successful completion of the whole versus a chosen ending of a part. The World is always the seed of the next Fool."
+      }
     }
   ]
 }

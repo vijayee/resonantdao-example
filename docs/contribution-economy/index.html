@@ -52,6 +52,10 @@
   .canvas { height: min(70vh, 1300px); min-height: 520px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; overflow: hidden; }
   .error { color: #b3392e; padding: 24px; }
   .glossary-card { margin-top: 14px; padding: 0; overflow: hidden; }
+  .ontology p { margin: 4px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+  .ontology .onto-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+                          font-weight: 650; margin: 14px 0 0; }
+  .ontology .onto-label:first-of-type { margin-top: 0; }
   .glossary-card > h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
                         margin: 0; padding: 14px 22px 10px; font-weight: 650; }
   table.glossary { border-collapse: collapse; margin-top: 0; width: 100%; font-size: 14px; }
@@ -153,11 +157,16 @@ function renderDiagram(diag) {
   const whoBlock = diag.whoActs.length
     ? `<div class="card"><div class="who"><p>Who has to act</p><ul class="who">` +
       diag.whoActs.map(w => `<li>${esc(w)}</li>`).join('') + `</ul></div></div>` : '';
+  const ontoBlock = diag.ontology
+    ? `<div class="card ontology"><p class="onto-label">Definition — ${esc(diag.ontology.cls)}, from the ontology</p><p>${esc(diag.ontology.definition)}</p>` +
+      `<p class="onto-label">Boundary — what makes it this and not a neighbor</p><p>${esc(diag.ontology.boundary)}</p></div>` : '';
+
   main.innerHTML =
     `<h2>${esc(diag.title)} <span class="badge ${esc(diag.badge)}">${diag.badge === 'proposed' ? 'proposed interpretation' : diag.badge}</span></h2>` +
     (whoBlock
       ? `<div class="meta-row"><div class="card"><p class="desc">${esc(diag.description)}</p></div>${whoBlock}</div>`
       : `<div class="card"><p class="desc">${esc(diag.description)}</p></div>`) +
+    ontoBlock +
     `<div class="controls"><button id="btn-zin">Zoom +</button><button id="btn-zout">Zoom −</button><button id="btn-fit">Fit</button><button id="btn-dl">Download SVG</button></div>` +
     `<div class="card" style="padding:0; overflow:hidden; margin-top:14px"><div class="canvas" id="canvas"></div></div>` +
     (diag.glossary && diag.glossary.length
