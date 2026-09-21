@@ -29,7 +29,7 @@
     <bpmn:userTask id="c01_task_acceptance" name="Two reviewers check the work"/>
     <bpmn:exclusiveGateway id="c01_gw_accepted" name="Accepted?"/>
     <bpmn:userTask id="c01_task_scope" name="Set the credit by scope"/>
-    <bpmn:endEvent id="c01_end_none" name="No bounty — submission pays nothing"/>
+    <bpmn:endEvent id="c01_end_none" name="No credit — submission pays nothing"/>
     <bpmn:serviceTask id="c01_task_record" name="Save a decision record"/>
     <bpmn:serviceTask id="c01_task_feed_c03" name="Share accepted work with Empress"/>
     <bpmn:endEvent id="c01_end_paid" name="Credit the builder's tally"/>

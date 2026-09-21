@@ -63,9 +63,9 @@ flowchart LR
   S([A member does something]) --> E[Record what happened and prove it is real] --> PV{Is the evidence genuine?}
   PV -->|no| REJ([No evidence — no score])
   PV -->|yes| CL[Score the action across all 22 dimensions] --> TI{Which review tier?}
-  TI -->|Tier 0 — automatic| T0[Automatic check] --> V{Verified?}
-  TI -->|Tier 1 — software + audit| T1[Software proposes the check] --> T1A[Spot-check a random sample] --> V
-  TI -->|Tier 2+ — human review| T2[Check reviewers have no stake] --> F1{Two reviewers check independently}
+  TI -->|Automatic check — no human review| T0[Automatic check] --> V{Verified?}
+  TI -->|Software check with a random audit| T1[Software proposes the check] --> T1A[Spot-check a random sample] --> V
+  TI -->|Human review — two or more reviewers| T2[Check reviewers have no stake] --> F1{Two reviewers check independently}
   F1 --> R1[Reviewer 1 writes their reasons]
   F1 --> R2[Reviewer 2 writes their reasons]
   R1 --> J1{Join the two verdicts}
@@ -129,7 +129,7 @@ flowchart LR
   S([Someone submits their work]) --> EV[Record what was made and prove it is real] --> PR[Check the records are genuine]
   PR --> AC[Two reviewers check the work] --> G{Accepted?}
   G -->|yes| SC[Set the credit by scope] --> RC[Save a decision record] --> F3[Share accepted work with Empress] --> PAID([Credit the builder's tally])
-  G -->|no| NONE([No bounty — submission pays nothing])
+  G -->|no| NONE([No credit — submission pays nothing])
 ```
 
 ### C_2 Priestess — Recording

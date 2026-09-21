@@ -42,9 +42,9 @@
       "new": "Round operators",
       "lane": true
     },
-    "Tier 0": "Tier 0 — automatic",
-    "Tier 1": "Tier 1 — software + audit",
-    "Tier 2+": "Tier 2+ — human review"
+    "Tier 0": "Automatic check — no human review",
+    "Tier 1": "Software check with a random audit",
+    "Tier 2+": "Human review — two or more reviewers"
   },
   "20-interaction-map.bpmn": {
     "Rails (serve everyone)": {
@@ -151,6 +151,7 @@
     "Emit explanation record (action ID, dimensions, intensities, calibration version)": "Save a decision record",
     "Feed C_3 Empress: accepted artifact as mentee-output input": "Share accepted work with Empress",
     "Delivery bounty to C_1 balance": "Credit the builder's tally",
+    "No bounty — submission pays nothing": "No credit — submission pays nothing",
     "Human Reviewer": {
       "new": "Reviewer",
       "lane": true

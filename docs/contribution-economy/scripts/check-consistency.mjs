@@ -6,7 +6,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const map = JSON.parse(await readFile(path.join(root, 'rename-map.json'), 'utf8'));
 const files = (await readdir(path.join(root, 'bpmn'))).filter(f => f.endsWith('.bpmn'));
 
-const FORBIDDEN = ['(', ')', 'P(a)', 'N_i', 'alpha_i', 'C_i(', 'Delta C', 'RCT =', '$RCT'];
+const FORBIDDEN = ['(', ')', 'P(a)', 'N_i', 'alpha_i', 'C_i(', 'Delta C', 'RCT =', '$RCT', 'Tier 0', 'Tier 1', 'Tier 2', 'Tier 3', 'bounty'];
 let failed = 0;
 
 for (const f of files) {

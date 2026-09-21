@@ -70,9 +70,9 @@
     <bpmn:sequenceFlow id="ml_f3" name="no" sourceRef="ml_gw_provenance" targetRef="ml_end_rejected"/>
     <bpmn:sequenceFlow id="ml_f4" name="yes" sourceRef="ml_gw_provenance" targetRef="ml_task_classify"/>
     <bpmn:sequenceFlow id="ml_f5" sourceRef="ml_task_classify" targetRef="ml_gw_tier"/>
-    <bpmn:sequenceFlow id="ml_f6" name="Tier 0 — automatic" sourceRef="ml_gw_tier" targetRef="ml_task_t0"/>
-    <bpmn:sequenceFlow id="ml_f7" name="Tier 1 — software + audit" sourceRef="ml_gw_tier" targetRef="ml_task_t1"/>
-    <bpmn:sequenceFlow id="ml_f8" name="Tier 2+ — human review" sourceRef="ml_gw_tier" targetRef="ml_task_t2_conflict"/>
+    <bpmn:sequenceFlow id="ml_f6" name="Automatic check — no human review" sourceRef="ml_gw_tier" targetRef="ml_task_t0"/>
+    <bpmn:sequenceFlow id="ml_f7" name="Software check with a random audit" sourceRef="ml_gw_tier" targetRef="ml_task_t1"/>
+    <bpmn:sequenceFlow id="ml_f8" name="Human review — two or more reviewers" sourceRef="ml_gw_tier" targetRef="ml_task_t2_conflict"/>
     <bpmn:sequenceFlow id="ml_f9" sourceRef="ml_task_t0" targetRef="ml_gw_verdict"/>
     <bpmn:sequenceFlow id="ml_f10" sourceRef="ml_task_t1" targetRef="ml_task_t1_audit"/>
     <bpmn:sequenceFlow id="ml_f11" sourceRef="ml_task_t1_audit" targetRef="ml_gw_verdict"/>
