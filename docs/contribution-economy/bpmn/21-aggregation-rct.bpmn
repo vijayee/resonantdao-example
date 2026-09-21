@@ -4,7 +4,7 @@
                   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
                   id="Definitions_rct" targetNamespace="http://resonantdao.com/bpmn">
-  <bpmn:process id="Process_rct" name="$RCT Aggregation" isExecutable="false">
+  <bpmn:process id="Process_rct" name="Overall Score Aggregation" isExecutable="false">
     <bpmn:laneSet id="LaneSet_rct">
       <bpmn:lane id="rct_lane_balance" name="Tallies">
         <bpmn:flowNodeRef>rct_start</bpmn:flowNodeRef>

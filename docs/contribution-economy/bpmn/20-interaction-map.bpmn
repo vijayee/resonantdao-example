@@ -58,7 +58,7 @@
     <bpmn:task id="im_task_c21" name="C_21 World"/>
     <bpmn:task id="im_task_c14" name="C_14 Temperance"/>
     <bpmn:task id="im_task_c19" name="C_19 Sun"/>
-    <bpmn:task id="im_task_rct" name="$RCT aggregation"/>
+    <bpmn:task id="im_task_rct" name="Overall score"/>
     <bpmn:sequenceFlow id="im_f1" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c00"/>
     <bpmn:sequenceFlow id="im_f2" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c01"/>
     <bpmn:sequenceFlow id="im_f3" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c05"/>

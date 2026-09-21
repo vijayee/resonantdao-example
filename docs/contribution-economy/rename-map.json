@@ -49,7 +49,8 @@
     "recognition must tie to verified record": "recognition tied to a proven record",
     "decision-changed evidence": "evidence a decision changed",
     "verification of resolution acceptance": "check both sides accepted",
-    "verify resource release": "check resources released"
+    "verify resource release": "check resources released",
+    "$RCT aggregation": "Overall score"
   },
   "21-aggregation-rct.bpmn": {
     "Cycle boundary — C_10 fair close, C_20 settled": "Round closed and records settled",
@@ -79,6 +80,7 @@
     "Publish summary": "Publish the summary",
     "Update 22-vector as source record": "Keep the 22-score breakdown",
     "Cycle settled": "Round settled",
+    "$RCT Aggregation": "Overall Score Aggregation",
     "Balance Engine": { "new": "Tallies", "lane": true },
     "Normalization": { "new": "Preparation", "lane": true },
     "Governance (human)": { "new": "Human governance", "lane": true },
@@ -333,6 +335,7 @@
     "Emit explanation record": "Save a decision record",
     "Verdicts feed all dimensions' pending claims": "Verdicts feed all pending claims",
     "C_18 balance updated": "C_18 tally updated",
+    "Queue drained": "All claims checked",
     "Human Reviewer": { "new": "Reviewer", "lane": true },
     "System / Automation": { "new": "System", "lane": true }
   },

@@ -26,7 +26,7 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="c18_start" name="A claim needs checking"/>
     <bpmn:exclusiveGateway id="c18_gw_queue" name="More pending claims?"/>
-    <bpmn:endEvent id="c18_end_drained" name="Queue drained"/>
+    <bpmn:endEvent id="c18_end_drained" name="All claims checked"/>
     <bpmn:userTask id="c18_task_check" name="Complete verification check"/>
     <bpmn:serviceTask id="c18_task_token" name="Credit per finished check"/>
     <bpmn:serviceTask id="c18_task_accuracy" name="Track accuracy above chance"/>
