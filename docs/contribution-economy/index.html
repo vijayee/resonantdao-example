@@ -5,53 +5,75 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>ResonantDAO — Contribution Economy Workflows</title>
 <style>
-  :root { --bg: #14181d; --panel: #1b2128; --line: #2a3138; --text: #e6e6e6; --muted: #9aa7b1;
-          --link: #7fb4d6; --accent: #d0b26a; --btn: #2a4a66; --btn-hover: #35597a; }
+  :root {
+    --bg: #f7f9fc; --surface: #ffffff; --soft: #eef2f8; --line: #e2e8f0; --line-strong: #cbd5e1;
+    --text: #1a2433; --muted: #5b6b80; --accent: #3b6fd4; --accent-soft: #e8f0fd;
+    --warn-soft: #fdf6e9; --warn-text: #92660f; --ok-soft: #e9f6ef; --ok-text: #1e7a4a;
+    --radius: 10px; --shadow: 0 1px 2px rgba(26, 36, 51, .06), 0 2px 8px rgba(26, 36, 51, .04);
+  }
   * { box-sizing: border-box; }
-  body { font-family: system-ui, sans-serif; font-size: 16px; margin: 0; background: var(--bg); color: var(--text); }
-  header { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 16px; }
-  header h1 { font-size: 20px; margin: 0; }
-  header p { color: var(--muted); margin: 0; font-size: 14px; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; margin: 0;
+         background: var(--bg); color: var(--text); line-height: 1.55; }
+  header { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--line);
+           box-shadow: var(--shadow); padding: 14px 24px; display: flex; align-items: baseline; gap: 16px; }
+  header h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  header p { color: var(--muted); margin: 0; font-size: 13.5px; }
   #menu-btn { display: none; margin-right: 12px; }
-  .shell { display: flex; min-height: calc(100vh - 61px); }
-  aside { width: 260px; flex: 0 0 260px; border-right: 1px solid var(--line); padding: 16px 0; overflow-y: auto;
-          position: sticky; top: 61px; height: calc(100vh - 61px); background: var(--bg); }
-  aside h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 20px 6px; }
-  aside a { display: block; padding: 6px 20px; color: var(--link); text-decoration: none; font-size: 14px;
-            border-left: 3px solid transparent; }
-  aside a:hover { background: var(--panel); }
-  aside a.active { border-left-color: var(--accent); background: var(--panel); color: var(--text); }
-  aside a .chip { font-size: 11px; color: var(--accent); margin-left: 6px; }
-  main { flex: 1 1 auto; min-width: 0; padding: 24px 32px; }
-  main h2 { font-size: 22px; margin: 0 0 4px; }
-  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; vertical-align: middle; }
-  .badge.specified { background: #1d4028; color: #7fd694; }
-  .badge.proposed { background: #4a3a12; color: #e6c25a; }
-  .badge.core { background: #1d3550; color: #7fb4d6; }
-  .desc { color: var(--muted); font-size: 15px; margin: 8px 0 0; max-width: 65em; }
-  .who { font-size: 14px; margin: 12px 0 0; }
-  .who b { color: var(--accent); }
-  .who li { margin: 2px 0; }
-  .controls { display: flex; gap: 8px; margin: 16px 0 10px; flex-wrap: wrap; }
-  button { background: var(--btn); color: #fff; border: 0; border-radius: 4px; padding: 7px 14px;
-           font-size: 14px; cursor: pointer; }
-  button:hover { background: var(--btn-hover); }
-  .canvas { height: min(62vh, 1200px); min-height: 500px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
-  .error { color: #e67e7e; padding: 24px; }
-  table.glossary { border-collapse: collapse; margin-top: 20px; width: 100%; max-width: 65em; font-size: 14px; }
-  table.glossary th, table.glossary td { text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  table.glossary th { color: var(--muted); font-weight: 600; font-size: 13px; }
-  table.glossary td.technical { color: var(--muted); }
-  .overview { max-width: 65em; }
-  .overview p, .overview li { color: var(--muted); font-size: 15px; line-height: 1.6; }
-  .overview h3 { margin: 20px 0 6px; }
+  .shell { display: flex; min-height: calc(100vh - 60px); }
+  aside { width: 248px; flex: 0 0 248px; background: var(--surface); border-right: 1px solid var(--line);
+          padding: 12px 12px 48px; overflow-y: auto; position: sticky; top: 60px; height: calc(100vh - 60px); }
+  aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
+             font-weight: 650; margin: 20px 8px 4px; }
+  aside a { display: block; padding: 7px 10px; margin: 1px 0; border-radius: 7px; color: var(--muted);
+            text-decoration: none; font-size: 13.5px; transition: background .12s, color .12s; }
+  aside a:hover { background: var(--soft); color: var(--text); }
+  aside a.active { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+  aside a .chip { font-size: 10.5px; letter-spacing: .04em; color: var(--warn-text); background: var(--warn-soft);
+                  padding: 1px 7px; border-radius: 20px; margin-left: 6px; vertical-align: 1px; }
+  main { flex: 1 1 auto; min-width: 0; padding: 28px 36px; max-width: 1240px; }
+  main h2 { font-size: 23px; margin: 0 0 2px; font-weight: 650; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; letter-spacing: .02em; }
+  .badge.specified { background: var(--ok-soft); color: var(--ok-text); }
+  .badge.proposed { background: var(--warn-soft); color: var(--warn-text); }
+  .badge.core { background: var(--accent-soft); color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+          padding: 18px 22px; box-shadow: var(--shadow); margin-top: 14px; }
+  .desc { color: var(--muted); font-size: 15px; margin: 0; max-width: none; }
+  .meta-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+  .meta-row .card { margin-top: 0; }
+  .who { font-size: 14px; margin: 0; }
+  .who > p { margin: 0 0 6px; color: var(--text); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+  ul.who { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; }
+  ul.who li { margin: 3px 0; }
+  .controls { display: flex; gap: 8px; margin: 16px 0 0; flex-wrap: wrap; }
+  button { background: var(--surface); color: var(--text); border: 1px solid var(--line-strong); border-radius: 7px;
+           padding: 7px 14px; font-size: 13.5px; cursor: pointer; transition: background .12s, border-color .12s; }
+  button:hover { background: var(--soft); border-color: var(--accent); color: var(--accent); }
+  .canvas { height: min(70vh, 1300px); min-height: 520px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; overflow: hidden; }
+  .error { color: #b3392e; padding: 24px; }
+  .glossary-card { margin-top: 14px; padding: 0; overflow: hidden; }
+  .glossary-card > h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+                        margin: 0; padding: 14px 22px 10px; font-weight: 650; }
+  table.glossary { border-collapse: collapse; margin-top: 0; width: 100%; font-size: 14px; }
+  table.glossary th, table.glossary td { text-align: left; padding: 9px 22px; vertical-align: top; }
+  table.glossary th { color: var(--muted); font-weight: 650; font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+                      background: var(--soft); }
+  table.glossary tbody tr { border-top: 1px solid var(--line); }
+  table.glossary tbody tr:hover { background: var(--accent-soft); }
+  table.glossary td.technical { color: var(--muted); font-size: 13.5px; }
+  .overview { display: grid; gap: 14px; margin-top: 14px; }
+  .overview .card { margin-top: 0; }
+  .overview h3 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .overview p { color: var(--muted); font-size: 15px; line-height: 1.65; margin: 0; }
+  .overview .lede { font-size: 16.5px; color: var(--text); }
   @media (max-width: 1023px) {
-    aside { position: fixed; left: -280px; top: 0; height: 100vh; z-index: 50; width: 280px; flex-basis: 280px;
+    aside { position: fixed; left: -270px; top: 0; height: 100vh; z-index: 50; width: 270px; flex-basis: 270px;
             transition: left 0.2s; border-right: 1px solid var(--line); }
-    aside.open { left: 0; }
+    aside.open { left: 0; box-shadow: 0 0 24px rgba(0, 0, 0, 0.12); }
     #menu-btn { display: inline-block; }
-    main { padding: 16px; }
-    .canvas { min-height: 420px; height: min(60vh, 900px); }
+    main { padding: 18px; }
+    .meta-row { grid-template-columns: 1fr; }
+    .canvas { min-height: 440px; height: min(62vh, 900px); }
   }
 </style>
 </head>
@@ -119,28 +141,34 @@ function select(d, id) {
 
 function renderOverview(o) {
   main.innerHTML =
-    `<div class="overview"><h2>${esc(o.title)}</h2>` +
-    `<p>${esc(o.intro)}</p><h3>How the system protects itself</h3><p>${esc(o.antigaming)}</p>` +
-    `<h3>Who feeds whom</h3><p>${esc(o.dependencies)}</p></div>`;
+    `<h2>${esc(o.title)}</h2>` +
+    `<div class="overview">` +
+    `<div class="card"><p class="lede">${esc(o.intro)}</p></div>` +
+    `<div class="card"><h3>How the system protects itself</h3><p>${esc(o.antigaming)}</p></div>` +
+    `<div class="card"><h3>Who feeds whom</h3><p>${esc(o.dependencies)}</p></div>` +
+    `</div>`;
 }
 
 function renderDiagram(diag) {
+  const whoBlock = diag.whoActs.length
+    ? `<div class="card"><div class="who"><p>Who has to act</p><ul class="who">` +
+      diag.whoActs.map(w => `<li>${esc(w)}</li>`).join('') + `</ul></div></div>` : '';
   main.innerHTML =
     `<h2>${esc(diag.title)} <span class="badge ${esc(diag.badge)}">${diag.badge === 'proposed' ? 'proposed interpretation' : diag.badge}</span></h2>` +
-    `<p class="desc">${esc(diag.description)}</p>` +
-    (diag.whoActs.length
-      ? `<p class="who"><b>Who has to act:</b></p><ul class="who">` + diag.whoActs.map(w => `<li>${esc(w)}</li>`).join('') + `</ul>` : '') +
+    (whoBlock
+      ? `<div class="meta-row"><div class="card"><p class="desc">${esc(diag.description)}</p></div>${whoBlock}</div>`
+      : `<div class="card"><p class="desc">${esc(diag.description)}</p></div>`) +
     `<div class="controls"><button id="btn-zin">Zoom +</button><button id="btn-zout">Zoom −</button><button id="btn-fit">Fit</button><button id="btn-dl">Download SVG</button></div>` +
-    `<div class="canvas" id="canvas"></div>` +
+    `<div class="card" style="padding:0; overflow:hidden; margin-top:14px"><div class="canvas" id="canvas"></div></div>` +
     (diag.glossary && diag.glossary.length
-      ? `<table class="glossary"><thead><tr><th>In the diagram</th><th>What it means technically</th></tr></thead><tbody>` +
+      ? `<div class="card glossary-card"><h3>Glossary</h3><table class="glossary"><thead><tr><th>In the diagram</th><th>What it means technically</th></tr></thead><tbody>` +
         diag.glossary.map(g => `<tr><td>${esc(g.plain)}</td><td class="technical">${esc(g.technical)}</td></tr>`).join('') +
-        `</tbody></table>` : '');
+        `</tbody></table></div>` : '');
   const canvas = document.getElementById('canvas');
   const v = new BpmnJS({ container: canvas });
   viewer = v;
   fetch(diag.file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
-    .then(xml => { if (viewer !== v) return; return v.importXML(xml); })
+    .then(xml => { if (viewer !== v) return; return v.importXML(xml).then(() => { v.get('canvas').zoom('fit-viewport', 'auto'); }); })
     .catch(err => { if (viewer !== v) return; canvas.innerHTML = `<p class="error">Failed to render: ${esc(err.message)}</p>`; });
   document.getElementById('btn-zin').addEventListener('click', () => {
     const c = viewer.get('canvas'); c.zoom(c.zoom() * 1.25);
