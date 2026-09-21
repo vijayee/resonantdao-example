@@ -228,7 +228,7 @@ flowchart LR
   M --> RC[Save a decision record] --> F20[Share adoption evidence with Judgement] --> E2([C_9 tally updated])
 ```
 
-### C_10 Wheel — Fair Cycle Completion
+### C_10 Wheel — Fair Round Completion
 
 ```mermaid
 flowchart LR

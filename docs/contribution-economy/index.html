@@ -58,7 +58,7 @@
 <body>
 <header>
   <button id="menu-btn" aria-label="Open navigation">☰</button>
-  <h1>ResonantDAO — Contribution Economy Workflows (v2)</h1>
+  <h1>ResonantDAO — Contribution Economy Workflows v2</h1>
   <p>22 dimensions · one round at a time · scores gate access, never vote weight</p>
 </header>
 <div class="shell">
@@ -86,11 +86,11 @@ function buildNav(d) {
   const sections = [['overview', 'Overview']];
   for (const s of d.sections) sections.push([s, s]);
   for (const [id, title] of sections) {
-    const h = document.createElement('h3');
-    h.textContent = title;
-    nav.appendChild(h);
     const items = id === 'overview' ? [{ id: 'overview', title: d.overview.title }]
                                     : d.diagrams.filter(x => groupOf(x.badge) === id);
+    const h = document.createElement('h3');
+    h.textContent = id === 'overview' ? title : `${title} (${items.length})`;
+    nav.appendChild(h);
     for (const item of items) {
       const a = document.createElement('a');
       a.href = '#' + item.id;
