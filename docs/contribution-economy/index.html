@@ -5,171 +5,165 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>ResonantDAO — Contribution Economy Workflows</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; background: #14181d; color: #e6e6e6; }
-  header { padding: 24px 32px; border-bottom: 1px solid #2a3138; }
-  h1 { font-size: 22px; margin: 0; }
-  header p { color: #9aa7b1; margin: 8px 0 0; max-width: 70em; }
-  nav { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 32px; position: sticky; top: 0;
-        background: #14181d; border-bottom: 1px solid #2a3138; z-index: 10; }
-  nav a { color: #7fb4d6; text-decoration: none; font-size: 13px; padding: 4px 8px; border-radius: 4px; }
-  nav a:hover { background: #232a31; }
-  .card { margin: 32px; padding: 20px; background: #1b2128; border: 1px solid #2a3138; border-radius: 8px; }
-  .card h2 { font-size: 17px; margin: 0 0 4px; }
+  :root { --bg: #14181d; --panel: #1b2128; --line: #2a3138; --text: #e6e6e6; --muted: #9aa7b1;
+          --link: #7fb4d6; --accent: #d0b26a; --btn: #2a4a66; --btn-hover: #35597a; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; font-size: 16px; margin: 0; background: var(--bg); color: var(--text); }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 16px; }
+  header h1 { font-size: 20px; margin: 0; }
+  header p { color: var(--muted); margin: 0; font-size: 14px; }
+  #menu-btn { display: none; margin-right: 12px; }
+  .shell { display: flex; min-height: calc(100vh - 61px); }
+  aside { width: 260px; flex: 0 0 260px; border-right: 1px solid var(--line); padding: 16px 0; overflow-y: auto;
+          position: sticky; top: 61px; height: calc(100vh - 61px); background: var(--bg); }
+  aside h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 20px 6px; }
+  aside a { display: block; padding: 6px 20px; color: var(--link); text-decoration: none; font-size: 14px;
+            border-left: 3px solid transparent; }
+  aside a:hover { background: var(--panel); }
+  aside a.active { border-left-color: var(--accent); background: var(--panel); color: var(--text); }
+  aside a .chip { font-size: 11px; color: var(--accent); margin-left: 6px; }
+  main { flex: 1 1 auto; min-width: 0; padding: 24px 32px; }
+  main h2 { font-size: 22px; margin: 0 0 4px; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; vertical-align: middle; }
   .badge.specified { background: #1d4028; color: #7fd694; }
   .badge.proposed { background: #4a3a12; color: #e6c25a; }
   .badge.core { background: #1d3550; color: #7fb4d6; }
-  .desc { color: #9aa7b1; font-size: 14px; margin: 8px 0; }
-  .canvas { height: 1176px; border: 1px solid #2a3138; border-radius: 4px; background: #fff; }
-  .humans { font-size: 13px; margin: 10px 0 0; }
-  .humans b { color: #d0b26a; }
-  .actions { margin-top: 8px; }
-  button { background: #2a4a66; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px;
-           font-size: 13px; cursor: pointer; }
-  button:hover { background: #35597a; }
+  .desc { color: var(--muted); font-size: 15px; margin: 8px 0 0; max-width: 65em; }
+  .who { font-size: 14px; margin: 12px 0 0; }
+  .who b { color: var(--accent); }
+  .who li { margin: 2px 0; }
+  .controls { display: flex; gap: 8px; margin: 16px 0 10px; flex-wrap: wrap; }
+  button { background: var(--btn); color: #fff; border: 0; border-radius: 4px; padding: 7px 14px;
+           font-size: 14px; cursor: pointer; }
+  button:hover { background: var(--btn-hover); }
+  .canvas { height: min(62vh, 1200px); min-height: 500px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  .error { color: #e67e7e; padding: 24px; }
+  table.glossary { border-collapse: collapse; margin-top: 20px; width: 100%; max-width: 65em; font-size: 14px; }
+  table.glossary th, table.glossary td { text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.glossary th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  table.glossary td.technical { color: var(--muted); }
+  .overview { max-width: 65em; }
+  .overview p, .overview li { color: var(--muted); font-size: 15px; line-height: 1.6; }
+  .overview h3 { margin: 20px 0 6px; }
+  @media (max-width: 1023px) {
+    aside { position: fixed; left: -280px; top: 0; height: 100vh; z-index: 50; width: 280px; flex-basis: 280px;
+            transition: left 0.2s; border-right: 1px solid var(--line); }
+    aside.open { left: 0; }
+    #menu-btn { display: inline-block; }
+    main { padding: 16px; }
+    .canvas { min-height: 420px; height: min(60vh, 900px); }
+  }
 </style>
 </head>
 <body>
 <header>
+  <button id="menu-btn" aria-label="Open navigation">☰</button>
   <h1>ResonantDAO — Contribution Economy Workflows (v2)</h1>
-  <p>22 contribution dimensions (Major Arcana, C_0–C_21) modeled as BPMN 2.0. Key invariants:
-     pay on outcome, never on activity; every action is multi-classified;
-     Delta C_i = Match × Outcome × Verification × Calibration; null never becomes 0;
-     $RCT summarizes the profile but never erases it and never scales votes.</p>
+  <p>22 dimensions · one round at a time · scores gate access, never vote weight</p>
 </header>
-<nav id="nav"></nav>
-<section class="card" id="anti-gaming">
-  <h2>Anti-gaming summary</h2>
-  <p class="desc">Named failure modes and where their countermeasures appear in the diagrams:
-    Sybil entry (C_0 identity check) · metric capture (every payment requires an outcome-verified gateway, never submission/attendance/length/pause) ·
-    conflict farming (C_3, C_6 conflict-farming gateways) · closure theater (C_13 real-closure check) ·
-    reviewer capture (C_18 accuracy-vs-chance tracking and reviewer rotation) ·
-    AI-leverage capture (scope sizing and calibration review by human operators) ·
-    reviewer self-interest (C_8 non-party resolver check, C_15 false-claim penalty, C_16 caused-failure rejection) ·
-    system-weight capture (C_15 Devil audits all dimension weights; C_11 Justice fairness audits feed back-pay/calibration/rule retirement).</p>
-</section>
-<main id="cards"></main>
+<div class="shell">
+  <aside id="nav"></aside>
+  <main id="content"></main>
+</div>
 <script src="https://unpkg.com/bpmn-js@17.11.1/dist/bpmn-navigated-viewer.development.js"></script>
 <script>
-const CORE = [
-  { file: 'bpmn/00-master-lifecycle.bpmn', title: 'Master Contribution Lifecycle', badge: 'core',
-    desc: 'Action → evidence → classification P(a) → tiered verification (T0–T3) → harm check → delta formula → 22 balances → cycle boundary → $RCT aggregation.',
-    humans: ['Random audit (T1)', 'Conflict-of-interest check + two independent reviewers with written reasons (T2)', 'Appeal panel (T3, deadline-bound)'] },
-  { file: 'bpmn/20-interaction-map.bpmn', title: 'Dimension Interaction Map', badge: 'core',
-    desc: 'Rails (C_2 records, C_18 verification, C_4 rules, C_11 audits, C_15 distortion audits) + cross-dimension flow dependencies + cycle spine C_10 → C_20 → C_21 → aggregation.',
-    humans: [] },
-  { file: 'bpmn/21-aggregation-rct.bpmn', title: '$RCT Aggregation Workflow', badge: 'core',
-    desc: 'Cycle boundary → null-preserving normalization N_i → capital-portion exclusion → human governance of alpha_i (Justice fairness audit + Devil distortion audit) → aggregate → use gate (eligibility/quorum only, never vote scaling) → publish + update 22-vector.',
-    humans: ['alpha_i weight review and versioning (Governance)', 'C_11 fairness audit', 'C_15 distortion audit', 'Chronic under-measurement back-pay decision'] },
-];
-const DIMS = [
-  { file: 'bpmn/c00-fool.bpmn', n: 'C_0', title: 'Fool — Entry', badge: 'specified',
-    desc: 'Entry/pioneering step. Entry event is a verified zero; validated crossings earn non-zero value.',
-    humans: ['Validate crossing (reviewer)'] },
-  { file: 'bpmn/c01-magician.bpmn', n: 'C_1', title: 'Magician — Building', badge: 'specified',
-    desc: 'Delivery bounty on acceptance, sized by scope; never on submission.',
-    humans: ['Artifact acceptance review (Tier 2)', 'Size delivery bounty by scope'] },
-  { file: 'bpmn/c02-priestess.bpmn', n: 'C_2', title: 'Priestess — Recording', badge: 'specified',
-    desc: 'Base credit on publication + usage bonus per verified retrieval. Evidence rails for all dimensions.',
-    humans: ['Retrieval verification'] },
-  { file: 'bpmn/c03-empress.bpmn', n: 'C_3', title: 'Empress — Nurturing', badge: 'specified',
-    desc: 'Multiplier: percentage of mentee’s accepted output, capped per mentee, cycle-gated.',
-    humans: ['Verify mentee output acceptance'] },
-  { file: 'bpmn/c04-emperor.bpmn', n: 'C_4', title: 'Emperor — Rule Changes', badge: 'proposed',
-    desc: 'Governance bounty on adopted rule change after ratification vote; proposal alone pays nothing.',
-    humans: ['Ratification vote'] },
-  { file: 'bpmn/c05-hierophant.bpmn', n: 'C_5', title: 'Hierophant — Teaching', badge: 'specified',
-    desc: 'Pays on demonstrated competence in another member; lectures and attendance pay nothing.',
-    humans: ['Competence demonstration review'] },
-  { file: 'bpmn/c06-lovers.bpmn', n: 'C_6', title: 'Lovers — Joint Builds', badge: 'proposed',
-    desc: 'Shared delivery bounty on accepted joint artifact, split by verified attribution.',
-    humans: ['Joint attribution review'] },
-  { file: 'bpmn/c07-chariot.bpmn', n: 'C_7', title: 'Chariot — Milestones', badge: 'proposed',
-    desc: 'Milestone token on verified milestone, net-of-harm.',
-    humans: ['Milestone verification'] },
-  { file: 'bpmn/c08-strength.bpmn', n: 'C_8', title: 'Strength — Resolving', badge: 'specified',
-    desc: 'Resolution token sized by severity; requires non-party resolver and both parties’ written acceptance.',
-    humans: ['Non-party resolver assignment', 'Party A written acceptance', 'Party B written acceptance'] },
-  { file: 'bpmn/c09-hermit.bpmn', n: 'C_9', title: 'Hermit — Discovering', badge: 'specified',
-    desc: 'Deep-work bounty at milestones + adoption bonus when a finding steers a vote; never on length.',
-    humans: ['Milestone evidence review', 'Decision-steering verification'] },
-  { file: 'bpmn/c10-wheel.bpmn', n: 'C_10', title: 'Wheel — Fair Cycle Completion', badge: 'proposed',
-    desc: 'Cycle-completion credit on audited fair cycle close; fires the aggregation boundary event.',
-    humans: ['Cycle fairness audit'] },
-  { file: 'bpmn/c11-justice.bpmn', n: 'C_11', title: 'Justice — Audits / Calibration', badge: 'proposed',
-    desc: 'Audit token per completed fairness audit; human-only during bootstrap; triggers back-pay/calibration on under-recognition.',
-    humans: ['Execute fairness audit (human-only bootstrap)'] },
-  { file: 'bpmn/c12-hanged-man.bpmn', n: 'C_12', title: 'Hanged Man — Re-seeing', badge: 'specified',
-    desc: 'Pays on decision-changed; never on pause duration.',
-    humans: ['Decision-delta evidence review'] },
-  { file: 'bpmn/c13-death.bpmn', n: 'C_13', title: 'Death — Ending', badge: 'specified',
-    desc: 'Closure token requiring preserved learning and verified resource release; feeds C_14.',
-    humans: ['Preserved-learning review', 'Resource release verification'] },
-  { file: 'bpmn/c14-temperance.bpmn', n: 'C_14', title: 'Temperance — Health in Range', badge: 'proposed',
-    desc: 'Holding credit per in-range interval with stall detection; consumes resources released by C_13.',
-    humans: ['Stall remediation'] },
-  { file: 'bpmn/c15-devil.bpmn', n: 'C_15', title: 'Devil — Exposing', badge: 'specified',
-    desc: 'Integrity bounty, among the largest payouts; corroboration required; false claims penalized.',
-    humans: ['Independent corroboration', 'Weight audit (human-only bootstrap)'] },
-  { file: 'bpmn/c16-tower.bpmn', n: 'C_16', title: 'Tower — Crisis Response', badge: 'specified',
-    desc: 'Crisis token sized by severity; pays stabilization, not detection or caused failure.',
-    humans: ['Crisis verification (via C_18)', 'Severity sizing'] },
-  { file: 'bpmn/c17-star.bpmn', n: 'C_17', title: 'Star — Orientation', badge: 'proposed',
-    desc: 'Onboarding credit when orientee completes first verified contribution; attendance alone pays nothing.',
-    humans: ['Orientation session'] },
-  { file: 'bpmn/c18-moon.bpmn', n: 'C_18', title: 'Moon — Verifying', badge: 'specified',
-    desc: 'Verification token per completed check regardless of direction; accuracy tracked against chance.',
-    humans: ['Verification check task', 'Reviewer rotation (capture countermeasure)'] },
-  { file: 'bpmn/c19-sun.bpmn', n: 'C_19', title: 'Sun — Public Recognition', badge: 'proposed',
-    desc: 'Recognition credit only when tied to a verified record.',
-    humans: ['Recognition review'] },
-  { file: 'bpmn/c20-judgement.bpmn', n: 'C_20', title: 'Judgement — Reckoning', badge: 'proposed',
-    desc: 'End-of-cycle reckoning and provenance settlement; unresolved judgments stay pending and settle retroactively.',
-    humans: ['Provenance settlement (human-only bootstrap)'] },
-  { file: 'bpmn/c21-world.bpmn', n: 'C_21', title: 'World — Completion', badge: 'proposed',
-    desc: 'Completion credit on verified whole-cycle completion; closes the cycle spine into aggregation.',
-    humans: ['Whole-cycle completion verification'] },
-];
-const ALL = [...CORE, ...DIMS];
+const main = document.getElementById('content');
 const nav = document.getElementById('nav');
-const cards = document.getElementById('cards');
-ALL.forEach((d, i) => {
-  const id = 'dg_' + i;
-  const a = document.createElement('a'); a.href = '#' + id;
-  a.textContent = (d.n ? d.n + ' ' : '') + d.title.split(' — ')[0];
-  nav.appendChild(a);
-  const card = document.createElement('section');
-  card.className = 'card'; card.id = id;
-  card.innerHTML =
-    `<h2>${d.n ? d.n + ' — ' : ''}${d.title} <span class="badge ${d.badge}">${d.badge === 'proposed' ? 'proposed interpretation' : d.badge}</span></h2>` +
-    `<p class="desc">${d.desc}</p><div class="canvas" id="${id}_c"></div>` +
-    (d.humans.length ? `<p class="humans"><b>Human interactions:</b> ${d.humans.join(' · ')}</p>` : '') +
-    `<div class="actions"><button id="${id}_zin">Zoom +</button> <button id="${id}_zout">Zoom −</button> <button id="${id}_fit">Fit</button> <button id="${id}_dl">Download SVG</button></div>`;
-  cards.appendChild(card);
-  const viewer = new BpmnJS({ container: document.getElementById(id + '_c') });
-  fetch(d.file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+let viewer = null;
+
+async function loadData() {
+  const d = await (await fetch('diagrams.json')).json();
+  buildNav(d);
+  const initial = location.hash ? location.hash.slice(1) : 'overview';
+  select(d, initial);
+  window.addEventListener('hashchange', () => select(d, location.hash.slice(1)));
+  document.getElementById('menu-btn').addEventListener('click', () => nav.classList.toggle('open'));
+}
+
+function buildNav(d) {
+  const sections = [['overview', 'Overview']];
+  for (const s of d.sections) sections.push([s, s]);
+  for (const [id, title] of sections) {
+    const h = document.createElement('h3');
+    h.textContent = title;
+    nav.appendChild(h);
+    const items = id === 'overview' ? [{ id: 'overview', title: 'How contribution works here' }]
+                                    : d.diagrams.filter(x => groupOf(x.badge) === id);
+    for (const item of items) {
+      const a = document.createElement('a');
+      a.href = '#' + item.id;
+      a.dataset.sel = item.id;
+      a.innerHTML = esc(item.title) + (item.badge === 'proposed' ? ' <span class="chip">proposed</span>' : '');
+      nav.appendChild(a);
+    }
+  }
+}
+
+function groupOf(badge) {
+  return badge === 'core' ? 'Core workflows'
+       : badge === 'specified' ? 'Specified dimensions'
+       : 'Proposed interpretation';
+}
+
+function select(d, id) {
+  for (const a of nav.querySelectorAll('a')) a.classList.toggle('active', a.dataset.sel === id);
+  nav.classList.remove('open');
+  if (viewer) { viewer.destroy(); viewer = null; }
+  if (id === 'overview') return renderOverview(d.overview);
+  const diag = d.diagrams.find(x => x.id === id);
+  if (!diag) { main.innerHTML = '<p class="error">Unknown diagram.</p>'; return; }
+  renderDiagram(diag);
+}
+
+function renderOverview(o) {
+  main.innerHTML =
+    `<div class="overview"><h2>${esc(o.title)}</h2>` +
+    `<p>${esc(o.intro)}</p><h3>How the system protects itself</h3><p>${esc(o.antigaming)}</p>` +
+    `<h3>Who feeds whom</h3><p>${esc(o.dependencies)}</p></div>`;
+}
+
+function renderDiagram(diag) {
+  main.innerHTML =
+    `<h2>${esc(diag.title)} <span class="badge ${diag.badge}">${diag.badge === 'proposed' ? 'proposed interpretation' : diag.badge}</span></h2>` +
+    `<p class="desc">${esc(diag.description)}</p>` +
+    (diag.whoActs.length
+      ? `<ul class="who"><b>Who has to act:</b>` + diag.whoActs.map(w => `<li>${esc(w)}</li>`).join('') + `</ul>` : '') +
+    `<div class="controls"><button id="btn-zin">Zoom +</button><button id="btn-zout">Zoom −</button><button id="btn-fit">Fit</button><button id="btn-dl">Download SVG</button></div>` +
+    `<div class="canvas" id="canvas"></div>` +
+    (diag.glossary && diag.glossary.length
+      ? `<table class="glossary"><thead><tr><th>In the diagram</th><th>What it means technically</th></tr></thead><tbody>` +
+        diag.glossary.map(g => `<tr><td>${esc(g.plain)}</td><td class="technical">${esc(g.technical)}</td></tr>`).join('') +
+        `</tbody></table>` : '');
+  const canvas = document.getElementById('canvas');
+  viewer = new BpmnJS({ container: canvas });
+  fetch(diag.file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
     .then(xml => viewer.importXML(xml))
-    .catch(err => { document.getElementById(id + '_c').textContent = 'Failed to render: ' + err.message; });
-  const canvasEl = () => viewer.get('canvas');
-  document.getElementById(id + '_zin').addEventListener('click', () => {
-    const canvas = canvasEl();
-    canvas.zoom(canvas.zoom() * 1.25);
+    .catch(err => { canvas.innerHTML = `<p class="error">Failed to render: ${esc(err.message)}</p>`; });
+  document.getElementById('btn-zin').addEventListener('click', () => {
+    const c = viewer.get('canvas'); c.zoom(c.zoom() * 1.25);
   });
-  document.getElementById(id + '_zout').addEventListener('click', () => {
-    const canvas = canvasEl();
-    canvas.zoom(canvas.zoom() * 0.8);
+  document.getElementById('btn-zout').addEventListener('click', () => {
+    const c = viewer.get('canvas'); c.zoom(c.zoom() * 0.8);
   });
-  document.getElementById(id + '_fit').addEventListener('click', () => canvasEl().zoom('fit-viewport', 'auto'));
-  document.getElementById(id + '_dl').addEventListener('click', async () => {
-    const { svg } = await viewer.saveSVG({ format: true });
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = d.file.replace('bpmn/', '').replace('.bpmn', '.svg');
-    a.click();
-    URL.revokeObjectURL(a.href);
+  document.getElementById('btn-fit').addEventListener('click', () => viewer.get('canvas').zoom('fit-viewport', 'auto'));
+  document.getElementById('btn-dl').addEventListener('click', async () => {
+    try {
+      const { svg } = await viewer.saveSVG();
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = diag.file.replace('bpmn/', '').replace('.bpmn', '.svg');
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) { /* diagram failed to load; nothing to download */ }
   });
-});
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+loadData().catch(err => { main.innerHTML = `<p class="error">Failed to load diagrams.json: ${esc(err.message)}</p>`; });
 </script>
 </body>
 </html>
