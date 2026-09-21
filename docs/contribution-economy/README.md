@@ -78,7 +78,7 @@ flowchart LR
   CY --> RCT[Combine into the overall score] --> END([Tallies updated — full breakdown kept])
 ```
 
-## $RCT aggregation mirror
+## Aggregation mirror
 
 ```mermaid
 flowchart LR
@@ -237,7 +237,7 @@ flowchart LR
   G -->|yes| CC[Credit for closing the round] --> RC[Save a decision record] --> FIRE[Start the overall scoring] --> E2([C_10 tally updated])
 ```
 
-### C_11 Justice — Audits / Calibration
+### C_11 Justice — Audits
 
 ```mermaid
 flowchart LR
