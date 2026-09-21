@@ -1,0 +1,437 @@
+{
+  "sections": ["Core workflows", "Specified dimensions", "Proposed interpretation"],
+  "overview": {
+    "title": "How contribution works here",
+    "intro": "Every contribution is scored across 22 dimensions. Work only counts when it produces a verified result — showing up, talking, or pausing never earns anything. Each score is adjusted by how well the work matched the intent, what it actually achieved, how strongly it was verified, and the DAO's latest tuning. Scores can't be transferred between people, and the overall score gates access and quorum but never makes votes heavier.",
+    "antigaming": "The system watches for its own failure modes: fake identities (C_0), trying to be paid for attendance or talk instead of results (every diagram), staged disputes (C_3, C_6), fake endings (C_13), reviewers getting captured (C_18 rotates them out), people exploiting system settings (C_15 exposes them and C_11 audits), and work being systematically missed (triggers back-pay, retuning, or rule retirement).",
+    "dependencies": "Who feeds whom: C_2 records support every dimension; C_18 verifies pending claims everywhere; C_1's accepted work feeds C_3 nurturing; C_5's proven skills also feed C_3; C_9 and C_12 findings reach C_20 at round end; C_13's released resources feed C_14's health measure; C_17 orientation feeds C_0 entry; C_15 distortion reports reach C_11 and scoring; C_11 tuning updates reach scoring; the round spine C_10 → C_21 opens scoring; C_4's adopted rules update tuning; C_19 recognition must link to a proven record; C_16 crises must be verified by C_18."
+  },
+  "diagrams": [
+    {
+      "id": "master",
+      "file": "bpmn/00-master-lifecycle.bpmn",
+      "title": "Master Contribution Lifecycle",
+      "badge": "core",
+      "description": "How any action becomes a contribution. The member records what happened, the system scores it across all 22 dimensions, reviewers check it, harm pulls the score down, and at the end of each round the 22 tallies combine into the overall score.",
+      "whoActs": [
+        "Software spot-checks are audited at random",
+        "Two independent reviewers write their reasons for important work",
+        "A rotating panel handles appeals on a deadline"
+      ],
+      "glossary": [
+        { "plain": "Record what happened and prove it is real", "technical": "evidence record with action, context, provenance, outcome" },
+        { "plain": "Score the action across all 22 dimensions", "technical": "classify into sparse vector P(a) = [p_0 … p_21]" },
+        { "plain": "No evidence — no score", "technical": "null stays null — never becomes 0" },
+        { "plain": "Spot-check a random sample", "technical": "random audit sample" },
+        { "plain": "Appeal to the rotating panel", "technical": "appeal — deadline-bound, Tier 3 rotating panel" },
+        { "plain": "No change — stays open", "technical": "unverified — no delta; judgment stays pending and settles retroactively" },
+        { "plain": "Check for harm and reduce the score", "technical": "verified harm reduces or voids the outcome" },
+        { "plain": "Score each dimension and update 22 tallies", "technical": "delta C_i(a) = Match × Outcome × Verification × Calibration → 22 non-transferable balances" },
+        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" },
+        { "plain": "Close the round", "technical": "cycle boundary: C_10 Wheel → C_20 Judgement → C_21 World" },
+        { "plain": "Combine into the overall score", "technical": "$RCT aggregation (see 21-aggregation-rct.bpmn)" },
+        { "plain": "Tallies updated — full breakdown kept", "technical": "balances updated — the 22-vector remains the source record" }
+      ]
+    },
+    {
+      "id": "interaction-map",
+      "file": "bpmn/20-interaction-map.bpmn",
+      "title": "Dimension Interaction Map",
+      "badge": "core",
+      "description": "How the 22 dimensions feed each other. Records and reviews support everything, handoffs pass evidence between dimensions, and the round's closing steps lead to scoring.",
+      "whoActs": [],
+      "glossary": [
+        { "plain": "mentee's accepted work feeds Empress", "technical": "feeds C_3's multiplier input" },
+        { "plain": "proven skill feeds Empress", "technical": "demonstrated competence as C_3 nurture evidence" },
+        { "plain": "released resources feed Temperance", "technical": "released resources feed C_14's health metric" },
+        { "plain": "new member's first proven work", "technical": "orientee's first verified contribution" },
+        { "plain": "records settled", "technical": "provenance settled" },
+        { "plain": "adopted rules and tuning versions", "technical": "adopted rules / calibration versions" },
+        { "plain": "tuning updates and fairness audit", "technical": "calibration updates + fairness audit" },
+        { "plain": "evidence a decision steered", "technical": "decision-steering evidence (adoption bonus)" },
+        { "plain": "Overall score", "technical": "$RCT aggregation" }
+      ]
+    },
+    {
+      "id": "aggregation",
+      "file": "bpmn/21-aggregation-rct.bpmn",
+      "title": "Overall Score Aggregation",
+      "badge": "core",
+      "description": "How 22 tallies become one overall score at the end of each round. Money-driven parts never count toward voting. Members review and re-tune the dimension weights by hand before combining.",
+      "whoActs": [
+        "Members review and version the dimension weights",
+        "A fairness audit looks for missed care, mediation, and upkeep",
+        "An audit checks the weights for distortion",
+        "Members decide back-pay or re-tuning when measurement keeps failing"
+      ],
+      "glossary": [
+        { "plain": "Overall Score Aggregation", "technical": "$RCT aggregation" },
+        { "plain": "Round closed and records settled", "technical": "cycle boundary — C_10 fair close, C_20 settled" },
+        { "plain": "Fetch each dimension's tally", "technical": "fetch C_i balances" },
+        { "plain": "Even out the tallies — blanks stay blank", "technical": "normalize N_i(C_i) — null-preserving; null never becomes 0 and never decays" },
+        { "plain": "Fairness audit for care, mediation, upkeep", "technical": "C_11 Justice fairness audit: under-recognized care / mediation / maintenance" },
+        { "plain": "Audit weights for distortion", "technical": "C_15 Devil distortion audit of dimension weights" },
+        { "plain": "Members review and version the weights", "technical": "governance review of alpha_i weights + versioning" },
+        { "plain": "Save which tuning version was used", "technical": "calibration-version explanation record" },
+        { "plain": "Fix systematic under-measurement", "technical": "chronic under-measurement check → back-pay / calibration / rule retirement" },
+        { "plain": "Combine into the overall score", "technical": "RCT = aggregate(alpha_i × N_i(C_i))" },
+        { "plain": "May the score gate access?", "technical": "use gate: eligibility/quorum only" },
+        { "plain": "access and quorum only", "technical": "gate eligibility/quorum — human-attributed portions, salient dims, hard caps" },
+        { "plain": "Not allowed — scores never scale votes", "technical": "FORBIDDEN — RCT never scales votes" },
+        { "plain": "Keep the 22-score breakdown", "technical": "update the 22-vector as the source record" }
+      ]
+    },
+    {
+      "id": "c00",
+      "file": "bpmn/c00-fool.bpmn",
+      "title": "C_0 Fool — Entry",
+      "badge": "specified",
+      "description": "Rewards being first to step into genuinely new territory. The first step itself is recorded but pays nothing — it earns value only once a reviewer confirms it was real.",
+      "whoActs": [
+        "A reviewer checks the first step"
+      ],
+      "glossary": [
+        { "plain": "Is the entrant's identity genuine?", "technical": "Sybil check" },
+        { "plain": "A reviewer checks the first step", "technical": "validate the crossing" },
+        { "plain": "Recorded but pays nothing", "technical": "verified zero — recorded, no payment" },
+        { "plain": "Share progress with orientation", "technical": "feeds C_17's entry-progress input" },
+        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+      ]
+    },
+    {
+      "id": "c01",
+      "file": "bpmn/c01-magician.bpmn",
+      "title": "C_1 Magician — Building",
+      "badge": "specified",
+      "description": "Rewards building something real. Payment happens on acceptance and is sized by scope — submitting work alone earns nothing.",
+      "whoActs": [
+        "Two reviewers check the work",
+        "The credit is set by scope"
+      ],
+      "glossary": [
+        { "plain": "Record what was made and prove it is real", "technical": "evidence record with action, context, provenance, outcome" },
+        { "plain": "Two reviewers check the work", "technical": "Tier 2 review — two independent reviewers" },
+        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" },
+        { "plain": "Share accepted work with Empress", "technical": "feeds C_3's mentor multiplier input" },
+        { "plain": "Credit the builder's tally", "technical": "delivery bounty credited to the C_1 balance" }
+      ]
+    },
+    {
+      "id": "c02",
+      "file": "bpmn/c02-priestess.bpmn",
+      "title": "C_2 Priestess — Recording",
+      "badge": "specified",
+      "description": "Rewards records that last, are credited to an author, and can be found again. Publishing earns a base credit; every confirmed later use earns a bonus.",
+      "whoActs": [
+        "A reviewer confirms each real use of the record"
+      ],
+      "glossary": [
+        { "plain": "Credit for publishing", "technical": "base credit on publication" },
+        { "plain": "A reviewer confirms each real use", "technical": "verified retrieval — usage bonus per confirmed use" },
+        { "plain": "These records support all dimensions", "technical": "rails for all dimensions — evidence records" },
+        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+      ]
+    },
+    {
+      "id": "c03",
+      "file": "bpmn/c03-empress.bpmn",
+      "title": "C_3 Empress — Nurturing",
+      "badge": "specified",
+      "description": "Rewards helping someone else grow. The reward is a share of the mentee's accepted work, capped per mentee and paid once per round.",
+      "whoActs": [
+        "A reviewer confirms the mentee's work was accepted"
+      ],
+      "glossary": [
+        { "plain": "A mentee's work was accepted", "technical": "mentee's accepted output (from C_1)" },
+        { "plain": "Free of staged disputes?", "technical": "conflict-farming check" },
+        { "plain": "Credit a share of the mentee's work", "technical": "nurture multiplier — percentage of mentee's accepted output" },
+        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+      ]
+    },
+    {
+      "id": "c04",
+      "file": "bpmn/c04-emperor.bpmn",
+      "title": "C_4 Emperor — Rule Changes",
+      "badge": "proposed",
+      "description": "Rewards rule changes the DAO actually adopts — proposing alone earns no credit.",
+      "whoActs": [
+        "Members vote to adopt the change"
+      ],
+      "glossary": [
+        { "plain": "Members vote to adopt it", "technical": "ratification vote" },
+        { "plain": "Credit the adopted change", "technical": "governance bounty on the adopted change" },
+        { "plain": "New rule becomes a tuning version", "technical": "adopted rule → calibration version, fed to aggregation" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c05",
+      "file": "bpmn/c05-hierophant.bpmn",
+      "title": "C_5 Hierophant — Teaching",
+      "badge": "specified",
+      "description": "Rewards teaching proven by someone actually being able to do the thing — lectures and attendance alone get no credit.",
+      "whoActs": [
+        "A reviewer confirms someone can now do it"
+      ],
+      "glossary": [
+        { "plain": "A reviewer confirms someone can do it", "technical": "demonstrated competence in another member" },
+        { "plain": "Share as nurture evidence with Empress", "technical": "feeds C_3's nurture-evidence input" },
+        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+      ]
+    },
+    {
+      "id": "c06",
+      "file": "bpmn/c06-lovers.bpmn",
+      "title": "C_6 Lovers — Joint Builds",
+      "badge": "proposed",
+      "description": "Rewards genuine joint builds, with the shared credit split by proven share of the work.",
+      "whoActs": [
+        "A reviewer confirms it was a real joint build"
+      ],
+      "glossary": [
+        { "plain": "Declare who built what", "technical": "declare joint build with attribution shares" },
+        { "plain": "Free of staged disputes?", "technical": "conflict-farming check" },
+        { "plain": "Link the accepted work to Magician", "technical": "feeds C_1's joint artifact acceptance" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c07",
+      "file": "bpmn/c07-chariot.bpmn",
+      "title": "C_7 Chariot — Milestones",
+      "badge": "proposed",
+      "description": "Rewards completed milestones, reduced or voided if the work caused proven harm.",
+      "whoActs": [
+        "A reviewer confirms the milestone is done"
+      ],
+      "glossary": [
+        { "plain": "Credit the milestone", "technical": "milestone token" },
+        { "plain": "Reduce or void for harm", "technical": "net-of-harm adjustment" },
+        { "plain": "Share milestone health with Temperance", "technical": "feeds C_14's milestone-health context" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c08",
+      "file": "bpmn/c08-strength.bpmn",
+      "title": "C_8 Strength — Resolving",
+      "badge": "specified",
+      "description": "Rewards resolving a live dispute. The resolver must be neutral, the credit is sized by severity, and both sides must accept the resolution in writing.",
+      "whoActs": [
+        "A neutral resolver is picked and checked",
+        "Both parties accept the outcome in writing"
+      ],
+      "glossary": [
+        { "plain": "Credit sized by severity", "technical": "resolution token sized by severity" },
+        { "plain": "Send the resolution for verification", "technical": "feeds C_18's verification queue" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c09",
+      "file": "bpmn/c09-hermit.bpmn",
+      "title": "C_9 Hermit — Discovering",
+      "badge": "specified",
+      "description": "Rewards deep research by proven milestones — page count earns nothing. A finding that steers a real vote earns an adoption bonus.",
+      "whoActs": [
+        "A reviewer checks milestone evidence",
+        "A reviewer confirms the finding steered a decision"
+      ],
+      "glossary": [
+        { "plain": "Pay at proven milestones", "technical": "deep-work bounty at milestones" },
+        { "plain": "Share adoption evidence with Judgement", "technical": "feeds C_20's adoption evidence" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c10",
+      "file": "bpmn/c10-wheel.bpmn",
+      "title": "C_10 Wheel — Fair Round Completion",
+      "badge": "proposed",
+      "description": "Rewards closing a round fairly. If the audit finds the round unfair, the system records the debt and retries next round.",
+      "whoActs": [
+        "A person audits the round's fairness"
+      ],
+      "glossary": [
+        { "plain": "Record the round's debt", "technical": "cycle debt — measurement failure is the system's debt" },
+        { "plain": "Start the overall scoring", "technical": "fires the cycle-boundary event to aggregation" },
+        { "plain": "Save a decision record", "technical": "explanation record — action ID, dimensions, intensities, calibration version" }
+      ]
+    },
+    {
+      "id": "c11",
+      "file": "bpmn/c11-justice.bpmn",
+      "title": "C_11 Justice — Audits",
+      "badge": "proposed",
+      "description": "Rewards running fairness audits, which stay human-only during the early phase. Missed care, mediation, or upkeep triggers back-pay, re-tuning, or rule retirement.",
+      "whoActs": [
+        "A person runs the fairness audit"
+      ],
+      "glossary": [
+        { "plain": "Run the fairness audit by hand", "technical": "human-only bootstrap" },
+        { "plain": "Were quiet kinds of work missed?", "technical": "under-recognition of care / mediation / maintenance" },
+        { "plain": "Credit per finished audit", "technical": "audit token per completed audit" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c12",
+      "file": "bpmn/c12-hanged-man.bpmn",
+      "title": "C_12 Hanged Man — Re-seeing",
+      "badge": "specified",
+      "description": "Rewards reframing a problem in a way that changes a real decision — sitting in a pause earns nothing.",
+      "whoActs": [
+        "A reviewer checks that the decision really changed"
+      ],
+      "glossary": [
+        { "plain": "A reviewer checks the decision changed", "technical": "decision-delta evidence" },
+        { "plain": "Record the change for Judgement", "technical": "feeds C_20's decision-change record" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c13",
+      "file": "bpmn/c13-death.bpmn",
+      "title": "C_13 Death — Ending",
+      "badge": "specified",
+      "description": "Rewards clean endings: learning preserved and resources released. Endings staged for appearance earn no credit.",
+      "whoActs": [
+        "A person checks the learning was preserved",
+        "A person confirms resources were released"
+      ],
+      "glossary": [
+        { "plain": "Rejected — it was theater", "technical": "closure theater" },
+        { "plain": "Credit the one who closed it", "technical": "closure token" },
+        { "plain": "Released resources feed Temperance", "technical": "feeds C_14's resource-release input" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c14",
+      "file": "bpmn/c14-temperance.bpmn",
+      "title": "C_14 Temperance — Health in Range",
+      "badge": "proposed",
+      "description": "Rewards keeping a health measure in a healthy range, with stall detection to catch quiet stops.",
+      "whoActs": [
+        "A person fixes the stall"
+      ],
+      "glossary": [
+        { "plain": "Each round checks the health measure", "technical": "health metric monitoring cycle" },
+        { "plain": "Credit for holding it in range", "technical": "holding credit per in-range interval" },
+        { "plain": "Uses resources released by Death", "technical": "consumes resources released by C_13" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c15",
+      "file": "bpmn/c15-devil.bpmn",
+      "title": "C_15 Devil — Exposing",
+      "badge": "specified",
+      "description": "Rewards exposing a skewed incentive. It needs a second person to confirm, earns one of the largest credits, and false claims are penalized.",
+      "whoActs": [
+        "A second person confirms the claim",
+        "A person audits the dimension weights"
+      ],
+      "glossary": [
+        { "plain": "A second person confirms it", "technical": "corroboration by at least one independent member" },
+        { "plain": "A person audits the dimension weights", "technical": "Devil operator audit of weights (human-only bootstrap)" },
+        { "plain": "Integrity credit — one of the largest", "technical": "integrity bounty — among the largest payouts" },
+        { "plain": "Report the distortion to Justice", "technical": "feeds C_11 and aggregation's distortion finding" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c16",
+      "file": "bpmn/c16-tower.bpmn",
+      "title": "C_16 Tower — Crisis Response",
+      "badge": "specified",
+      "description": "Rewards stabilizing a verified crisis. Spotting one earns nothing, and causing it earns nothing.",
+      "whoActs": [
+        "Moon verifies the crisis is real",
+        "The credit is sized by severity"
+      ],
+      "glossary": [
+        { "plain": "Moon verifies the crisis", "technical": "verified via C_18 Moon" },
+        { "plain": "Credit for stabilizing", "technical": "crisis token for stabilization" },
+        { "plain": "Share the record with Death", "technical": "feeds C_13's stabilization record" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c17",
+      "file": "bpmn/c17-star.bpmn",
+      "title": "C_17 Star — Orientation",
+      "badge": "proposed",
+      "description": "Rewards a guide when their new member completes a first proven contribution — running sessions alone gets no credit.",
+      "whoActs": [
+        "A person runs the orientation"
+      ],
+      "glossary": [
+        { "plain": "Did the new member finish first proven work?", "technical": "orientee completed first verified contribution" },
+        { "plain": "Share entry progress with the Fool", "technical": "feeds C_0's entry-progress input" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c18",
+      "file": "bpmn/c18-moon.bpmn",
+      "title": "C_18 Moon — Verifying",
+      "badge": "specified",
+      "description": "Rewards finishing verification checks in either direction. Accuracy is tracked against chance, and suspicious reviewer patterns rotate reviewers out.",
+      "whoActs": [
+        "A reviewer checks each pending claim",
+        "Reviewers get swapped if capture is suspected"
+      ],
+      "glossary": [
+        { "plain": "Credit per finished check", "technical": "verification token per completed check, either direction" },
+        { "plain": "Do reviewers look captured?", "technical": "reviewer capture suspected" },
+        { "plain": "Swap in new reviewers", "technical": "rotate the reviewer pool (Tier 3)" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c19",
+      "file": "bpmn/c19-sun.bpmn",
+      "title": "C_19 Sun — Public Recognition",
+      "badge": "proposed",
+      "description": "Rewards public recognition only when it links to a proven record — popularity alone earns nothing.",
+      "whoActs": [
+        "A reviewer checks the record"
+      ],
+      "glossary": [
+        { "plain": "Link the recognition to the record", "technical": "feeds C_2's recognized-record link" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c20",
+      "file": "bpmn/c20-judgement.bpmn",
+      "title": "C_20 Judgement — Reckoning",
+      "badge": "proposed",
+      "description": "Rewards settling the round's records — human-only during the early phase. Unresolved judgments stay open and settle when evidence arrives.",
+      "whoActs": [
+        "People settle the records"
+      ],
+      "glossary": [
+        { "plain": "People settle the records", "technical": "provenance settlement (human-only bootstrap)" },
+        { "plain": "Leave open until evidence arrives", "technical": "settles retroactively when evidence arrives" },
+        { "plain": "Mark the records settled", "technical": "fires aggregation precondition — provenance settled" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    },
+    {
+      "id": "c21",
+      "file": "bpmn/c21-world.bpmn",
+      "title": "C_21 World — Completion",
+      "badge": "proposed",
+      "description": "Rewards completing the whole round once every part is settled. Incomplete rounds wait.",
+      "whoActs": [
+        "A person confirms the round completed"
+      ],
+      "glossary": [
+        { "plain": "Close the round so scores can be published", "technical": "closes the cycle spine, enables $RCT publication" },
+        { "plain": "Save a decision record", "technical": "explanation record" }
+      ]
+    }
+  ]
+}
