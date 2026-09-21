@@ -2,6 +2,7 @@ import { EncryptedSnapshot } from '@shared/types';
 
 const DB_NAME = 'ResonantDAO';
 const DB_VERSION = 2;
+const webCrypto = globalThis.crypto;
 const LOGIN_STORE = 'login';
 const WALLET_STORE = 'wallet';
 
@@ -63,9 +64,12 @@ export async function aesGcmEncrypt(
   plaintext: Uint8Array,
   username: string
 ): Promise<EncryptedSnapshot> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['encrypt']);
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as BufferSource }, cryptoKey, plaintext as BufferSource));
+  if (!webCrypto || !webCrypto.getRandomValues || !webCrypto.subtle) {
+    throw new Error('Web Crypto API is not available. Wallet encryption requires a secure browser context.');
+  }
+  const iv = webCrypto.getRandomValues(new Uint8Array(12));
+  const cryptoKey = await webCrypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['encrypt']);
+  const ciphertext = new Uint8Array(await webCrypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as BufferSource }, cryptoKey, plaintext as BufferSource));
   return {
     username,
     iv: bytesToBase64(iv),
@@ -80,8 +84,11 @@ export async function aesGcmDecrypt(
 ): Promise<Uint8Array> {
   const iv = base64ToBytes(snapshot.iv);
   const ciphertext = base64ToBytes(snapshot.ciphertext);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['decrypt']);
-  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv as BufferSource }, cryptoKey, ciphertext as BufferSource));
+  if (!webCrypto || !webCrypto.subtle) {
+    throw new Error('Web Crypto API is not available. Wallet decryption requires a secure browser context.');
+  }
+  const cryptoKey = await webCrypto.subtle.importKey('raw', key as BufferSource, 'AES-GCM', false, ['decrypt']);
+  return new Uint8Array(await webCrypto.subtle.decrypt({ name: 'AES-GCM', iv: iv as BufferSource }, cryptoKey, ciphertext as BufferSource));
 }
 
 export async function saveLoginBundle(bundle: LoginBundle): Promise<void> {

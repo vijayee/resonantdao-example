@@ -1,16 +1,34 @@
-import * as eauth from '/wasm/eauth/index.js';
-import * as crabs from '/wasm/crabs/index.js';
+/**
+ * Browser WASM entry point.
+ *
+ * The raw Emscripten scripts /wasm/eauth/eauth.js and /wasm/crabs/crabs.js are
+ * loaded via <script> tags in index.html before the app bundle. They expose
+ * window.createEAuthModule and window.createCRABSModule.
+ *
+ * The original CommonJS wrappers in node_modules cannot be imported reliably
+ * from Vite's production build (the namespace object ends up empty), so we use
+ * browser-specific ESM copies in this source tree.
+ */
 
-const { EAuth, getModule: getEAuthModule } = eauth;
-const { Node, KeyPair, Operation, getModule: getCRABSModule } = crabs;
+export { EAuth, getModule as getEAuthModule } from './eauth-wasm-wrapper';
+export { Node, KeyPair, Operation, getModule as getCRABSModule } from './crabs-wasm-wrapper';
 
-export async function loadEAuth(): Promise<eauth.EAuth> {
+import { getModule as getEAuthModule } from './eauth-wasm-wrapper';
+import { EAuth as EAuthClass } from './eauth-wasm-wrapper';
+
+export async function loadEAuth(): Promise<EAuthClass> {
   await getEAuthModule();
-  return EAuth.create();
+  return EAuthClass.create();
 }
 
-export async function loadCRABS(): Promise<typeof import('/wasm/crabs/index.js')> {
-  return getCRABSModule();
+export async function loadCRABS(): Promise<any> {
+  // The CRABS wrapper exports Node/KeyPair/Operation classes directly.
+  // Returning an object with those properties keeps the API shape consistent.
+  const mod = await import('./crabs-wasm-wrapper');
+  return {
+    Node: mod.Node,
+    KeyPair: mod.KeyPair,
+    Operation: mod.Operation,
+    getModule: mod.getModule,
+  };
 }
-
-export { Node, KeyPair, Operation };
