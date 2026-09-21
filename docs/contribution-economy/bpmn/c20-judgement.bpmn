@@ -9,11 +9,11 @@
       <bpmn:lane id="c20_lane_member" name="Member">
         <bpmn:flowNodeRef>c20_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c20_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c20_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c20_task_settle</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c20_gw_unres</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c20_lane_system" name="System / Automation">
+      <bpmn:lane id="c20_lane_system" name="System">
         <bpmn:flowNodeRef>c20_task_pending</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c20_task_credit</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c20_task_record</bpmn:flowNodeRef>
@@ -21,18 +21,18 @@
         <bpmn:flowNodeRef>c20_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c20_start" name="Cycle reckoning"/>
-    <bpmn:userTask id="c20_task_settle" name="Provenance settlement (human-only bootstrap)"/>
-    <bpmn:exclusiveGateway id="c20_gw_unres" name="Unresolved judgments?"/>
-    <bpmn:serviceTask id="c20_task_pending" name="Keep pending (settles retroactively when evidence arrives)"/>
-    <bpmn:serviceTask id="c20_task_credit" name="Reckoning credit"/>
-    <bpmn:serviceTask id="c20_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c20_task_agg" name="Fire aggregation precondition (provenance settled)"/>
-    <bpmn:endEvent id="c20_end_balance" name="C_20 balance updated"/>
+    <bpmn:startEvent id="c20_start" name="End-of-round reckoning"/>
+    <bpmn:userTask id="c20_task_settle" name="People settle the records"/>
+    <bpmn:exclusiveGateway id="c20_gw_unres" name="Any unresolved calls?"/>
+    <bpmn:serviceTask id="c20_task_pending" name="Leave open until evidence arrives"/>
+    <bpmn:serviceTask id="c20_task_credit" name="Credit the settling"/>
+    <bpmn:serviceTask id="c20_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c20_task_agg" name="Mark the records settled"/>
+    <bpmn:endEvent id="c20_end_balance" name="C_20 tally updated"/>
     <bpmn:sequenceFlow id="c20_f1" sourceRef="c20_start" targetRef="c20_task_settle"/>
     <bpmn:sequenceFlow id="c20_f2" sourceRef="c20_task_settle" targetRef="c20_gw_unres"/>
     <bpmn:sequenceFlow id="c20_f3" name="yes" sourceRef="c20_gw_unres" targetRef="c20_task_pending"/>
-    <bpmn:sequenceFlow id="c20_f4" name="next cycle" sourceRef="c20_task_pending" targetRef="c20_gw_unres"/>
+    <bpmn:sequenceFlow id="c20_f4" name="next round" sourceRef="c20_task_pending" targetRef="c20_gw_unres"/>
     <bpmn:sequenceFlow id="c20_f5" name="no" sourceRef="c20_gw_unres" targetRef="c20_task_credit"/>
     <bpmn:sequenceFlow id="c20_f6" sourceRef="c20_task_credit" targetRef="c20_task_record"/>
     <bpmn:sequenceFlow id="c20_f7" sourceRef="c20_task_record" targetRef="c20_task_agg"/>

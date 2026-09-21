@@ -9,11 +9,11 @@
       <bpmn:lane id="c18_lane_member" name="Member">
         <bpmn:flowNodeRef>c18_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c18_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c18_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c18_task_check</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c18_task_rotate</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c18_lane_system" name="System / Automation">
+      <bpmn:lane id="c18_lane_system" name="System">
         <bpmn:flowNodeRef>c18_gw_queue</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c18_end_drained</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c18_task_token</bpmn:flowNodeRef>
@@ -24,17 +24,17 @@
         <bpmn:flowNodeRef>c18_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c18_start" name="Pending claim enqueued"/>
+    <bpmn:startEvent id="c18_start" name="A claim needs checking"/>
     <bpmn:exclusiveGateway id="c18_gw_queue" name="More pending claims?"/>
     <bpmn:endEvent id="c18_end_drained" name="Queue drained"/>
     <bpmn:userTask id="c18_task_check" name="Complete verification check"/>
-    <bpmn:serviceTask id="c18_task_token" name="Verification token per completed check (any direction)"/>
-    <bpmn:serviceTask id="c18_task_accuracy" name="Track accuracy vs chance"/>
-    <bpmn:exclusiveGateway id="c18_gw_capture" name="Reviewer capture suspected?"/>
-    <bpmn:userTask id="c18_task_rotate" name="Rotate reviewer pool (Tier 3)"/>
-    <bpmn:serviceTask id="c18_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c18_task_feed" name="Verdicts feed all dimensions' pending claims"/>
-    <bpmn:endEvent id="c18_end_balance" name="C_18 balance updated"/>
+    <bpmn:serviceTask id="c18_task_token" name="Credit per finished check"/>
+    <bpmn:serviceTask id="c18_task_accuracy" name="Track accuracy above chance"/>
+    <bpmn:exclusiveGateway id="c18_gw_capture" name="Do reviewers look captured?"/>
+    <bpmn:userTask id="c18_task_rotate" name="Swap in new reviewers"/>
+    <bpmn:serviceTask id="c18_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c18_task_feed" name="Verdicts feed all pending claims"/>
+    <bpmn:endEvent id="c18_end_balance" name="C_18 tally updated"/>
     <bpmn:sequenceFlow id="c18_f1" sourceRef="c18_start" targetRef="c18_gw_queue"/>
     <bpmn:sequenceFlow id="c18_f2" name="no" sourceRef="c18_gw_queue" targetRef="c18_end_drained"/>
     <bpmn:sequenceFlow id="c18_f3" name="yes" sourceRef="c18_gw_queue" targetRef="c18_task_check"/>

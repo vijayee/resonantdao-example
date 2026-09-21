@@ -9,10 +9,10 @@
       <bpmn:lane id="c14_lane_member" name="Member">
         <bpmn:flowNodeRef>c14_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c14_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c14_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c14_task_stall</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c14_lane_system" name="System / Automation">
+      <bpmn:lane id="c14_lane_system" name="System">
         <bpmn:flowNodeRef>c14_gw_range</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c14_task_hold</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c14_task_record</bpmn:flowNodeRef>
@@ -22,15 +22,15 @@
         <bpmn:flowNodeRef>c14_end_none</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c14_start" name="Health metric monitoring cycle"/>
-    <bpmn:exclusiveGateway id="c14_gw_range" name="Metric in range?"/>
-    <bpmn:serviceTask id="c14_task_hold" name="Holding credit per in-range interval"/>
-    <bpmn:serviceTask id="c14_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c14_task_consume" name="Consumes resources released by C_13 Death"/>
-    <bpmn:endEvent id="c14_end_balance" name="C_14 balance updated"/>
-    <bpmn:exclusiveGateway id="c14_gw_stall" name="Stall detected?"/>
-    <bpmn:userTask id="c14_task_stall" name="Stall remediation (human)"/>
-    <bpmn:endEvent id="c14_end_none" name="No credit (out of range)"/>
+    <bpmn:startEvent id="c14_start" name="Each round checks the health measure"/>
+    <bpmn:exclusiveGateway id="c14_gw_range" name="Is the measure in range?"/>
+    <bpmn:serviceTask id="c14_task_hold" name="Credit for holding it in range"/>
+    <bpmn:serviceTask id="c14_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c14_task_consume" name="Uses resources released by Death"/>
+    <bpmn:endEvent id="c14_end_balance" name="C_14 tally updated"/>
+    <bpmn:exclusiveGateway id="c14_gw_stall" name="Has progress stalled?"/>
+    <bpmn:userTask id="c14_task_stall" name="A person fixes the stall"/>
+    <bpmn:endEvent id="c14_end_none" name="No credit — out of range"/>
     <bpmn:sequenceFlow id="c14_f1" sourceRef="c14_start" targetRef="c14_gw_range"/>
     <bpmn:sequenceFlow id="c14_f2" name="yes" sourceRef="c14_gw_range" targetRef="c14_task_hold"/>
     <bpmn:sequenceFlow id="c14_f3" sourceRef="c14_task_hold" targetRef="c14_task_record"/>

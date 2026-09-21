@@ -10,27 +10,27 @@
         <bpmn:flowNodeRef>c04_start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c04_task_draft</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c04_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c04_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c04_task_vote</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c04_gw_adopted</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c04_end_none</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c04_lane_system" name="System / Automation">
+      <bpmn:lane id="c04_lane_system" name="System">
         <bpmn:flowNodeRef>c04_task_bounty</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c04_task_record</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c04_task_feed</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c04_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c04_start" name="Rule change proposed"/>
-    <bpmn:userTask id="c04_task_draft" name="Draft rule change"/>
-    <bpmn:userTask id="c04_task_vote" name="Ratification vote"/>
+    <bpmn:startEvent id="c04_start" name="Someone proposes a rule change"/>
+    <bpmn:userTask id="c04_task_draft" name="Draft the change"/>
+    <bpmn:userTask id="c04_task_vote" name="Members vote to adopt it"/>
     <bpmn:exclusiveGateway id="c04_gw_adopted" name="Adopted?"/>
-    <bpmn:endEvent id="c04_end_none" name="No bounty (proposal alone pays nothing)"/>
-    <bpmn:serviceTask id="c04_task_bounty" name="Governance bounty on adopted change"/>
-    <bpmn:serviceTask id="c04_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c04_task_feed" name="Feed aggregation: adopted rule → calibration version"/>
-    <bpmn:endEvent id="c04_end_balance" name="C_4 balance updated"/>
+    <bpmn:endEvent id="c04_end_none" name="No reward — a proposal alone pays nothing"/>
+    <bpmn:serviceTask id="c04_task_bounty" name="Reward the adopted change"/>
+    <bpmn:serviceTask id="c04_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c04_task_feed" name="New rule becomes a tuning version"/>
+    <bpmn:endEvent id="c04_end_balance" name="C_4 tally updated"/>
     <bpmn:sequenceFlow id="c04_f1" sourceRef="c04_start" targetRef="c04_task_draft"/>
     <bpmn:sequenceFlow id="c04_f2" sourceRef="c04_task_draft" targetRef="c04_task_vote"/>
     <bpmn:sequenceFlow id="c04_f3" sourceRef="c04_task_vote" targetRef="c04_gw_adopted"/>

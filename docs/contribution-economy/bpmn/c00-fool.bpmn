@@ -11,11 +11,11 @@
         <bpmn:flowNodeRef>c00_task_evidence</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c00_end_zero</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c00_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c00_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c00_task_review</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c00_gw_crossing</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c00_lane_system" name="System / Automation">
+      <bpmn:lane id="c00_lane_system" name="System">
         <bpmn:flowNodeRef>c00_gw_sybil</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c00_end_sybil</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c00_task_record</bpmn:flowNodeRef>
@@ -23,16 +23,16 @@
         <bpmn:flowNodeRef>c00_end_value</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c00_start" name="Entry into unworked territory"/>
-    <bpmn:userTask id="c00_task_evidence" name="Submit entry evidence"/>
-    <bpmn:exclusiveGateway id="c00_gw_sybil" name="Sybil check passed?"/>
-    <bpmn:endEvent id="c00_end_sybil" name="No entry credit (Sybil)"/>
-    <bpmn:userTask id="c00_task_review" name="Validate crossing (reviewer)"/>
-    <bpmn:exclusiveGateway id="c00_gw_crossing" name="Crossing validated?"/>
-    <bpmn:endEvent id="c00_end_zero" name="Entry event = verified zero (recorded, no payment)"/>
-    <bpmn:serviceTask id="c00_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
-    <bpmn:serviceTask id="c00_task_feed_c17" name="Feed C_17 Star: orientation progress"/>
-    <bpmn:endEvent id="c00_end_value" name="Validated crossing earns value"/>
+    <bpmn:startEvent id="c00_start" name="Someone tries something new"/>
+    <bpmn:userTask id="c00_task_evidence" name="Share what the first step was"/>
+    <bpmn:exclusiveGateway id="c00_gw_sybil" name="Did it pass the identity check?"/>
+    <bpmn:endEvent id="c00_end_sybil" name="No credit — fake identity"/>
+    <bpmn:userTask id="c00_task_review" name="A reviewer checks the first step"/>
+    <bpmn:exclusiveGateway id="c00_gw_crossing" name="Did the first step hold up?"/>
+    <bpmn:endEvent id="c00_end_zero" name="Recorded but pays nothing"/>
+    <bpmn:serviceTask id="c00_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c00_task_feed_c17" name="Share progress with orientation"/>
+    <bpmn:endEvent id="c00_end_value" name="It was real — it earns value"/>
     <bpmn:sequenceFlow id="c00_f1" sourceRef="c00_start" targetRef="c00_task_evidence"/>
     <bpmn:sequenceFlow id="c00_f2" sourceRef="c00_task_evidence" targetRef="c00_gw_sybil"/>
     <bpmn:sequenceFlow id="c00_f3" name="no" sourceRef="c00_gw_sybil" targetRef="c00_end_sybil"/>

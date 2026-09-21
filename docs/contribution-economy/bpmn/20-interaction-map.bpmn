@@ -6,14 +6,14 @@
                   id="Definitions_im" targetNamespace="http://resonantdao.com/bpmn">
   <bpmn:process id="Process_im" name="Dimension Interaction Map" isExecutable="false">
     <bpmn:laneSet id="LaneSet_im">
-      <bpmn:lane id="im_lane_rails" name="Rails (serve everyone)">
+      <bpmn:lane id="im_lane_rails" name="Support rails">
         <bpmn:flowNodeRef>im_task_c02</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c18</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c04</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c11</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c15</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="im_lane_flows" name="Flow dependencies">
+      <bpmn:lane id="im_lane_flows" name="Handoffs">
         <bpmn:flowNodeRef>im_task_c17</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c00</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c01</bpmn:flowNodeRef>
@@ -27,7 +27,7 @@
         <bpmn:flowNodeRef>im_task_c08</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c07</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="im_lane_cycle" name="Cycle spine">
+      <bpmn:lane id="im_lane_cycle" name="Round backbone">
         <bpmn:flowNodeRef>im_task_c10</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c20</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>im_task_c21</bpmn:flowNodeRef>
@@ -65,23 +65,23 @@
     <bpmn:sequenceFlow id="im_f4" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c09"/>
     <bpmn:sequenceFlow id="im_f5" name="evidence records" sourceRef="im_task_c02" targetRef="im_task_c19"/>
     <bpmn:sequenceFlow id="im_f6" name="crisis verification verdict" sourceRef="im_task_c18" targetRef="im_task_c16"/>
-    <bpmn:sequenceFlow id="im_f7" name="verification of resolution acceptance" sourceRef="im_task_c18" targetRef="im_task_c08"/>
-    <bpmn:sequenceFlow id="im_f8" name="verify resource release" sourceRef="im_task_c18" targetRef="im_task_c13"/>
-    <bpmn:sequenceFlow id="im_f9" name="mentee's accepted artifact = multiplier input" sourceRef="im_task_c01" targetRef="im_task_c03"/>
-    <bpmn:sequenceFlow id="im_f10" name="demonstrated competence = nurture evidence" sourceRef="im_task_c05" targetRef="im_task_c03"/>
-    <bpmn:sequenceFlow id="im_f11" name="decision-steering evidence (adoption bonus)" sourceRef="im_task_c09" targetRef="im_task_c20"/>
-    <bpmn:sequenceFlow id="im_f12" name="decision-changed evidence" sourceRef="im_task_c12" targetRef="im_task_c20"/>
-    <bpmn:sequenceFlow id="im_f13" name="released resources feed health metric" sourceRef="im_task_c13" targetRef="im_task_c14"/>
+    <bpmn:sequenceFlow id="im_f7" name="check both sides accepted" sourceRef="im_task_c18" targetRef="im_task_c08"/>
+    <bpmn:sequenceFlow id="im_f8" name="check resources released" sourceRef="im_task_c18" targetRef="im_task_c13"/>
+    <bpmn:sequenceFlow id="im_f9" name="student's accepted work feeds Empress" sourceRef="im_task_c01" targetRef="im_task_c03"/>
+    <bpmn:sequenceFlow id="im_f10" name="proven skill feeds Empress" sourceRef="im_task_c05" targetRef="im_task_c03"/>
+    <bpmn:sequenceFlow id="im_f11" name="evidence a decision steered" sourceRef="im_task_c09" targetRef="im_task_c20"/>
+    <bpmn:sequenceFlow id="im_f12" name="evidence a decision changed" sourceRef="im_task_c12" targetRef="im_task_c20"/>
+    <bpmn:sequenceFlow id="im_f13" name="released resources feed Temperance" sourceRef="im_task_c13" targetRef="im_task_c14"/>
     <bpmn:sequenceFlow id="im_f14" name="orientation feeds entry" sourceRef="im_task_c17" targetRef="im_task_c00"/>
-    <bpmn:sequenceFlow id="im_f15" name="orientee's first verified contribution" sourceRef="im_task_c17" targetRef="im_task_c01"/>
+    <bpmn:sequenceFlow id="im_f15" name="new member's first proven work" sourceRef="im_task_c17" targetRef="im_task_c01"/>
     <bpmn:sequenceFlow id="im_f16" name="weight distortion findings" sourceRef="im_task_c15" targetRef="im_task_c11"/>
-    <bpmn:sequenceFlow id="im_f17" name="distortion audit precondition" sourceRef="im_task_c15" targetRef="im_task_rct"/>
-    <bpmn:sequenceFlow id="im_f18" name="calibration updates + fairness audit" sourceRef="im_task_c11" targetRef="im_task_rct"/>
-    <bpmn:sequenceFlow id="im_f19" name="fair cycle close" sourceRef="im_task_c10" targetRef="im_task_c20"/>
-    <bpmn:sequenceFlow id="im_f20" name="provenance settled" sourceRef="im_task_c20" targetRef="im_task_c21"/>
-    <bpmn:sequenceFlow id="im_f21" name="whole-cycle completion" sourceRef="im_task_c21" targetRef="im_task_rct"/>
-    <bpmn:sequenceFlow id="im_f22" name="adopted rules / calibration versions" sourceRef="im_task_c04" targetRef="im_task_rct"/>
-    <bpmn:sequenceFlow id="im_f23" name="recognition must tie to verified record" sourceRef="im_task_c19" targetRef="im_task_c02"/>
+    <bpmn:sequenceFlow id="im_f17" name="distortion audit required" sourceRef="im_task_c15" targetRef="im_task_rct"/>
+    <bpmn:sequenceFlow id="im_f18" name="tuning updates and fairness audit" sourceRef="im_task_c11" targetRef="im_task_rct"/>
+    <bpmn:sequenceFlow id="im_f19" name="fair round close" sourceRef="im_task_c10" targetRef="im_task_c20"/>
+    <bpmn:sequenceFlow id="im_f20" name="records settled" sourceRef="im_task_c20" targetRef="im_task_c21"/>
+    <bpmn:sequenceFlow id="im_f21" name="whole round done" sourceRef="im_task_c21" targetRef="im_task_rct"/>
+    <bpmn:sequenceFlow id="im_f22" name="adopted rules and tuning versions" sourceRef="im_task_c04" targetRef="im_task_rct"/>
+    <bpmn:sequenceFlow id="im_f23" name="recognition tied to a proven record" sourceRef="im_task_c19" targetRef="im_task_c02"/>
     <bpmn:sequenceFlow id="im_f24" name="crisis verification request" sourceRef="im_task_c16" targetRef="im_task_c18"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="Diagram_im">

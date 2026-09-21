@@ -9,7 +9,7 @@
       <bpmn:lane id="c08_lane_member" name="Member">
         <bpmn:flowNodeRef>c08_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c08_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c08_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c08_task_assign</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c08_gw_split2</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c08_task_acc_a</bpmn:flowNodeRef>
@@ -18,7 +18,7 @@
         <bpmn:flowNodeRef>c08_gw_accepts</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c08_end_nores</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c08_lane_system" name="System / Automation">
+      <bpmn:lane id="c08_lane_system" name="System">
         <bpmn:flowNodeRef>c08_gw_split1</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c08_task_verify</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c08_gw_join1</bpmn:flowNodeRef>
@@ -30,23 +30,23 @@
         <bpmn:flowNodeRef>c08_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c08_start" name="Live dispute opened"/>
+    <bpmn:startEvent id="c08_start" name="A dispute opens"/>
     <bpmn:parallelGateway id="c08_gw_split1"/>
-    <bpmn:userTask id="c08_task_assign" name="Assign non-party resolver"/>
-    <bpmn:serviceTask id="c08_task_verify" name="Verify resolver is not a party"/>
+    <bpmn:userTask id="c08_task_assign" name="Pick a resolver who is not involved"/>
+    <bpmn:serviceTask id="c08_task_verify" name="Confirm the resolver is neutral"/>
     <bpmn:parallelGateway id="c08_gw_join1"/>
-    <bpmn:exclusiveGateway id="c08_gw_qual" name="Resolver qualified?"/>
+    <bpmn:exclusiveGateway id="c08_gw_qual" name="Is the resolver qualified?"/>
     <bpmn:endEvent id="c08_end_disqual" name="Resolver disqualified"/>
-    <bpmn:serviceTask id="c08_task_token" name="Resolution token sized by severity"/>
+    <bpmn:serviceTask id="c08_task_token" name="Reward sized by severity"/>
     <bpmn:parallelGateway id="c08_gw_split2"/>
     <bpmn:userTask id="c08_task_acc_a" name="Party A written acceptance"/>
     <bpmn:userTask id="c08_task_acc_b" name="Party B written acceptance"/>
     <bpmn:parallelGateway id="c08_gw_join2"/>
-    <bpmn:exclusiveGateway id="c08_gw_accepts" name="Both acceptances received?"/>
-    <bpmn:endEvent id="c08_end_nores" name="No resolution token (both acceptances required)"/>
-    <bpmn:serviceTask id="c08_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c08_task_feed_c18" name="Feed C_18 Moon: resolution record for verification"/>
-    <bpmn:endEvent id="c08_end_balance" name="C_8 balance updated"/>
+    <bpmn:exclusiveGateway id="c08_gw_accepts" name="Did both sides accept in writing?"/>
+    <bpmn:endEvent id="c08_end_nores" name="No reward — both sides must accept"/>
+    <bpmn:serviceTask id="c08_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c08_task_feed_c18" name="Send the resolution for verification"/>
+    <bpmn:endEvent id="c08_end_balance" name="C_8 tally updated"/>
     <bpmn:sequenceFlow id="c08_f1" sourceRef="c08_start" targetRef="c08_gw_split1"/>
     <bpmn:sequenceFlow id="c08_f2" sourceRef="c08_gw_split1" targetRef="c08_task_assign"/>
     <bpmn:sequenceFlow id="c08_f3" sourceRef="c08_gw_split1" targetRef="c08_task_verify"/>

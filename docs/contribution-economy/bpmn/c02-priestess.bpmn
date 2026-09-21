@@ -9,13 +9,13 @@
       <bpmn:lane id="c02_lane_member" name="Member">
         <bpmn:flowNodeRef>c02_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c02_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c02_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c02_task_verify</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c02_gw_more</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c02_gw_attrib</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c02_end_nocredit</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c02_lane_system" name="System / Automation">
+      <bpmn:lane id="c02_lane_system" name="System">
         <bpmn:flowNodeRef>c02_gw_quality</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c02_end_notrecord</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c02_task_base</bpmn:flowNodeRef>
@@ -24,17 +24,17 @@
         <bpmn:flowNodeRef>c02_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c02_start" name="Record published"/>
-    <bpmn:exclusiveGateway id="c02_gw_quality" name="Durable, attributable, findable?"/>
+    <bpmn:startEvent id="c02_start" name="Someone publishes a record"/>
+    <bpmn:exclusiveGateway id="c02_gw_quality" name="Lasting, credited, findable?"/>
     <bpmn:endEvent id="c02_end_notrecord" name="Not a record — no credit"/>
-    <bpmn:serviceTask id="c02_task_base" name="Base credit on publication"/>
-    <bpmn:userTask id="c02_task_verify" name="Verify retrieval (usage bonus per verified retrieval)"/>
-    <bpmn:exclusiveGateway id="c02_gw_more" name="More verified retrievals?"/>
-    <bpmn:exclusiveGateway id="c02_gw_attrib" name="Attributable and findable?"/>
+    <bpmn:serviceTask id="c02_task_base" name="Credit for publishing"/>
+    <bpmn:userTask id="c02_task_verify" name="A reviewer confirms each real use"/>
+    <bpmn:exclusiveGateway id="c02_gw_more" name="More confirmed uses?"/>
+    <bpmn:exclusiveGateway id="c02_gw_attrib" name="Credited and findable?"/>
     <bpmn:endEvent id="c02_end_nocredit" name="No credit"/>
-    <bpmn:serviceTask id="c02_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
-    <bpmn:serviceTask id="c02_task_rails" name="Rails for all dimensions: evidence records"/>
-    <bpmn:endEvent id="c02_end_balance" name="C_2 balance updated"/>
+    <bpmn:serviceTask id="c02_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c02_task_rails" name="These records support all dimensions"/>
+    <bpmn:endEvent id="c02_end_balance" name="C_2 tally updated"/>
     <bpmn:sequenceFlow id="c02_f1" sourceRef="c02_start" targetRef="c02_gw_quality"/>
     <bpmn:sequenceFlow id="c02_f2" name="no" sourceRef="c02_gw_quality" targetRef="c02_end_notrecord"/>
     <bpmn:sequenceFlow id="c02_f3" name="yes" sourceRef="c02_gw_quality" targetRef="c02_task_base"/>

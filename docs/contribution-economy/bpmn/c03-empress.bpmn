@@ -9,12 +9,12 @@
       <bpmn:lane id="c03_lane_member" name="Member">
         <bpmn:flowNodeRef>c03_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c03_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c03_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c03_task_verify</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c03_gw_conflict</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c03_end_reject</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c03_lane_system" name="System / Automation">
+      <bpmn:lane id="c03_lane_system" name="System">
         <bpmn:flowNodeRef>c03_gw_cap</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c03_end_nocap</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c03_gw_cycle</bpmn:flowNodeRef>
@@ -24,17 +24,17 @@
         <bpmn:flowNodeRef>c03_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c03_start" name="Mentee's accepted output (from C_1)"/>
-    <bpmn:exclusiveGateway id="c03_gw_cap" name="Cap per mentee respected?"/>
-    <bpmn:endEvent id="c03_end_nocap" name="No multiplier (cap exceeded)"/>
-    <bpmn:exclusiveGateway id="c03_gw_cycle" name="Cycle gate open?"/>
-    <bpmn:endEvent id="c03_end_defer" name="Deferred to next cycle"/>
-    <bpmn:userTask id="c03_task_verify" name="Verify mentee output acceptance"/>
-    <bpmn:exclusiveGateway id="c03_gw_conflict" name="Conflict-farming check passed?"/>
-    <bpmn:endEvent id="c03_end_reject" name="Rejected (conflict farming)"/>
-    <bpmn:serviceTask id="c03_task_mult" name="Nurture multiplier: percentage of mentee's accepted output"/>
-    <bpmn:serviceTask id="c03_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
-    <bpmn:endEvent id="c03_end_balance" name="C_3 balance updated"/>
+    <bpmn:startEvent id="c03_start" name="A mentee's work was accepted"/>
+    <bpmn:exclusiveGateway id="c03_gw_cap" name="Under the per-mentee cap?"/>
+    <bpmn:endEvent id="c03_end_nocap" name="No share — cap exceeded"/>
+    <bpmn:exclusiveGateway id="c03_gw_cycle" name="Is this round's window open?"/>
+    <bpmn:endEvent id="c03_end_defer" name="Deferred to the next round"/>
+    <bpmn:userTask id="c03_task_verify" name="Confirm the mentee's work was accepted"/>
+    <bpmn:exclusiveGateway id="c03_gw_conflict" name="Clean of staged disputes?"/>
+    <bpmn:endEvent id="c03_end_reject" name="Rejected — staged conflict"/>
+    <bpmn:serviceTask id="c03_task_mult" name="Pay a share of the mentee's work"/>
+    <bpmn:serviceTask id="c03_task_record" name="Save a decision record"/>
+    <bpmn:endEvent id="c03_end_balance" name="C_3 tally updated"/>
     <bpmn:sequenceFlow id="c03_f1" sourceRef="c03_start" targetRef="c03_gw_cap"/>
     <bpmn:sequenceFlow id="c03_f2" name="no" sourceRef="c03_gw_cap" targetRef="c03_end_nocap"/>
     <bpmn:sequenceFlow id="c03_f3" name="yes" sourceRef="c03_gw_cap" targetRef="c03_gw_cycle"/>

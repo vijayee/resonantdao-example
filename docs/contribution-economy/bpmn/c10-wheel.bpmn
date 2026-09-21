@@ -9,11 +9,11 @@
       <bpmn:lane id="c10_lane_member" name="Member">
         <bpmn:flowNodeRef>c10_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c10_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c10_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c10_task_audit</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c10_gw_fair</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c10_lane_system" name="System / Automation">
+      <bpmn:lane id="c10_lane_system" name="System">
         <bpmn:flowNodeRef>c10_task_debt</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c10_end_retrial</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c10_task_credit</bpmn:flowNodeRef>
@@ -22,15 +22,15 @@
         <bpmn:flowNodeRef>c10_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c10_start" name="Cycle end reached"/>
-    <bpmn:userTask id="c10_task_audit" name="Fairness audit of cycle (human)"/>
-    <bpmn:exclusiveGateway id="c10_gw_fair" name="Cycle fair?"/>
-    <bpmn:serviceTask id="c10_task_debt" name="Log cycle debt (measurement failure is the system's debt)"/>
-    <bpmn:endEvent id="c10_end_retrial" name="Retrial next cycle"/>
-    <bpmn:serviceTask id="c10_task_credit" name="Cycle-completion credit"/>
-    <bpmn:serviceTask id="c10_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
-    <bpmn:serviceTask id="c10_task_fire" name="Fire cycle-boundary event (to 21-aggregation-rct.bpmn)"/>
-    <bpmn:endEvent id="c10_end_balance" name="C_10 balance updated"/>
+    <bpmn:startEvent id="c10_start" name="The round ends"/>
+    <bpmn:userTask id="c10_task_audit" name="A person audits the round's fairness"/>
+    <bpmn:exclusiveGateway id="c10_gw_fair" name="Was the round fair?"/>
+    <bpmn:serviceTask id="c10_task_debt" name="Record the round's debt"/>
+    <bpmn:endEvent id="c10_end_retrial" name="Retried in the next round"/>
+    <bpmn:serviceTask id="c10_task_credit" name="Credit for closing the round"/>
+    <bpmn:serviceTask id="c10_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c10_task_fire" name="Start the scoring roundup"/>
+    <bpmn:endEvent id="c10_end_balance" name="C_10 tally updated"/>
     <bpmn:sequenceFlow id="c10_f1" sourceRef="c10_start" targetRef="c10_task_audit"/>
     <bpmn:sequenceFlow id="c10_f2" sourceRef="c10_task_audit" targetRef="c10_gw_fair"/>
     <bpmn:sequenceFlow id="c10_f3" name="no" sourceRef="c10_gw_fair" targetRef="c10_task_debt"/>

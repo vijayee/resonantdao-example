@@ -11,28 +11,28 @@
         <bpmn:flowNodeRef>c01_task_evidence</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c01_end_none</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c01_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c01_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c01_task_acceptance</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c01_gw_accepted</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c01_task_scope</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c01_lane_system" name="System / Automation">
+      <bpmn:lane id="c01_lane_system" name="System">
         <bpmn:flowNodeRef>c01_task_provenance</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c01_task_record</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c01_task_feed_c03</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c01_end_paid</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c01_start" name="Artifact submitted"/>
-    <bpmn:userTask id="c01_task_evidence" name="Submit evidence: action, context, provenance, outcome"/>
-    <bpmn:serviceTask id="c01_task_provenance" name="Provenance check"/>
-    <bpmn:userTask id="c01_task_acceptance" name="Review and accept artifact (Tier 2: two independent reviewers)"/>
+    <bpmn:startEvent id="c01_start" name="Someone submits their work"/>
+    <bpmn:userTask id="c01_task_evidence" name="Record what was made and prove it is real"/>
+    <bpmn:serviceTask id="c01_task_provenance" name="Check the records are genuine"/>
+    <bpmn:userTask id="c01_task_acceptance" name="Two reviewers check the work"/>
     <bpmn:exclusiveGateway id="c01_gw_accepted" name="Accepted?"/>
-    <bpmn:userTask id="c01_task_scope" name="Size delivery bounty by scope"/>
+    <bpmn:userTask id="c01_task_scope" name="Set the reward by scope"/>
     <bpmn:endEvent id="c01_end_none" name="No bounty — submission pays nothing"/>
-    <bpmn:serviceTask id="c01_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
-    <bpmn:serviceTask id="c01_task_feed_c03" name="Feed C_3 Empress: accepted artifact as mentee-output input"/>
-    <bpmn:endEvent id="c01_end_paid" name="Delivery bounty to C_1 balance"/>
+    <bpmn:serviceTask id="c01_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c01_task_feed_c03" name="Share accepted work with Empress"/>
+    <bpmn:endEvent id="c01_end_paid" name="Pay the builder's tally"/>
     <bpmn:sequenceFlow id="c01_f1" sourceRef="c01_start" targetRef="c01_task_evidence"/>
     <bpmn:sequenceFlow id="c01_f2" sourceRef="c01_task_evidence" targetRef="c01_task_provenance"/>
     <bpmn:sequenceFlow id="c01_f3" sourceRef="c01_task_provenance" targetRef="c01_task_acceptance"/>

@@ -9,15 +9,15 @@
       <bpmn:lane id="ml_lane_member" name="Member">
         <bpmn:flowNodeRef>ml_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="ml_lane_evidence" name="Evidence Layer">
+      <bpmn:lane id="ml_lane_evidence" name="Records">
         <bpmn:flowNodeRef>ml_task_evidence</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_gw_provenance</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_end_rejected</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="ml_lane_classifier" name="Classifier">
+      <bpmn:lane id="ml_lane_classifier" name="Scoring">
         <bpmn:flowNodeRef>ml_task_classify</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="ml_lane_verification" name="Verification">
+      <bpmn:lane id="ml_lane_verification" name="Review">
         <bpmn:flowNodeRef>ml_gw_tier</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_task_t0</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_task_t1</bpmn:flowNodeRef>
@@ -31,48 +31,48 @@
         <bpmn:flowNodeRef>ml_task_appeal</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_end_unverified</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="ml_lane_balance" name="Balance Engine">
+      <bpmn:lane id="ml_lane_balance" name="Tallies">
         <bpmn:flowNodeRef>ml_task_harm</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_task_delta</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_task_record</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="ml_lane_cycle" name="Cycle Operators">
+      <bpmn:lane id="ml_lane_cycle" name="Round operators">
         <bpmn:flowNodeRef>ml_event_cycle</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_task_rct</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>ml_end</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="ml_start" name="Member performs action"/>
-    <bpmn:userTask id="ml_task_evidence" name="Record evidence: action, context, provenance, outcome (C_2 rails)"/>
-    <bpmn:exclusiveGateway id="ml_gw_provenance" name="Provenance valid?"/>
-    <bpmn:endEvent id="ml_end_rejected" name="No evidence — null stays null (never 0)"/>
-    <bpmn:serviceTask id="ml_task_classify" name="Classify: propose sparse vector P(a) = [p_0 … p_21]"/>
-    <bpmn:exclusiveGateway id="ml_gw_tier" name="Review tier"/>
-    <bpmn:serviceTask id="ml_task_t0" name="Automatic verification"/>
-    <bpmn:serviceTask id="ml_task_t1" name="Machine-proposed check"/>
-    <bpmn:userTask id="ml_task_t1_audit" name="Random audit sample"/>
-    <bpmn:userTask id="ml_task_t2_conflict" name="Conflict-of-interest check"/>
-    <bpmn:parallelGateway id="ml_gw_t2_split" name="Spawn independent reviews"/>
-    <bpmn:userTask id="ml_task_t2_r1" name="Reviewer 1: written reasons"/>
-    <bpmn:userTask id="ml_task_t2_r2" name="Reviewer 2: written reasons"/>
-    <bpmn:parallelGateway id="ml_gw_t2_join" name="Merge reviewer verdicts"/>
+    <bpmn:startEvent id="ml_start" name="A member does something"/>
+    <bpmn:userTask id="ml_task_evidence" name="Record what happened and prove it is real"/>
+    <bpmn:exclusiveGateway id="ml_gw_provenance" name="Is the evidence genuine?"/>
+    <bpmn:endEvent id="ml_end_rejected" name="No evidence — no score"/>
+    <bpmn:serviceTask id="ml_task_classify" name="Score the action across all 22 dimensions"/>
+    <bpmn:exclusiveGateway id="ml_gw_tier" name="Which review tier?"/>
+    <bpmn:serviceTask id="ml_task_t0" name="Automatic check"/>
+    <bpmn:serviceTask id="ml_task_t1" name="Software proposes the check"/>
+    <bpmn:userTask id="ml_task_t1_audit" name="Spot-check a random sample"/>
+    <bpmn:userTask id="ml_task_t2_conflict" name="Check reviewers have no stake"/>
+    <bpmn:parallelGateway id="ml_gw_t2_split" name="Two reviewers check independently"/>
+    <bpmn:userTask id="ml_task_t2_r1" name="Reviewer 1 writes their reasons"/>
+    <bpmn:userTask id="ml_task_t2_r2" name="Reviewer 2 writes their reasons"/>
+    <bpmn:parallelGateway id="ml_gw_t2_join" name="Join the two verdicts"/>
     <bpmn:exclusiveGateway id="ml_gw_verdict" name="Verified?"/>
-    <bpmn:userTask id="ml_task_appeal" name="Appeal (deadline-bound, Tier 3 rotating panel)"/>
-    <bpmn:endEvent id="ml_end_unverified" name="Unverified — no delta, judgment stays pending (settles retroactively)"/>
-    <bpmn:serviceTask id="ml_task_harm" name="Harm check — verified harm reduces or voids outcome"/>
-    <bpmn:serviceTask id="ml_task_delta" name="Delta C_i(a) = Match_i × Outcome × Verification × Calibration_i → 22 non-transferable balances"/>
-    <bpmn:serviceTask id="ml_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
-    <bpmn:intermediateThrowEvent id="ml_event_cycle" name="Cycle boundary (C_10 Wheel → C_20 Judgement → C_21 World)"/>
-    <bpmn:serviceTask id="ml_task_rct" name="Aggregate $RCT (see 21-aggregation-rct.bpmn)"/>
-    <bpmn:endEvent id="ml_end" name="Balances updated — 22-vector remains source record"/>
+    <bpmn:userTask id="ml_task_appeal" name="Appeal to the rotating panel"/>
+    <bpmn:endEvent id="ml_end_unverified" name="No change — stays open"/>
+    <bpmn:serviceTask id="ml_task_harm" name="Check for harm and reduce the score"/>
+    <bpmn:serviceTask id="ml_task_delta" name="Score each dimension and update 22 tallies"/>
+    <bpmn:serviceTask id="ml_task_record" name="Save a decision record"/>
+    <bpmn:intermediateThrowEvent id="ml_event_cycle" name="Close the round"/>
+    <bpmn:serviceTask id="ml_task_rct" name="Combine into the overall score"/>
+    <bpmn:endEvent id="ml_end" name="Tallies updated — full breakdown kept"/>
     <bpmn:sequenceFlow id="ml_f1" sourceRef="ml_start" targetRef="ml_task_evidence"/>
     <bpmn:sequenceFlow id="ml_f2" sourceRef="ml_task_evidence" targetRef="ml_gw_provenance"/>
     <bpmn:sequenceFlow id="ml_f3" name="no" sourceRef="ml_gw_provenance" targetRef="ml_end_rejected"/>
     <bpmn:sequenceFlow id="ml_f4" name="yes" sourceRef="ml_gw_provenance" targetRef="ml_task_classify"/>
     <bpmn:sequenceFlow id="ml_f5" sourceRef="ml_task_classify" targetRef="ml_gw_tier"/>
-    <bpmn:sequenceFlow id="ml_f6" name="Tier 0" sourceRef="ml_gw_tier" targetRef="ml_task_t0"/>
-    <bpmn:sequenceFlow id="ml_f7" name="Tier 1" sourceRef="ml_gw_tier" targetRef="ml_task_t1"/>
-    <bpmn:sequenceFlow id="ml_f8" name="Tier 2+" sourceRef="ml_gw_tier" targetRef="ml_task_t2_conflict"/>
+    <bpmn:sequenceFlow id="ml_f6" name="Tier 0 — automatic" sourceRef="ml_gw_tier" targetRef="ml_task_t0"/>
+    <bpmn:sequenceFlow id="ml_f7" name="Tier 1 — software + audit" sourceRef="ml_gw_tier" targetRef="ml_task_t1"/>
+    <bpmn:sequenceFlow id="ml_f8" name="Tier 2+ — human review" sourceRef="ml_gw_tier" targetRef="ml_task_t2_conflict"/>
     <bpmn:sequenceFlow id="ml_f9" sourceRef="ml_task_t0" targetRef="ml_gw_verdict"/>
     <bpmn:sequenceFlow id="ml_f10" sourceRef="ml_task_t1" targetRef="ml_task_t1_audit"/>
     <bpmn:sequenceFlow id="ml_f11" sourceRef="ml_task_t1_audit" targetRef="ml_gw_verdict"/>

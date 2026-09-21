@@ -9,11 +9,11 @@
       <bpmn:lane id="c13_lane_member" name="Member">
         <bpmn:flowNodeRef>c13_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c13_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c13_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c13_gw_split</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c13_task_learning</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c13_lane_system" name="System / Automation">
+      <bpmn:lane id="c13_lane_system" name="System">
         <bpmn:flowNodeRef>c13_task_release</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c13_gw_join</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c13_gw_real</bpmn:flowNodeRef>
@@ -24,17 +24,17 @@
         <bpmn:flowNodeRef>c13_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c13_start" name="Closure chosen"/>
+    <bpmn:startEvent id="c13_start" name="Someone ends the thing"/>
     <bpmn:parallelGateway id="c13_gw_split"/>
-    <bpmn:userTask id="c13_task_learning" name="Review preserved learning"/>
-    <bpmn:userTask id="c13_task_release" name="Verify resource release"/>
+    <bpmn:userTask id="c13_task_learning" name="Check the learning was preserved"/>
+    <bpmn:userTask id="c13_task_release" name="Confirm resources were released"/>
     <bpmn:parallelGateway id="c13_gw_join"/>
-    <bpmn:exclusiveGateway id="c13_gw_real" name="Real closure (not abandonment)?"/>
-    <bpmn:endEvent id="c13_end_reject" name="Rejected (closure theater)"/>
-    <bpmn:serviceTask id="c13_task_token" name="Closure token"/>
-    <bpmn:serviceTask id="c13_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c13_task_feed_c14" name="Feed C_14 Temperance: released resources"/>
-    <bpmn:endEvent id="c13_end_balance" name="C_13 balance updated"/>
+    <bpmn:exclusiveGateway id="c13_gw_real" name="Was it ended, not abandoned?"/>
+    <bpmn:endEvent id="c13_end_reject" name="Rejected — it was theater"/>
+    <bpmn:serviceTask id="c13_task_token" name="Credit the one who closed it"/>
+    <bpmn:serviceTask id="c13_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c13_task_feed_c14" name="Released resources feed Temperance"/>
+    <bpmn:endEvent id="c13_end_balance" name="C_13 tally updated"/>
     <bpmn:sequenceFlow id="c13_f1" sourceRef="c13_start" targetRef="c13_gw_split"/>
     <bpmn:sequenceFlow id="c13_f2" sourceRef="c13_gw_split" targetRef="c13_task_learning"/>
     <bpmn:sequenceFlow id="c13_f3" sourceRef="c13_gw_split" targetRef="c13_task_release"/>

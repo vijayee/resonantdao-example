@@ -9,12 +9,12 @@
       <bpmn:lane id="c12_lane_member" name="Member">
         <bpmn:flowNodeRef>c12_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c12_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c12_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c12_task_delta</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c12_gw_changed</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c12_end_nochg</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c12_lane_system" name="System / Automation">
+      <bpmn:lane id="c12_lane_system" name="System">
         <bpmn:flowNodeRef>c12_gw_pause</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c12_end_nocredit</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c12_task_credit</bpmn:flowNodeRef>
@@ -23,16 +23,16 @@
         <bpmn:flowNodeRef>c12_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c12_start" name="Reframe proposed"/>
-    <bpmn:exclusiveGateway id="c12_gw_pause" name="Pause duration only?"/>
-    <bpmn:endEvent id="c12_end_nocredit" name="No credit (never pays on pause)"/>
-    <bpmn:userTask id="c12_task_delta" name="Review decision-delta evidence"/>
-    <bpmn:exclusiveGateway id="c12_gw_changed" name="Decision actually changed?"/>
+    <bpmn:startEvent id="c12_start" name="Someone reframes the problem"/>
+    <bpmn:exclusiveGateway id="c12_gw_pause" name="Just a pause, nothing else?"/>
+    <bpmn:endEvent id="c12_end_nocredit" name="No credit — pausing alone pays nothing"/>
+    <bpmn:userTask id="c12_task_delta" name="A reviewer checks the decision changed"/>
+    <bpmn:exclusiveGateway id="c12_gw_changed" name="Did the decision really change?"/>
     <bpmn:endEvent id="c12_end_nochg" name="No decision change — no credit"/>
-    <bpmn:serviceTask id="c12_task_credit" name="Decision-changed credit"/>
-    <bpmn:serviceTask id="c12_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c12_task_feed_c20" name="Feed C_20 Judgement: decision-change record"/>
-    <bpmn:endEvent id="c12_end_balance" name="C_12 balance updated"/>
+    <bpmn:serviceTask id="c12_task_credit" name="Credit the reframe"/>
+    <bpmn:serviceTask id="c12_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c12_task_feed_c20" name="Record the change for Judgement"/>
+    <bpmn:endEvent id="c12_end_balance" name="C_12 tally updated"/>
     <bpmn:sequenceFlow id="c12_f1" sourceRef="c12_start" targetRef="c12_gw_pause"/>
     <bpmn:sequenceFlow id="c12_f2" name="yes" sourceRef="c12_gw_pause" targetRef="c12_end_nocredit"/>
     <bpmn:sequenceFlow id="c12_f3" name="no" sourceRef="c12_gw_pause" targetRef="c12_task_delta"/>

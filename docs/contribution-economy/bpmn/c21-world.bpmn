@@ -9,26 +9,26 @@
     <bpmn:lane id="c21_lane_member" name="Member">
       <bpmn:flowNodeRef>c21_start</bpmn:flowNodeRef>
     </bpmn:lane>
-    <bpmn:lane id="c21_lane_reviewer" name="Human Reviewer">
+    <bpmn:lane id="c21_lane_reviewer" name="Reviewer">
       <bpmn:flowNodeRef>c21_task_verify</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>c21_gw_settled</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>c21_end_incomplete</bpmn:flowNodeRef>
     </bpmn:lane>
-    <bpmn:lane id="c21_lane_system" name="System / Automation">
+    <bpmn:lane id="c21_lane_system" name="System">
       <bpmn:flowNodeRef>c21_task_credit</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>c21_task_record</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>c21_task_close</bpmn:flowNodeRef>
       <bpmn:flowNodeRef>c21_end_balance</bpmn:flowNodeRef>
     </bpmn:lane>
   </bpmn:laneSet>
-  <bpmn:startEvent id="c21_start" name="Whole-cycle completion claimed"/>
-  <bpmn:userTask id="c21_task_verify" name="Verify completion of the whole (human)"/>
-  <bpmn:exclusiveGateway id="c21_gw_settled" name="All cycle dimensions settled?"/>
-  <bpmn:endEvent id="c21_end_incomplete" name="Incomplete (defer)"/>
-  <bpmn:serviceTask id="c21_task_credit" name="Completion credit"/>
-  <bpmn:serviceTask id="c21_task_record" name="Emit explanation record"/>
-  <bpmn:serviceTask id="c21_task_close" name="Close cycle spine (enable $RCT publication)"/>
-  <bpmn:endEvent id="c21_end_balance" name="C_21 balance updated"/>
+  <bpmn:startEvent id="c21_start" name="Someone claims the whole round is done"/>
+  <bpmn:userTask id="c21_task_verify" name="A person confirms the round completed"/>
+  <bpmn:exclusiveGateway id="c21_gw_settled" name="Is every part of the round settled?"/>
+  <bpmn:endEvent id="c21_end_incomplete" name="Incomplete — defer"/>
+  <bpmn:serviceTask id="c21_task_credit" name="Credit the completion"/>
+  <bpmn:serviceTask id="c21_task_record" name="Save a decision record"/>
+  <bpmn:serviceTask id="c21_task_close" name="Close the round so scores can publish"/>
+  <bpmn:endEvent id="c21_end_balance" name="C_21 tally updated"/>
   <bpmn:sequenceFlow id="c21_f1" sourceRef="c21_start" targetRef="c21_task_verify"/>
   <bpmn:sequenceFlow id="c21_f2" sourceRef="c21_task_verify" targetRef="c21_gw_settled"/>
   <bpmn:sequenceFlow id="c21_f3" name="no" sourceRef="c21_gw_settled" targetRef="c21_end_incomplete"/>

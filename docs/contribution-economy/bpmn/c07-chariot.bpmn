@@ -9,11 +9,11 @@
       <bpmn:lane id="c07_lane_member" name="Member">
         <bpmn:flowNodeRef>c07_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c07_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c07_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c07_task_verify</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c07_gw_harm</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c07_lane_system" name="System / Automation">
+      <bpmn:lane id="c07_lane_system" name="System">
         <bpmn:flowNodeRef>c07_task_adjust</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c07_gw_merge</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c07_task_token</bpmn:flowNodeRef>
@@ -22,15 +22,15 @@
         <bpmn:flowNodeRef>c07_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c07_start" name="Milestone plan committed"/>
-    <bpmn:userTask id="c07_task_verify" name="Verify milestone completion"/>
-    <bpmn:exclusiveGateway id="c07_gw_harm" name="Harm detected (verified)?"/>
-    <bpmn:serviceTask id="c07_task_adjust" name="Net-of-harm adjustment (reduce or void outcome)"/>
-    <bpmn:exclusiveGateway id="c07_gw_merge" name="Merge paths"/>
-    <bpmn:serviceTask id="c07_task_token" name="Milestone token"/>
-    <bpmn:serviceTask id="c07_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c07_task_feed" name="Feed C_14 Temperance: milestone health context"/>
-    <bpmn:endEvent id="c07_end_balance" name="C_7 balance updated"/>
+    <bpmn:startEvent id="c07_start" name="Someone commits to milestones"/>
+    <bpmn:userTask id="c07_task_verify" name="Confirm the milestone is done"/>
+    <bpmn:exclusiveGateway id="c07_gw_harm" name="Did it cause proven harm?"/>
+    <bpmn:serviceTask id="c07_task_adjust" name="Reduce or void for harm"/>
+    <bpmn:exclusiveGateway id="c07_gw_merge" name="Join paths"/>
+    <bpmn:serviceTask id="c07_task_token" name="Credit the milestone"/>
+    <bpmn:serviceTask id="c07_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c07_task_feed" name="Share milestone health with Temperance"/>
+    <bpmn:endEvent id="c07_end_balance" name="C_7 tally updated"/>
     <bpmn:sequenceFlow id="c07_f1" sourceRef="c07_start" targetRef="c07_task_verify"/>
     <bpmn:sequenceFlow id="c07_f2" sourceRef="c07_task_verify" targetRef="c07_gw_harm"/>
     <bpmn:sequenceFlow id="c07_f3" name="yes" sourceRef="c07_gw_harm" targetRef="c07_task_adjust"/>

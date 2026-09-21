@@ -9,12 +9,12 @@
       <bpmn:lane id="c15_lane_member" name="Member">
         <bpmn:flowNodeRef>c15_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c15_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c15_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c15_task_corrob</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c15_gw_corr</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c15_task_audit</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c15_lane_system" name="System / Automation">
+      <bpmn:lane id="c15_lane_system" name="System">
         <bpmn:flowNodeRef>c15_task_penalty</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c15_end_penalty</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c15_task_bounty</bpmn:flowNodeRef>
@@ -23,16 +23,16 @@
         <bpmn:flowNodeRef>c15_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c15_start" name="Incentive distortion claim filed"/>
-    <bpmn:userTask id="c15_task_corrob" name="Corroboration by independent member (≥ 1)"/>
-    <bpmn:exclusiveGateway id="c15_gw_corr" name="Claim corroborated?"/>
-    <bpmn:userTask id="c15_task_audit" name="Devil operator audit of weights (human-only bootstrap)"/>
+    <bpmn:startEvent id="c15_start" name="Someone reports a skewed incentive"/>
+    <bpmn:userTask id="c15_task_corrob" name="A second person confirms it"/>
+    <bpmn:exclusiveGateway id="c15_gw_corr" name="Is the claim confirmed?"/>
+    <bpmn:userTask id="c15_task_audit" name="A person audits the dimension weights"/>
     <bpmn:serviceTask id="c15_task_penalty" name="False-claim penalty"/>
     <bpmn:endEvent id="c15_end_penalty" name="Penalty applied"/>
-    <bpmn:serviceTask id="c15_task_bounty" name="Integrity bounty (among the largest payouts)"/>
-    <bpmn:serviceTask id="c15_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c15_task_feed_c11" name="Feed C_11 Justice + aggregation: distortion finding"/>
-    <bpmn:endEvent id="c15_end_balance" name="C_15 balance updated"/>
+    <bpmn:serviceTask id="c15_task_bounty" name="Integrity reward — one of the largest"/>
+    <bpmn:serviceTask id="c15_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c15_task_feed_c11" name="Report the distortion to Justice"/>
+    <bpmn:endEvent id="c15_end_balance" name="C_15 tally updated"/>
     <bpmn:sequenceFlow id="c15_f1" sourceRef="c15_start" targetRef="c15_task_corrob"/>
     <bpmn:sequenceFlow id="c15_f2" sourceRef="c15_task_corrob" targetRef="c15_gw_corr"/>
     <bpmn:sequenceFlow id="c15_f3" name="no" sourceRef="c15_gw_corr" targetRef="c15_task_penalty"/>

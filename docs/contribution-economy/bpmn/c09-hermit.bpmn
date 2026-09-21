@@ -9,14 +9,14 @@
       <bpmn:lane id="c09_lane_member" name="Member">
         <bpmn:flowNodeRef>c09_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c09_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c09_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c09_task_evidence</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c09_gw_trigger</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c09_end_nobounty</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c09_gw_steer</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c09_task_verify</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c09_lane_system" name="System / Automation">
+      <bpmn:lane id="c09_lane_system" name="System">
         <bpmn:flowNodeRef>c09_task_bounty</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c09_gw_join</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c09_task_record</bpmn:flowNodeRef>
@@ -24,18 +24,18 @@
         <bpmn:flowNodeRef>c09_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c09_start" name="Research finding delivered"/>
-    <bpmn:userTask id="c09_task_evidence" name="Milestone evidence review"/>
-    <bpmn:serviceTask id="c09_task_bounty" name="Deep-work bounty at milestones"/>
-    <bpmn:exclusiveGateway id="c09_gw_trigger" name="Payment trigger = milestone?"/>
-    <bpmn:endEvent id="c09_end_nobounty" name="No bounty (never pays on length)"/>
-    <bpmn:exclusiveGateway id="c09_gw_steer" name="Finding steers a vote?"/>
-    <bpmn:userTask id="c09_task_verify" name="Verify decision-steering evidence"/>
-    <bpmn:serviceTask id="c09_task_bonus" name="Adoption bonus"/>
-    <bpmn:exclusiveGateway id="c09_gw_join" name="Merge paths"/>
-    <bpmn:serviceTask id="c09_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c09_task_feed_c20" name="Feed C_20 Judgement: adoption evidence"/>
-    <bpmn:endEvent id="c09_end_balance" name="C_9 balance updated"/>
+    <bpmn:startEvent id="c09_start" name="A research finding arrives"/>
+    <bpmn:userTask id="c09_task_evidence" name="A reviewer checks milestone evidence"/>
+    <bpmn:serviceTask id="c09_task_bounty" name="Pay at proven milestones"/>
+    <bpmn:exclusiveGateway id="c09_gw_trigger" name="Is progress measured by milestones?"/>
+    <bpmn:endEvent id="c09_end_nobounty" name="No reward — length alone pays nothing"/>
+    <bpmn:exclusiveGateway id="c09_gw_steer" name="Did the finding steer a vote?"/>
+    <bpmn:userTask id="c09_task_verify" name="Confirm the finding steered a decision"/>
+    <bpmn:serviceTask id="c09_task_bonus" name="Bonus when adopted"/>
+    <bpmn:exclusiveGateway id="c09_gw_join" name="Join paths"/>
+    <bpmn:serviceTask id="c09_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c09_task_feed_c20" name="Share adoption evidence with Judgement"/>
+    <bpmn:endEvent id="c09_end_balance" name="C_9 tally updated"/>
     <bpmn:sequenceFlow id="c09_f1" sourceRef="c09_start" targetRef="c09_task_evidence"/>
     <bpmn:sequenceFlow id="c09_f2" sourceRef="c09_task_evidence" targetRef="c09_task_bounty"/>
     <bpmn:sequenceFlow id="c09_f3" sourceRef="c09_task_bounty" targetRef="c09_gw_trigger"/>

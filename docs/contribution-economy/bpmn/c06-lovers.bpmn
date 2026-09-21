@@ -10,27 +10,27 @@
         <bpmn:flowNodeRef>c06_start</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c06_task_declare</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c06_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c06_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c06_task_review</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c06_gw_farm</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c06_end_reject</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c06_lane_system" name="System / Automation">
+      <bpmn:lane id="c06_lane_system" name="System">
         <bpmn:flowNodeRef>c06_task_bounty</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c06_task_record</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c06_task_feed</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c06_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c06_start" name="Joint build declared"/>
-    <bpmn:userTask id="c06_task_declare" name="Declare joint build with attribution shares"/>
-    <bpmn:userTask id="c06_task_review" name="Review genuine joint contribution + verified attribution"/>
-    <bpmn:exclusiveGateway id="c06_gw_farm" name="Conflict farming check passed?"/>
-    <bpmn:endEvent id="c06_end_reject" name="Rejected (conflict farming)"/>
-    <bpmn:serviceTask id="c06_task_bounty" name="Shared delivery bounty split by verified attribution"/>
-    <bpmn:serviceTask id="c06_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c06_task_feed" name="Feed C_1 Magician: joint artifact acceptance"/>
-    <bpmn:endEvent id="c06_end_balance" name="C_6 balance updated"/>
+    <bpmn:startEvent id="c06_start" name="A joint build is declared"/>
+    <bpmn:userTask id="c06_task_declare" name="Declare who built what"/>
+    <bpmn:userTask id="c06_task_review" name="Confirm it was a real joint build"/>
+    <bpmn:exclusiveGateway id="c06_gw_farm" name="Clean of staged disputes?"/>
+    <bpmn:endEvent id="c06_end_reject" name="Rejected — staged conflict"/>
+    <bpmn:serviceTask id="c06_task_bounty" name="Split the reward by proven share"/>
+    <bpmn:serviceTask id="c06_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c06_task_feed" name="Link the accepted work to Magician"/>
+    <bpmn:endEvent id="c06_end_balance" name="C_6 tally updated"/>
     <bpmn:sequenceFlow id="c06_f1" sourceRef="c06_start" targetRef="c06_task_declare"/>
     <bpmn:sequenceFlow id="c06_f2" sourceRef="c06_task_declare" targetRef="c06_task_review"/>
     <bpmn:sequenceFlow id="c06_f3" sourceRef="c06_task_review" targetRef="c06_gw_farm"/>

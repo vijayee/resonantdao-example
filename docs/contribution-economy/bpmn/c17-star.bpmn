@@ -9,30 +9,30 @@
       <bpmn:lane id="c17_lane_member" name="Member">
         <bpmn:flowNodeRef>c17_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c17_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c17_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c17_task_session</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c17_gw_attend</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c17_end_noattend</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c17_gw_first</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c17_end_pending</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c17_lane_system" name="System / Automation">
+      <bpmn:lane id="c17_lane_system" name="System">
         <bpmn:flowNodeRef>c17_task_credit</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c17_task_record</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c17_task_feed</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c17_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c17_start" name="New member oriented"/>
-    <bpmn:userTask id="c17_task_session" name="Orientation session (human)"/>
-    <bpmn:exclusiveGateway id="c17_gw_attend" name="Attendance only?"/>
-    <bpmn:endEvent id="c17_end_noattend" name="No credit (attendance pays nothing)"/>
-    <bpmn:exclusiveGateway id="c17_gw_first" name="Orientee completed first verified contribution?"/>
-    <bpmn:endEvent id="c17_end_pending" name="Pending (no credit yet)"/>
-    <bpmn:serviceTask id="c17_task_credit" name="Onboarding credit"/>
-    <bpmn:serviceTask id="c17_task_record" name="Emit explanation record"/>
-    <bpmn:serviceTask id="c17_task_feed" name="Feed C_0 Fool: entry progress"/>
-    <bpmn:endEvent id="c17_end_balance" name="C_17 balance updated"/>
+    <bpmn:startEvent id="c17_start" name="A new member is being oriented"/>
+    <bpmn:userTask id="c17_task_session" name="A person runs the orientation"/>
+    <bpmn:exclusiveGateway id="c17_gw_attend" name="Only attendance, nothing more?"/>
+    <bpmn:endEvent id="c17_end_noattend" name="No credit — showing up pays nothing"/>
+    <bpmn:exclusiveGateway id="c17_gw_first" name="Did the new member finish first proven work?"/>
+    <bpmn:endEvent id="c17_end_pending" name="Pending — no credit yet"/>
+    <bpmn:serviceTask id="c17_task_credit" name="Credit the guide"/>
+    <bpmn:serviceTask id="c17_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c17_task_feed" name="Share entry progress with the Fool"/>
+    <bpmn:endEvent id="c17_end_balance" name="C_17 tally updated"/>
     <bpmn:sequenceFlow id="c17_f1" sourceRef="c17_start" targetRef="c17_task_session"/>
     <bpmn:sequenceFlow id="c17_f2" sourceRef="c17_task_session" targetRef="c17_gw_attend"/>
     <bpmn:sequenceFlow id="c17_f3" name="yes" sourceRef="c17_gw_attend" targetRef="c17_end_noattend"/>

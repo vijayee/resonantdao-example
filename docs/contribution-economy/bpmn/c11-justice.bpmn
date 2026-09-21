@@ -9,10 +9,10 @@
       <bpmn:lane id="c11_lane_member" name="Member">
         <bpmn:flowNodeRef>c11_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c11_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c11_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c11_task_audit</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c11_lane_system" name="System / Automation">
+      <bpmn:lane id="c11_lane_system" name="System">
         <bpmn:flowNodeRef>c11_task_token</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c11_gw_adjust</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c11_task_backpay</bpmn:flowNodeRef>
@@ -21,14 +21,14 @@
         <bpmn:flowNodeRef>c11_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c11_start" name="Audit scheduled"/>
-    <bpmn:userTask id="c11_task_audit" name="Execute fairness audit (human-only bootstrap)"/>
-    <bpmn:serviceTask id="c11_task_token" name="Audit token per completed audit"/>
-    <bpmn:exclusiveGateway id="c11_gw_adjust" name="Under-recognition (care/mediation/maintenance)?"/>
-    <bpmn:serviceTask id="c11_task_backpay" name="Trigger back-pay / calibration / rule retirement"/>
-    <bpmn:exclusiveGateway id="c11_gw_merge" name="Merge paths"/>
-    <bpmn:serviceTask id="c11_task_record" name="Emit explanation record"/>
-    <bpmn:endEvent id="c11_end_balance" name="C_11 balance updated"/>
+    <bpmn:startEvent id="c11_start" name="An audit is scheduled"/>
+    <bpmn:userTask id="c11_task_audit" name="Run the fairness audit by hand"/>
+    <bpmn:serviceTask id="c11_task_token" name="Credit per finished audit"/>
+    <bpmn:exclusiveGateway id="c11_gw_adjust" name="Were quiet kinds of work missed?"/>
+    <bpmn:serviceTask id="c11_task_backpay" name="Trigger back-pay, retuning, or retirement"/>
+    <bpmn:exclusiveGateway id="c11_gw_merge" name="Join paths"/>
+    <bpmn:serviceTask id="c11_task_record" name="Save a decision record"/>
+    <bpmn:endEvent id="c11_end_balance" name="C_11 tally updated"/>
     <bpmn:sequenceFlow id="c11_f1" sourceRef="c11_start" targetRef="c11_task_audit"/>
     <bpmn:sequenceFlow id="c11_f2" sourceRef="c11_task_audit" targetRef="c11_task_token"/>
     <bpmn:sequenceFlow id="c11_f3" sourceRef="c11_task_token" targetRef="c11_gw_adjust"/>

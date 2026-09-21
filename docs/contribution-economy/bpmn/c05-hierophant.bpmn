@@ -9,10 +9,10 @@
       <bpmn:lane id="c05_lane_member" name="Member">
         <bpmn:flowNodeRef>c05_start</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c05_lane_reviewer" name="Human Reviewer">
+      <bpmn:lane id="c05_lane_reviewer" name="Reviewer">
         <bpmn:flowNodeRef>c05_task_review</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="c05_lane_system" name="System / Automation">
+      <bpmn:lane id="c05_lane_system" name="System">
         <bpmn:flowNodeRef>c05_gw_lecture</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c05_end_nocredit</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>c05_task_credit</bpmn:flowNodeRef>
@@ -21,14 +21,14 @@
         <bpmn:flowNodeRef>c05_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c05_start" name="Teaching claimed"/>
-    <bpmn:exclusiveGateway id="c05_gw_lecture" name="Lecture or attendance only?"/>
-    <bpmn:endEvent id="c05_end_nocredit" name="No credit (never pays on lectures or attendance)"/>
-    <bpmn:userTask id="c05_task_review" name="Review demonstrated competence in another member"/>
-    <bpmn:serviceTask id="c05_task_credit" name="Competence credit"/>
-    <bpmn:serviceTask id="c05_task_record" name="Emit explanation record (action ID, dimensions, intensities, calibration version)"/>
-    <bpmn:serviceTask id="c05_task_feed_c03" name="Feed C_3 Empress: competence as nurture evidence"/>
-    <bpmn:endEvent id="c05_end_balance" name="C_5 balance updated"/>
+    <bpmn:startEvent id="c05_start" name="Someone claims they taught"/>
+    <bpmn:exclusiveGateway id="c05_gw_lecture" name="Only a lecture or attendance?"/>
+    <bpmn:endEvent id="c05_end_nocredit" name="No credit — lectures alone pay nothing"/>
+    <bpmn:userTask id="c05_task_review" name="A reviewer confirms someone can do it"/>
+    <bpmn:serviceTask id="c05_task_credit" name="Credit the teacher"/>
+    <bpmn:serviceTask id="c05_task_record" name="Save a decision record"/>
+    <bpmn:serviceTask id="c05_task_feed_c03" name="Share as nurture evidence with Empress"/>
+    <bpmn:endEvent id="c05_end_balance" name="C_5 tally updated"/>
     <bpmn:sequenceFlow id="c05_f1" sourceRef="c05_start" targetRef="c05_gw_lecture"/>
     <bpmn:sequenceFlow id="c05_f2" name="yes" sourceRef="c05_gw_lecture" targetRef="c05_end_nocredit"/>
     <bpmn:sequenceFlow id="c05_f3" name="no" sourceRef="c05_gw_lecture" targetRef="c05_task_review"/>
