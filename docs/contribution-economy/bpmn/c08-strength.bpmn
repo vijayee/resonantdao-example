@@ -37,13 +37,13 @@
     <bpmn:parallelGateway id="c08_gw_join1"/>
     <bpmn:exclusiveGateway id="c08_gw_qual" name="Is the resolver qualified?"/>
     <bpmn:endEvent id="c08_end_disqual" name="Resolver disqualified"/>
-    <bpmn:serviceTask id="c08_task_token" name="Reward sized by severity"/>
+    <bpmn:serviceTask id="c08_task_token" name="Credit sized by severity"/>
     <bpmn:parallelGateway id="c08_gw_split2"/>
     <bpmn:userTask id="c08_task_acc_a" name="Party A written acceptance"/>
     <bpmn:userTask id="c08_task_acc_b" name="Party B written acceptance"/>
     <bpmn:parallelGateway id="c08_gw_join2"/>
     <bpmn:exclusiveGateway id="c08_gw_accepts" name="Did both sides accept in writing?"/>
-    <bpmn:endEvent id="c08_end_nores" name="No reward — both sides must accept"/>
+    <bpmn:endEvent id="c08_end_nores" name="No credit — both sides must accept"/>
     <bpmn:serviceTask id="c08_task_record" name="Save a decision record"/>
     <bpmn:serviceTask id="c08_task_feed_c18" name="Send the resolution for verification"/>
     <bpmn:endEvent id="c08_end_balance" name="C_8 tally updated"/>

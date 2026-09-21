@@ -26,8 +26,8 @@
     <bpmn:userTask id="c04_task_draft" name="Draft the change"/>
     <bpmn:userTask id="c04_task_vote" name="Members vote to adopt it"/>
     <bpmn:exclusiveGateway id="c04_gw_adopted" name="Adopted?"/>
-    <bpmn:endEvent id="c04_end_none" name="No reward — a proposal alone pays nothing"/>
-    <bpmn:serviceTask id="c04_task_bounty" name="Reward the adopted change"/>
+    <bpmn:endEvent id="c04_end_none" name="No credit — proposing alone pays nothing"/>
+    <bpmn:serviceTask id="c04_task_bounty" name="Credit the adopted change"/>
     <bpmn:serviceTask id="c04_task_record" name="Save a decision record"/>
     <bpmn:serviceTask id="c04_task_feed" name="New rule becomes a tuning version"/>
     <bpmn:endEvent id="c04_end_balance" name="C_4 tally updated"/>

@@ -27,7 +27,7 @@
   <bpmn:endEvent id="c21_end_incomplete" name="Incomplete — defer"/>
   <bpmn:serviceTask id="c21_task_credit" name="Credit the completion"/>
   <bpmn:serviceTask id="c21_task_record" name="Save a decision record"/>
-  <bpmn:serviceTask id="c21_task_close" name="Close the round so scores can publish"/>
+  <bpmn:serviceTask id="c21_task_close" name="Close the round so scores can be published"/>
   <bpmn:endEvent id="c21_end_balance" name="C_21 tally updated"/>
   <bpmn:sequenceFlow id="c21_f1" sourceRef="c21_start" targetRef="c21_task_verify"/>
   <bpmn:sequenceFlow id="c21_f2" sourceRef="c21_task_verify" targetRef="c21_gw_settled"/>

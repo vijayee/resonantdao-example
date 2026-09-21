@@ -30,9 +30,9 @@
     <bpmn:exclusiveGateway id="c03_gw_cycle" name="Is this round's window open?"/>
     <bpmn:endEvent id="c03_end_defer" name="Deferred to the next round"/>
     <bpmn:userTask id="c03_task_verify" name="Confirm the mentee's work was accepted"/>
-    <bpmn:exclusiveGateway id="c03_gw_conflict" name="Clean of staged disputes?"/>
+    <bpmn:exclusiveGateway id="c03_gw_conflict" name="Free of staged disputes?"/>
     <bpmn:endEvent id="c03_end_reject" name="Rejected — staged conflict"/>
-    <bpmn:serviceTask id="c03_task_mult" name="Pay a share of the mentee's work"/>
+    <bpmn:serviceTask id="c03_task_mult" name="Credit a share of the mentee's work"/>
     <bpmn:serviceTask id="c03_task_record" name="Save a decision record"/>
     <bpmn:endEvent id="c03_end_balance" name="C_3 tally updated"/>
     <bpmn:sequenceFlow id="c03_f1" sourceRef="c03_start" targetRef="c03_gw_cap"/>

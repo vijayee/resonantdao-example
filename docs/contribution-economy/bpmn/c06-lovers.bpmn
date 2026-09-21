@@ -25,9 +25,9 @@
     <bpmn:startEvent id="c06_start" name="A joint build is declared"/>
     <bpmn:userTask id="c06_task_declare" name="Declare who built what"/>
     <bpmn:userTask id="c06_task_review" name="Confirm it was a real joint build"/>
-    <bpmn:exclusiveGateway id="c06_gw_farm" name="Clean of staged disputes?"/>
+    <bpmn:exclusiveGateway id="c06_gw_farm" name="Free of staged disputes?"/>
     <bpmn:endEvent id="c06_end_reject" name="Rejected — staged conflict"/>
-    <bpmn:serviceTask id="c06_task_bounty" name="Split the reward by proven share"/>
+    <bpmn:serviceTask id="c06_task_bounty" name="Split the credit by proven share"/>
     <bpmn:serviceTask id="c06_task_record" name="Save a decision record"/>
     <bpmn:serviceTask id="c06_task_feed" name="Link the accepted work to Magician"/>
     <bpmn:endEvent id="c06_end_balance" name="C_6 tally updated"/>

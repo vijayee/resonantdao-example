@@ -28,11 +28,11 @@
     <bpmn:serviceTask id="c01_task_provenance" name="Check the records are genuine"/>
     <bpmn:userTask id="c01_task_acceptance" name="Two reviewers check the work"/>
     <bpmn:exclusiveGateway id="c01_gw_accepted" name="Accepted?"/>
-    <bpmn:userTask id="c01_task_scope" name="Set the reward by scope"/>
+    <bpmn:userTask id="c01_task_scope" name="Set the credit by scope"/>
     <bpmn:endEvent id="c01_end_none" name="No bounty — submission pays nothing"/>
     <bpmn:serviceTask id="c01_task_record" name="Save a decision record"/>
     <bpmn:serviceTask id="c01_task_feed_c03" name="Share accepted work with Empress"/>
-    <bpmn:endEvent id="c01_end_paid" name="Pay the builder's tally"/>
+    <bpmn:endEvent id="c01_end_paid" name="Credit the builder's tally"/>
     <bpmn:sequenceFlow id="c01_f1" sourceRef="c01_start" targetRef="c01_task_evidence"/>
     <bpmn:sequenceFlow id="c01_f2" sourceRef="c01_task_evidence" targetRef="c01_task_provenance"/>
     <bpmn:sequenceFlow id="c01_f3" sourceRef="c01_task_provenance" targetRef="c01_task_acceptance"/>

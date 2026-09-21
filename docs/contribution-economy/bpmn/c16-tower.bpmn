@@ -27,11 +27,11 @@
     <bpmn:startEvent id="c16_start" name="A crisis is spotted"/>
     <bpmn:userTask id="c16_task_verify" name="Moon verifies the crisis"/>
     <bpmn:exclusiveGateway id="c16_gw_verified" name="Is the crisis real?"/>
-    <bpmn:endEvent id="c16_end_notoken" name="No reward — spotting alone pays nothing"/>
+    <bpmn:endEvent id="c16_end_notoken" name="No credit — spotting alone pays nothing"/>
     <bpmn:exclusiveGateway id="c16_gw_cause" name="Did the responder cause it?"/>
-    <bpmn:endEvent id="c16_end_cause" name="No reward — the responder caused it"/>
-    <bpmn:userTask id="c16_task_size" name="Size the reward by severity"/>
-    <bpmn:serviceTask id="c16_task_token" name="Reward for stabilizing"/>
+    <bpmn:endEvent id="c16_end_cause" name="No credit — the responder caused it"/>
+    <bpmn:userTask id="c16_task_size" name="Size the credit by severity"/>
+    <bpmn:serviceTask id="c16_task_token" name="Credit for stabilizing"/>
     <bpmn:serviceTask id="c16_task_record" name="Save a decision record"/>
     <bpmn:serviceTask id="c16_task_feed_c13" name="Share the record with Death"/>
     <bpmn:endEvent id="c16_end_balance" name="C_16 tally updated"/>

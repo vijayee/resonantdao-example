@@ -23,7 +23,7 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="c20_start" name="End-of-round reckoning"/>
     <bpmn:userTask id="c20_task_settle" name="People settle the records"/>
-    <bpmn:exclusiveGateway id="c20_gw_unres" name="Any unresolved calls?"/>
+    <bpmn:exclusiveGateway id="c20_gw_unres" name="Any unsettled judgments?"/>
     <bpmn:serviceTask id="c20_task_pending" name="Leave open until evidence arrives"/>
     <bpmn:serviceTask id="c20_task_credit" name="Credit the settling"/>
     <bpmn:serviceTask id="c20_task_record" name="Save a decision record"/>

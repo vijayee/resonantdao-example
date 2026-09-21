@@ -25,7 +25,7 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="c00_start" name="Someone tries something new"/>
     <bpmn:userTask id="c00_task_evidence" name="Share what the first step was"/>
-    <bpmn:exclusiveGateway id="c00_gw_sybil" name="Did it pass the identity check?"/>
+    <bpmn:exclusiveGateway id="c00_gw_sybil" name="Is the entrant's identity genuine?"/>
     <bpmn:endEvent id="c00_end_sybil" name="No credit — fake identity"/>
     <bpmn:userTask id="c00_task_review" name="A reviewer checks the first step"/>
     <bpmn:exclusiveGateway id="c00_gw_crossing" name="Did the first step hold up?"/>

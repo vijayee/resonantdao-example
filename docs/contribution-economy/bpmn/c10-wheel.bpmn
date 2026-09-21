@@ -4,7 +4,7 @@
                   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
                   id="Definitions_c10" targetNamespace="http://resonantdao.com/bpmn">
-  <bpmn:process id="Process_c10" name="C_10 Wheel — Fair Cycle Completion" isExecutable="false">
+  <bpmn:process id="Process_c10" name="C_10 Wheel — Fair Round Completion" isExecutable="false">
     <bpmn:laneSet id="LaneSet_c10">
       <bpmn:lane id="c10_lane_member" name="Member">
         <bpmn:flowNodeRef>c10_start</bpmn:flowNodeRef>
@@ -29,7 +29,7 @@
     <bpmn:endEvent id="c10_end_retrial" name="Retried in the next round"/>
     <bpmn:serviceTask id="c10_task_credit" name="Credit for closing the round"/>
     <bpmn:serviceTask id="c10_task_record" name="Save a decision record"/>
-    <bpmn:serviceTask id="c10_task_fire" name="Start the scoring roundup"/>
+    <bpmn:serviceTask id="c10_task_fire" name="Start the overall scoring"/>
     <bpmn:endEvent id="c10_end_balance" name="C_10 tally updated"/>
     <bpmn:sequenceFlow id="c10_f1" sourceRef="c10_start" targetRef="c10_task_audit"/>
     <bpmn:sequenceFlow id="c10_f2" sourceRef="c10_task_audit" targetRef="c10_gw_fair"/>

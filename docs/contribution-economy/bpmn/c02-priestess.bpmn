@@ -25,7 +25,7 @@
       </bpmn:lane>
     </bpmn:laneSet>
     <bpmn:startEvent id="c02_start" name="Someone publishes a record"/>
-    <bpmn:exclusiveGateway id="c02_gw_quality" name="Lasting, credited, findable?"/>
+    <bpmn:exclusiveGateway id="c02_gw_quality" name="Lasting, attributed, findable?"/>
     <bpmn:endEvent id="c02_end_notrecord" name="Not a record — no credit"/>
     <bpmn:serviceTask id="c02_task_base" name="Credit for publishing"/>
     <bpmn:userTask id="c02_task_verify" name="A reviewer confirms each real use"/>

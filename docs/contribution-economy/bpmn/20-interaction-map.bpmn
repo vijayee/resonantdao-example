@@ -67,7 +67,7 @@
     <bpmn:sequenceFlow id="im_f6" name="crisis verification verdict" sourceRef="im_task_c18" targetRef="im_task_c16"/>
     <bpmn:sequenceFlow id="im_f7" name="check both sides accepted" sourceRef="im_task_c18" targetRef="im_task_c08"/>
     <bpmn:sequenceFlow id="im_f8" name="check resources released" sourceRef="im_task_c18" targetRef="im_task_c13"/>
-    <bpmn:sequenceFlow id="im_f9" name="student's accepted work feeds Empress" sourceRef="im_task_c01" targetRef="im_task_c03"/>
+    <bpmn:sequenceFlow id="im_f9" name="mentee's accepted work feeds Empress" sourceRef="im_task_c01" targetRef="im_task_c03"/>
     <bpmn:sequenceFlow id="im_f10" name="proven skill feeds Empress" sourceRef="im_task_c05" targetRef="im_task_c03"/>
     <bpmn:sequenceFlow id="im_f11" name="evidence a decision steered" sourceRef="im_task_c09" targetRef="im_task_c20"/>
     <bpmn:sequenceFlow id="im_f12" name="evidence a decision changed" sourceRef="im_task_c12" targetRef="im_task_c20"/>

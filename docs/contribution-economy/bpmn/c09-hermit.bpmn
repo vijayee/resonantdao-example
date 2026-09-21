@@ -28,7 +28,7 @@
     <bpmn:userTask id="c09_task_evidence" name="A reviewer checks milestone evidence"/>
     <bpmn:serviceTask id="c09_task_bounty" name="Pay at proven milestones"/>
     <bpmn:exclusiveGateway id="c09_gw_trigger" name="Is progress measured by milestones?"/>
-    <bpmn:endEvent id="c09_end_nobounty" name="No reward — length alone pays nothing"/>
+    <bpmn:endEvent id="c09_end_nobounty" name="No credit — length alone pays nothing"/>
     <bpmn:exclusiveGateway id="c09_gw_steer" name="Did the finding steer a vote?"/>
     <bpmn:userTask id="c09_task_verify" name="Confirm the finding steered a decision"/>
     <bpmn:serviceTask id="c09_task_bonus" name="Bonus when adopted"/>

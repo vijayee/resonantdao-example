@@ -24,7 +24,7 @@
         <bpmn:flowNodeRef>c13_end_balance</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="c13_start" name="Someone ends the thing"/>
+    <bpmn:startEvent id="c13_start" name="Someone ends a project"/>
     <bpmn:parallelGateway id="c13_gw_split"/>
     <bpmn:userTask id="c13_task_learning" name="Check the learning was preserved"/>
     <bpmn:userTask id="c13_task_release" name="Confirm resources were released"/>
