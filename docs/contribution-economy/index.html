@@ -72,11 +72,13 @@ const nav = document.getElementById('nav');
 let viewer = null;
 
 async function loadData() {
-  const d = await (await fetch('diagrams.json')).json();
+  const r = await fetch('diagrams.json');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const d = await r.json();
   buildNav(d);
   const initial = location.hash ? location.hash.slice(1) : 'overview';
   select(d, initial);
-  window.addEventListener('hashchange', () => select(d, location.hash.slice(1)));
+  window.addEventListener('hashchange', () => select(d, location.hash.slice(1) || 'overview'));
   document.getElementById('menu-btn').addEventListener('click', () => nav.classList.toggle('open'));
 }
 
@@ -87,7 +89,7 @@ function buildNav(d) {
     const h = document.createElement('h3');
     h.textContent = title;
     nav.appendChild(h);
-    const items = id === 'overview' ? [{ id: 'overview', title: 'How contribution works here' }]
+    const items = id === 'overview' ? [{ id: 'overview', title: d.overview.title }]
                                     : d.diagrams.filter(x => groupOf(x.badge) === id);
     for (const item of items) {
       const a = document.createElement('a');
@@ -124,10 +126,10 @@ function renderOverview(o) {
 
 function renderDiagram(diag) {
   main.innerHTML =
-    `<h2>${esc(diag.title)} <span class="badge ${diag.badge}">${diag.badge === 'proposed' ? 'proposed interpretation' : diag.badge}</span></h2>` +
+    `<h2>${esc(diag.title)} <span class="badge ${esc(diag.badge)}">${diag.badge === 'proposed' ? 'proposed interpretation' : diag.badge}</span></h2>` +
     `<p class="desc">${esc(diag.description)}</p>` +
     (diag.whoActs.length
-      ? `<ul class="who"><b>Who has to act:</b>` + diag.whoActs.map(w => `<li>${esc(w)}</li>`).join('') + `</ul>` : '') +
+      ? `<p class="who"><b>Who has to act:</b></p><ul class="who">` + diag.whoActs.map(w => `<li>${esc(w)}</li>`).join('') + `</ul>` : '') +
     `<div class="controls"><button id="btn-zin">Zoom +</button><button id="btn-zout">Zoom −</button><button id="btn-fit">Fit</button><button id="btn-dl">Download SVG</button></div>` +
     `<div class="canvas" id="canvas"></div>` +
     (diag.glossary && diag.glossary.length
@@ -135,10 +137,11 @@ function renderDiagram(diag) {
         diag.glossary.map(g => `<tr><td>${esc(g.plain)}</td><td class="technical">${esc(g.technical)}</td></tr>`).join('') +
         `</tbody></table>` : '');
   const canvas = document.getElementById('canvas');
-  viewer = new BpmnJS({ container: canvas });
+  const v = new BpmnJS({ container: canvas });
+  viewer = v;
   fetch(diag.file).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
-    .then(xml => viewer.importXML(xml))
-    .catch(err => { canvas.innerHTML = `<p class="error">Failed to render: ${esc(err.message)}</p>`; });
+    .then(xml => { if (viewer !== v) return; return v.importXML(xml); })
+    .catch(err => { if (viewer !== v) return; canvas.innerHTML = `<p class="error">Failed to render: ${esc(err.message)}</p>`; });
   document.getElementById('btn-zin').addEventListener('click', () => {
     const c = viewer.get('canvas'); c.zoom(c.zoom() * 1.25);
   });
@@ -154,7 +157,7 @@ function renderDiagram(diag) {
       a.href = URL.createObjectURL(blob);
       a.download = diag.file.replace('bpmn/', '').replace('.bpmn', '.svg');
       a.click();
-      URL.revokeObjectURL(a.href);
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch (err) { /* diagram failed to load; nothing to download */ }
   });
 }
