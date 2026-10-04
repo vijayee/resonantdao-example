@@ -377,3 +377,32 @@ flowchart LR
 ## Badge note
 
 The 10 dimensions the source page only names (Chariot, Emperor, Lovers, Wheel, Justice, Temperance, Star, Sun, Judgement, World) are fully modeled here as proposed interpretations pending DAO ratification; the 12 named-and-specified dimensions and 3 core diagrams derive directly from the spec page.
+
+## Binding to the reference implementation (2026-09-30)
+
+The reference app in this repo now pays `$RES` through contribution workflow
+outcome rules instead of timed accrual:
+
+- Implemented in `shared/src/handlers.ts`: `submit_contribution` (master
+  lifecycle record + explanation record), `verify_contribution` (schema-driven
+  lifecycle step: C_18 Moon verifier credit per completed check either
+  direction; final-requirement acceptance pays submitter outcome bounties and
+  advances the lifecycle; rejection terminates immediately), and
+  `settle_contribution` (submitter's terminal acknowledgment).
+- Step schemas live in `shared/src/contribution.ts` (`DIMENSIONS` registry +
+  `SCHEMAS` map — phase 1 wires C_1 Magician, C_2 Priestess, C_18 Moon as
+  submit→verify→settle; default submit→verify elsewhere). Role-based views are
+  pure projections in `shared/src/wizard.ts` (`wizardModel`); the wizard UI
+  renders classify/describe/evidence panes and stepper cards per role.
+- Evidence content lives out-of-band in a content-addressed WaveDB store
+  (`put_content`/`get_content` by sha-256); CRABS carries only hash pointers.
+- Timed accrual (`distributeTokens`), the `set_token_config` custodian op, and
+  the initial seed grant are deleted; voting spends the `$RES` balance with the
+  same quadratic mechanics.
+- Deferred (open issues, invariants not yet honored end-to-end): multi-party
+  step modes (C_8 all-parties), tiered verification (Tier 1 random audits,
+  Tier 2 dual-reviewer with conflict-of-interest checks, Tier 3 appeal panel),
+  harm checks, retrieval bonuses (C_2 usage bonus), round spine C_10/C_20/C_21
+  and `$RCT` aggregation, null-vs-verified-zero preservation in the 22-vector,
+  reviewer-capture hardening, and the payload-attested dims/submitter trust in
+  `verify_contribution`.
