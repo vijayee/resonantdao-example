@@ -25,6 +25,7 @@ export const POLICIES = {
   remove_member: 'role:custodian',
   submit_contribution: 'role:member',
   verify_contribution: 'role:member',
+  settle_contribution: 'role:member',
 } as const;
 
 export const STATE_NAMES = {

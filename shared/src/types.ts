@@ -94,6 +94,12 @@ export interface VerifyContributionPayload {
   reason: string;
 }
 
+export interface SettleContributionPayload {
+  contributionId: string;
+  submitter: string;
+  reason: string;
+}
+
 export type ClientMessage =
   | { kind: 'register'; username: string; publicKeyHex: string }
   | { kind: 'login'; username: string }

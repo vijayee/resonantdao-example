@@ -1,5 +1,5 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
+import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
   CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
@@ -215,6 +215,57 @@ export function makeVerifyContributionHandler(
       schemaVersion: schema.schemaVersion,
     };
     state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
+    return 0;
+  };
+}
+
+// Terminal lifecycle settle step (op 'settle_contribution'): the submitter
+// acknowledges the verified outcome; the lifecycle finalizes as accepted. No
+// payments — every payout already fired at the final verify completion.
+// Positional validation (documented limitation): handlers cannot read the
+// fact record's dims, so the settle step is validated by position — the
+// settle step exists only as the terminal step (index 2) in phase-1 schemas.
+// Future multi-step schemas will pass dims like verify does to locate the
+// settle step in the schema instead of pinning the register index.
+export function makeSettleContributionHandler(
+  _node: { addRegister(name: string, initial?: number): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: SettleContributionPayload = JSON.parse(op.payload || '{}');
+    if (
+      !isNonEmptyString(payload.contributionId) ||
+      !isNonEmptyString(payload.submitter) ||
+      !isNonEmptyString(payload.reason)
+    ) {
+      return -1;
+    }
+    if (payload.submitter !== op.signerId) {
+      return -1; // settlement is the submitter's final acknowledgment
+    }
+    if (!state.setContains(STATE_NAMES.contributions, payload.contributionId)) {
+      return -1;
+    }
+    const statusReg = CONTRIB_NAMES.status(payload.contributionId);
+    if (state.getRegister(statusReg) !== 0) {
+      return -1; // already accepted/rejected, or never submitted
+    }
+    if (state.getRegister(CONTRIB_NAMES.step(payload.contributionId)) !== 2) {
+      return -1;
+    }
+
+    const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, 'settle');
+    state.incrementPNCounter(doneReg, 1, op.signerId);
+    state.setRegister(statusReg, 1, op.signerId);
+
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const explanation = {
+      contributionId: payload.contributionId,
+      stepId: 'settle',
+      settlement: { settler: op.signerId, reason: payload.reason, at: nowMs },
+      calibrationVersion: CALIBRATION_VERSION,
+    };
+    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(explanation), op.signerId);
     return 0;
   };
 }

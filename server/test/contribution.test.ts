@@ -56,9 +56,9 @@ import {
   CONTENT_LIMITS, SCHEMA_VERSION, SCHEMAS, DEFAULT_SCHEMA,
   schemaForDims, validateEvidenceRef, stepPaymentsFor,
 } from '../../shared/src/contribution';
-import { makeSubmitContributionHandler, makeVerifyContributionHandler } from '../../shared/src/handlers';
+import { makeSettleContributionHandler, makeSubmitContributionHandler, makeVerifyContributionHandler } from '../../shared/src/handlers';
 import { CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
-import { ContributionPayload, VerifyContributionPayload } from '../../shared/src/types';
+import { ContributionPayload, SettleContributionPayload, VerifyContributionPayload } from '../../shared/src/types';
 import { HandlerOperation, HandlerState } from 'crabs-wasm';
 
 class MockNode {
@@ -373,5 +373,69 @@ describe('verify_contribution handler (schema-driven)', () => {
     expect(verifyRecord.payments['alice']).toBe(RES_CONFIG.buildingBounty);
     expect(verifyRecord.calibrationVersion).toBe('v1');
     expect(verifyRecord.schemaVersion).toBe('v1');
+  });
+});
+
+function settleOp(payload: Partial<SettleContributionPayload>, signer = 'alice'): SettleContributionPayload {
+  return {
+    contributionId: 'c-1', submitter: 'alice', reason: 'recorded my outcome',
+    ...payload,
+  } as SettleContributionPayload;
+}
+
+describe('settle_contribution handler', () => {
+  function setupAtSettle(node: MockNode, state: MockState, contributeId: string) {
+    setupSubmitted(state, node, 'alice', contributeId);
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob',
+      verifyOp({ contributionId: contributeId, pass: true, reason: 'ok' })))).toBe(0);
+  }
+
+  it('the submitter settles after verification, finalizing as accepted', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupAtSettle(node, state, 'c-settle');
+    const settle = makeSettleContributionHandler(node);
+    expect(run(settle, state, makeOp('settle_contribution', 'alice',
+      settleOp({ contributionId: 'c-settle' })))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-settle'))).toBe(1);
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-settle', 'settle'))).toBe(1);
+    const explanations = state.allSetElements(CONTRIB_NAMES.explanations('c-settle'));
+    const settleRecord = JSON.parse(explanations.find((e) => e.includes('"settlement"'))!);
+    expect(settleRecord.stepId).toBe('settle');
+    expect(settleRecord.settlement.settler).toBe('alice');
+    expect(settleRecord.calibrationVersion).toBe('v1');
+  });
+
+  it('rejects settlement by a non-submitter, at the wrong step, or twice', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupAtSettle(node, state, 'c-guard');
+    const settle = makeSettleContributionHandler(node);
+    expect(run(settle, state, makeOp('settle_contribution', 'bob',
+      settleOp({ contributionId: 'c-guard', submitter: 'alice', reason: 'not mine' })))).toBe(-1);
+    expect(run(settle, state, makeOp('settle_contribution', 'alice',
+      settleOp({ contributionId: 'c-guard', reason: 'ok' })))).toBe(0);
+    expect(run(settle, state, makeOp('settle_contribution', 'alice',
+      settleOp({ contributionId: 'c-guard', reason: 'again' })))).toBe(-1);
+  });
+
+  it('rejects settle at the verify step and for the default-schema lifecycle', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node, 'alice', 'c-nosettle', { '9': 1 });
+    const settle = makeSettleContributionHandler(node);
+    // default schema: terminal is verify (index 1) ⇒ settle invalid at index 1
+    expect(run(settle, state, makeOp('settle_contribution', 'alice',
+      settleOp({ contributionId: 'c-nosettle', reason: 'early' })))).toBe(-1);
+  });
+
+  it('rejects settle without a written reason', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupAtSettle(node, state, 'c-reason');
+    const settle = makeSettleContributionHandler(node);
+    expect(run(settle, state, makeOp('settle_contribution', 'alice',
+      settleOp({ contributionId: 'c-reason', reason: '' })))).toBe(-1);
   });
 });
