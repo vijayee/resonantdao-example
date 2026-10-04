@@ -1567,6 +1567,8 @@ Replace the phase-1 contributions list rendering with a `renderContributions()` 
 
 Both actions reuse the exact try/submit/safeExecuteRemote/finally shape shown in Task 9 Step 2 of the phase-1 plan (see `onSubmitContribution` above) — copy that error/success handling verbatim for `onVerifyContribution`/`onSettleContribution`, replacing the payload with the one shown in this bullet. Guard rails client-side: the verify form refuses to send when `submitter === wallet.username`; the settle button only renders when `model.steps[currentStepIndex]?.op === 'settle_contribution'`.
 
+> **Plan amendment (2026-10-04, execution):** the "small inline form" for verify/settle was simplified to `confirm()` + `prompt()` for phase 1 — all guard rails (no-self, required written reason, pass flag) are enforced identically; the inline form is deferred to the UI-polish phase together with the other deferred invariants.
+
 Add `renderContributions()` to the demo-clock refresh list (`startDemoClock`, after `renderCustodianControls()`), and remove any phase-1 verify UI remnants (`confirm`/`prompt` flow).
 
 - [ ] **Step 4: Build**
