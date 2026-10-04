@@ -1,16 +1,16 @@
 import { loadCRABS } from './wasm';
 import {
-  CONFIG_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, runoffId,
+  CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, POLICIES, RES_NAMES, STATE_NAMES, TOKEN_NAMES, runoffId,
 } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import {
   CastBallotPayload,
   CastRunoffVotePayload,
+  ContributionPayload,
   ExecutePayload,
   FinalizeElectionPayload,
   ProposalPayload,
   RemoveMemberPayload,
-  SetTokenConfigPayload,
   StartElectionPayload,
   SyncRolesPayload,
   VotePayload,
@@ -23,8 +23,10 @@ import {
   makeExecuteHandler,
   makeFinalizeElectionHandler,
   makeRemoveMemberHandler,
-  makeSetTokenConfigHandler,
+  makeSettleContributionHandler,
   makeStartElectionHandler,
+  makeSubmitContributionHandler,
+  makeVerifyContributionHandler,
   makeVoteHandler,
 } from '@shared/handlers';
 
@@ -63,9 +65,8 @@ export class BrowserDao {
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addORSet(STATE_NAMES.executedProposals);
+    this.node.addORSet(STATE_NAMES.contributions);
     this.node.addRegister('time_now', 0);
-    this.node.addRegister(CONFIG_NAMES.distributionInterval(), 0);
-    this.node.addRegister(CONFIG_NAMES.distributionRate(), 0);
 
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);
@@ -81,22 +82,26 @@ export class BrowserDao {
     this.node.setPolicy('cast_ballot', POLICIES.cast_ballot);
     this.node.setPolicy('finalize_election', POLICIES.finalize_election);
     this.node.setPolicy('cast_runoff_vote', POLICIES.cast_runoff_vote);
-    this.node.setPolicy('set_token_config', POLICIES.set_token_config);
     this.node.setPolicy('remove_member', POLICIES.remove_member);
+    this.node.setPolicy('submit_contribution', POLICIES.submit_contribution);
+    this.node.setPolicy('verify_contribution', POLICIES.verify_contribution);
+    this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
 
     this.node.registerHandlerJs('start_election', makeStartElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('cast_ballot', makeCastBallotHandler({ getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('finalize_election', makeFinalizeElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('cast_runoff_vote', makeCastRunoffVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
-    this.node.registerHandlerJs('set_token_config', makeSetTokenConfigHandler({ getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
+    this.node.registerHandlerJs('submit_contribution', makeSubmitContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('verify_contribution', makeVerifyContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('sync_roles', () => 0);
 
     this.node.registerUser(username, this.signingKey.publicKeyHex());
     // PoC bootstrap: the client locally grants its own membership attributes.
     this.node.grantRole(username, 'role', 'member', this.adminId);
     this.node.grantRole(username, 'reputation', '1', this.adminId);
-    this.initTokenRegisters(username);
+    this.initResRegisters(username);
     try { this.node.setAdd(STATE_NAMES.members, username, this.signingKey.publicKeyHex()); } catch (err) { /* ignore duplicate */ }
   }
 
@@ -132,10 +137,6 @@ export class BrowserDao {
     return this.signAndSerialize('cast_runoff_vote', userId, JSON.stringify(payload));
   }
 
-  async setTokenConfig(userId: string, payload: SetTokenConfigPayload): Promise<Uint8Array> {
-    return this.signAndSerialize('set_token_config', userId, JSON.stringify(payload));
-  }
-
   async removeMember(userId: string, payload: RemoveMemberPayload): Promise<Uint8Array> {
     return this.signAndSerialize('remove_member', userId, JSON.stringify(payload));
   }
@@ -145,16 +146,15 @@ export class BrowserDao {
     this.node.registerUser(username, publicKeyHex);
     this.node.grantRole(username, 'role', 'member', this.adminId);
     this.node.grantRole(username, 'reputation', '1', this.adminId);
-    this.initTokenRegisters(username);
+    this.initResRegisters(username);
     try { this.node.setAdd(STATE_NAMES.members, username, publicKeyHex); } catch (err) { /* ignore duplicate */ }
     // Seed the role-change baseline so sync_roles target versions map
     // one-to-one to the key-version bumps applied by the server.
     this.roleChangeCount.set(username, keyVersion);
   }
 
-  private initTokenRegisters(username: string) {
-    try { this.node.addRegister(TOKEN_NAMES.balance(username), TOKEN_CONFIG.initialTokens); } catch (err) { /* ignore duplicate */ }
-    try { this.node.addRegister(TOKEN_NAMES.lastDistribution(username), Date.now()); } catch (err) { /* ignore duplicate */ }
+  private initResRegisters(username: string) {
+    try { this.node.addRegister(RES_NAMES.balance(username), 0); } catch (err) { /* ignore duplicate */ }
   }
 
   private async signAndSerialize(type: string, userId: string, payloadJson: string): Promise<Uint8Array> {
@@ -171,6 +171,7 @@ export class BrowserDao {
   }
 
   private proposals = new Map<string, ProposalPayload>();
+  private contributions = new Map<string, { record: ContributionPayload; submitter: string; submittedAt: number }>();
   private elections = new Map<string, { electionId: string; candidates: string[]; isRunoff: boolean; seats: number }>();
   custodians: string[] = [];
   private roleChangeCount = new Map<string, number>();
@@ -192,6 +193,7 @@ export class BrowserDao {
       if (proposal) {
         this.proposals.set(proposal.proposalId, proposal);
       }
+      await this.mirrorContributionState(op);
       await this.mirrorElectionState(op);
     } finally {
       op.destroy();
@@ -241,6 +243,44 @@ export class BrowserDao {
         }
       }
     }
+  }
+
+  private async mirrorContributionState(op: any): Promise<void> {
+    if (op.type !== 'submit_contribution' && op.type !== 'verify_contribution' && op.type !== 'settle_contribution') {
+      return;
+    }
+    let payload: any = null;
+    try {
+      const raw = op.payload;
+      const json = typeof raw === 'string' ? raw : new TextDecoder().decode(raw as Uint8Array);
+      payload = JSON.parse(json.replace(/\0$/, ''));
+    } catch {
+      return;
+    }
+    if (op.type === 'submit_contribution') {
+      if (typeof payload.contributionId === 'string') {
+        this.contributions.set(payload.contributionId, {
+          record: payload as ContributionPayload,
+          submitter: op.signerId,
+          submittedAt: this.getNodeTimeMs(),
+        });
+      }
+      return;
+    }
+    const entry = this.contributions.get(payload.contributionId);
+    if (entry) {
+      if (op.type === 'verify_contribution') {
+        (entry as any).verifiedBy = op.signerId;
+        (entry as any).verdict = payload.pass;
+        (entry as any).verdictReason = payload.reason;
+      } else {
+        (entry as any).settledBy = op.signerId;
+      }
+    }
+  }
+
+  getContributions(): Array<{ record: ContributionPayload; submitter: string; submittedAt: number }> {
+    return Array.from(this.contributions.values());
   }
 
   private async mirrorElectionState(op: any): Promise<void> {
@@ -302,8 +342,26 @@ export class BrowserDao {
     return this.node.setContains(STATE_NAMES.executedProposals, id);
   }
 
-  getTokenBalance(username: string): number {
-    return this.node.getRegister(`tokens:${username}`) || 0;
+  getResBalance(username: string): number {
+    return this.node.getRegister(RES_NAMES.balance(username)) || 0;
+  }
+
+  getDimensionBalance(username: string, dimIndex: number): number {
+    return this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, dimIndex)) || 0;
+  }
+
+  getContributionStatus(contributionId: string): 'pending' | 'accepted' | 'rejected' | 'unknown' {
+    if (!this.node.setContains(STATE_NAMES.contributions, contributionId)) return 'unknown';
+    const status = this.node.getRegister(CONTRIB_NAMES.status(contributionId));
+    return status === 1 ? 'accepted' : status === 2 ? 'rejected' : 'pending';
+  }
+
+  getContributionStepIndex(contributionId: string): number {
+    return this.node.getRegister(CONTRIB_NAMES.step(contributionId)) || 0;
+  }
+
+  getContributionStepDone(contributionId: string, stepId: string): number {
+    return this.node.getPNCounter(CONTRIB_NAMES.stepDone(contributionId, stepId)) || 0;
   }
 
   getProposalType(id: string): 'direct' | 'quadratic' | null {
@@ -373,13 +431,6 @@ export class BrowserDao {
       }
     }
     return (used * (used + 1) * (2 * used + 1)) / 6;
-  }
-
-  getDistributionConfig(): { intervalMs: number; rate: number } {
-    return {
-      intervalMs: this.node.getRegister(CONFIG_NAMES.distributionInterval()) || TOKEN_CONFIG.distributionIntervalMs,
-      rate: this.node.getRegister(CONFIG_NAMES.distributionRate()) || TOKEN_CONFIG.distributionRate,
-    };
   }
 
   getNodeTimeMs(): number {
