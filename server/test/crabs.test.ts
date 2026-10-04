@@ -1,5 +1,6 @@
 import { KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
+import { CONTRIB_NAMES } from '../../shared/src/policies';
 import { DaoNode } from '../src/crabs';
 
 describe('DaoNode', () => {
@@ -63,6 +64,7 @@ describe('DaoNode', () => {
       evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
       schemaVersion: 'v1',
     }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('c-wire-1'))).toBe(1); // real wasm: addRegister initial persists
     expect(dao.isContributionPending('c-wire-1')).toBe(true);
     expect(dao.getContributionStatus('c-wire-1')).toBe('pending');
     // Dimension tallies are only written at settlement; before that the
