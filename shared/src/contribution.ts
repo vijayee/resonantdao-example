@@ -74,3 +74,134 @@ export function paymentFor(dimIndex: number, match: number): number {
   if (dimIndex === 2) return RES_CONFIG.recordingBaseCredit * match;
   return 0; // C_18 pays the verifier per completed check, not the submitter
 }
+
+// --- Evidence references (content lives out-of-band; CRABS holds pointers) ---
+
+export interface EvidenceRef {
+  hash: string; // sha-256 hex of the content OR of the pointer text
+  uri: string;  // 'content://{hash}' for stored objects, otherwise a pointer (URL, id, …)
+  mediaType: string;
+  size: number; // bytes (0 allowed for pure pointers)
+}
+
+export const CONTENT_LIMITS = {
+  maxObjectBytes: 8 * 1024 * 1024,
+  maxInlineEvidenceChars: 2000,
+} as const;
+
+const HASH_RE = /^[0-9a-f]{64}$/;
+
+export function validateEvidenceRef(ref: unknown): ref is EvidenceRef {
+  if (!ref || typeof ref !== 'object') return false;
+  const r = ref as Partial<EvidenceRef>;
+  return (
+    typeof r.hash === 'string' && HASH_RE.test(r.hash) &&
+    typeof r.uri === 'string' && r.uri !== '' && r.uri.length <= CONTENT_LIMITS.maxInlineEvidenceChars &&
+    typeof r.mediaType === 'string' && r.mediaType !== '' && r.mediaType.length <= 64 &&
+    typeof r.size === 'number' && Number.isInteger(r.size) && r.size >= 0
+  );
+}
+
+// --- Step schemas (static code on every replica — handlers consult these) ---
+
+export type StepActor = 'submitter' | 'verifier' | 'custodian' | 'member';
+export type PayRule = 'per-dims' | 'per-check' | 'flat';
+export type RequirementMode = 'single' | 'all-parties' | 'majority';
+
+export interface StepDef {
+  stepId: string;
+  title: string;
+  requirement: { mode: RequirementMode; count: number };
+  actors: StepActor[];
+  op: 'submit_contribution' | 'verify_contribution' | 'settle_contribution';
+  pays?: Array<{ who: 'submitter' | 'actor'; rule: PayRule; amount?: number }>;
+  antiGaming?: Array<'no-self' | 'written-reason' | 'both-parties'>;
+}
+
+export interface DimensionSchema {
+  dimIndex: number;      // -1 = default schema for unwired dimensions
+  schemaVersion: string;
+  steps: StepDef[];
+}
+
+export const SCHEMA_VERSION = 'v1' as const;
+
+const SUBMIT_STEP: StepDef = {
+  stepId: 'submit',
+  title: 'Submission',
+  requirement: { mode: 'single', count: 1 },
+  actors: ['submitter'],
+  op: 'submit_contribution',
+};
+
+const VERIFY_STEP: StepDef = {
+  stepId: 'verify',
+  title: 'Verification',
+  requirement: { mode: 'single', count: 1 },
+  actors: ['verifier'],
+  op: 'verify_contribution',
+  pays: [
+    { who: 'actor', rule: 'per-check' },     // C_18 Moon: per completed check, either direction
+    { who: 'submitter', rule: 'per-dims' },  // class-specific outcome bounties on acceptance
+  ],
+  antiGaming: ['no-self', 'written-reason'],
+};
+
+const SETTLE_STEP: StepDef = {
+  stepId: 'settle',
+  title: 'Settlement',
+  requirement: { mode: 'single', count: 1 },
+  actors: ['submitter'],
+  op: 'settle_contribution',
+  antiGaming: ['written-reason'],
+};
+
+export const DEFAULT_SCHEMA: DimensionSchema = {
+  dimIndex: -1,
+  schemaVersion: SCHEMA_VERSION,
+  steps: [SUBMIT_STEP, VERIFY_STEP],
+};
+
+export const SCHEMAS: Map<number, DimensionSchema> = new Map();
+for (const dimIndex of [1, 2, 18]) {
+  SCHEMAS.set(dimIndex, {
+    dimIndex,
+    schemaVersion: SCHEMA_VERSION,
+    steps: [SUBMIT_STEP, VERIFY_STEP, SETTLE_STEP],
+  });
+}
+
+export function schemaForDims(dims: Record<string, number>): DimensionSchema {
+  const wired = Object.keys(dims)
+    .map(Number)
+    .filter((i) => SCHEMAS.has(i))
+    .sort((a, b) => a - b);
+  return wired.length > 0 ? SCHEMAS.get(wired[0])! : DEFAULT_SCHEMA;
+}
+
+// Payment helper: who receives what when a verify step completes.
+// - 'per-check' pays the actor on EVERY completion of the check (C_18: pays either direction; callers apply it per completion).
+// - 'per-dims'/'flat' amounts are emitted once and applied by the caller at the
+//   step's final requirement completion.
+export function stepPaymentsFor(
+  step: StepDef,
+  dims: Record<string, number>,
+  parties: { actor: string; submitter: string }
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const pay of step.pays ?? []) {
+    const target = pay.who === 'actor' ? parties.actor : parties.submitter;
+    let amount = 0;
+    if (pay.rule === 'per-check') {
+      amount = pay.amount ?? RES_CONFIG.verificationCheckCredit;
+    } else if (pay.rule === 'per-dims') {
+      for (const [dimKey, match] of Object.entries(dims)) {
+        amount += paymentFor(Number(dimKey), match);
+      }
+    } else {
+      amount = pay.amount ?? 0;
+    }
+    out.set(target, (out.get(target) ?? 0) + amount);
+  }
+  return out;
+}

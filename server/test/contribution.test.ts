@@ -51,3 +51,64 @@ describe('contribution registry', () => {
     expect(CALIBRATION_VERSION).toBe('v1');
   });
 });
+
+import {
+  CONTENT_LIMITS, SCHEMA_VERSION, SCHEMAS, DEFAULT_SCHEMA,
+  schemaForDims, validateEvidenceRef, stepPaymentsFor,
+} from '../../shared/src/contribution';
+
+describe('step schemas', () => {
+  it('version is v1 and content limits are set', () => {
+    expect(SCHEMA_VERSION).toBe('v1');
+    expect(CONTENT_LIMITS.maxObjectBytes).toBe(8 * 1024 * 1024);
+    expect(CONTENT_LIMITS.maxInlineEvidenceChars).toBe(2000);
+  });
+
+  it('wires C_1, C_2, C_18 as 3-step submit->verify->settle schemas', () => {
+    for (const dim of [1, 2, 18]) {
+      const schema = SCHEMAS.get(dim)!;
+      expect(schema.dimIndex).toBe(dim);
+      expect(schema.schemaVersion).toBe('v1');
+      expect(schema.steps.map((s) => s.stepId)).toEqual(['submit', 'verify', 'settle']);
+      expect(schema.steps[0].op).toBe('submit_contribution');
+      expect(schema.steps[1].op).toBe('verify_contribution');
+      expect(schema.steps[2].op).toBe('settle_contribution');
+      expect(schema.steps[1].actors).toContain('verifier');
+      expect(schema.steps[1].antiGaming).toContain('no-self');
+      expect(schema.steps[1].antiGaming).toContain('written-reason');
+    }
+  });
+
+  it('defines a 2-step default schema for unwired dimensions', () => {
+    expect(DEFAULT_SCHEMA.steps.map((s) => s.stepId)).toEqual(['submit', 'verify']);
+    expect(schemaForDims({ '9': 1 }).dimIndex).toBe(-1);
+    expect(schemaForDims({ '9': 1 })).toBe(DEFAULT_SCHEMA);
+  });
+
+  it('resolves the schema of the lowest wired dimIndex (deterministic priority)', () => {
+    expect(schemaForDims({ '1': 0.5, '2': 1 }).dimIndex).toBe(1);
+    expect(schemaForDims({ '18': 1, '2': 1 }).dimIndex).toBe(2);
+    expect(schemaForDims({ '18': 1 }).dimIndex).toBe(18);
+  });
+
+  it('verify steps pay the actor per check and the submitter per dims', () => {
+    const step = SCHEMAS.get(1)!.steps[1];
+    const pays = stepPaymentsFor(step, { '1': 1, '2': 0.5 },
+      { actor: 'bob', submitter: 'alice' });
+    expect(pays.get('bob')).toBe(RES_CONFIG.verificationCheckCredit);
+    expect(pays.get('alice')).toBe(RES_CONFIG.buildingBounty * 1 + RES_CONFIG.recordingBaseCredit * 0.5);
+  });
+
+  describe('validateEvidenceRef', () => {
+    const good = { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 };
+    it('accepts well-formed refs', () => expect(validateEvidenceRef(good)).toBe(true));
+    it('rejects malformed refs', () => {
+      expect(validateEvidenceRef({ ...good, hash: 'zz' })).toBe(false);
+      expect(validateEvidenceRef({ ...good, uri: '' })).toBe(false);
+      expect(validateEvidenceRef({ ...good, mediaType: '' })).toBe(false);
+      expect(validateEvidenceRef({ ...good, size: -1 })).toBe(false);
+      expect(validateEvidenceRef({ ...good, hash: 'zz'.repeat(32) })).toBe(false);
+      expect(validateEvidenceRef(null)).toBe(false);
+    });
+  });
+});
