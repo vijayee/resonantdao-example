@@ -30,6 +30,9 @@ describe('contribution registry', () => {
       expect(isValidDims({ '1.5': 1 })).toBe(false);
       expect(isValidDims({ '1': 0 })).toBe(false);
       expect(isValidDims({ '1': 2 })).toBe(false);
+      expect(isValidDims({ '01': 1 })).toBe(false);
+      expect(isValidDims({ '1': Infinity })).toBe(false);
+      expect(isValidDims({ '1': -0.5 })).toBe(false);
       expect(isValidDims([1, 2])).toBe(false);
       expect(isValidDims(null)).toBe(false);
     });
