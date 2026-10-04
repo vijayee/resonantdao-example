@@ -12,6 +12,8 @@ import {
   ProposalPayload,
   RemoveMemberPayload,
   StartElectionPayload,
+  SettleContributionPayload,
+  VerifyContributionPayload,
   SyncRolesPayload,
   VotePayload,
 } from '@shared/types';
@@ -29,6 +31,16 @@ import {
   makeVerifyContributionHandler,
   makeVoteHandler,
 } from '@shared/handlers';
+
+export interface ContributionMirrorEntry {
+  record: ContributionPayload;
+  submitter: string;
+  submittedAt: number;
+  verifiedBy?: string;
+  verdict?: boolean;
+  verdictReason?: string;
+  settledBy?: string;
+}
 
 export class BrowserDao {
   private Node: any;
@@ -137,6 +149,18 @@ export class BrowserDao {
     return this.signAndSerialize('cast_runoff_vote', userId, JSON.stringify(payload));
   }
 
+  async submitContribution(userId: string, payload: ContributionPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('submit_contribution', userId, JSON.stringify(payload));
+  }
+
+  async verifyContribution(userId: string, payload: VerifyContributionPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('verify_contribution', userId, JSON.stringify(payload));
+  }
+
+  async settleContribution(userId: string, payload: SettleContributionPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('settle_contribution', userId, JSON.stringify(payload));
+  }
+
   async removeMember(userId: string, payload: RemoveMemberPayload): Promise<Uint8Array> {
     return this.signAndSerialize('remove_member', userId, JSON.stringify(payload));
   }
@@ -171,7 +195,7 @@ export class BrowserDao {
   }
 
   private proposals = new Map<string, ProposalPayload>();
-  private contributions = new Map<string, { record: ContributionPayload; submitter: string; submittedAt: number }>();
+  private contributions = new Map<string, ContributionMirrorEntry>();
   private elections = new Map<string, { electionId: string; candidates: string[]; isRunoff: boolean; seats: number }>();
   custodians: string[] = [];
   private roleChangeCount = new Map<string, number>();
@@ -270,16 +294,16 @@ export class BrowserDao {
     const entry = this.contributions.get(payload.contributionId);
     if (entry) {
       if (op.type === 'verify_contribution') {
-        (entry as any).verifiedBy = op.signerId;
-        (entry as any).verdict = payload.pass;
-        (entry as any).verdictReason = payload.reason;
+        entry.verifiedBy = op.signerId;
+        entry.verdict = payload.pass;
+        entry.verdictReason = payload.reason;
       } else {
-        (entry as any).settledBy = op.signerId;
+        entry.settledBy = op.signerId;
       }
     }
   }
 
-  getContributions(): Array<{ record: ContributionPayload; submitter: string; submittedAt: number }> {
+  getContributions(): ContributionMirrorEntry[] {
     return Array.from(this.contributions.values());
   }
 

@@ -1,3 +1,4 @@
+import { base64ToBytes, bytesToBase64 } from './dao';
 import {
   ClientMessage,
   EncryptedSnapshot,
@@ -23,10 +24,16 @@ const SERVER_MESSAGE_KINDS: ServerMessage['kind'][] = [
   'broadcast',
   'error',
   'members',
+  'content_stored',
+  'content',
 ];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function isEncryptedSnapshot(value: unknown): value is EncryptedSnapshot {
@@ -98,6 +105,14 @@ function isServerMessage(value: unknown): value is ServerMessage {
       return typeof value.message === 'string';
     case 'members':
       return Array.isArray(value.users) && value.users.every(isPublicUser);
+    case 'content_stored':
+      return isNonEmptyString(value.hash);
+    case 'content':
+      return (
+        isNonEmptyString(value.hash) &&
+        typeof value.mediaType === 'string' &&
+        typeof value.bytesBase64 === 'string'
+      );
     default:
       return false;
   }
@@ -266,5 +281,20 @@ export class ServerClient {
 
   async putSnapshot(snapshot: EncryptedSnapshot): Promise<void> {
     await this.send({ kind: 'put_snapshot', snapshot });
+  }
+
+  async putContent(bytes: Uint8Array, mediaType: string): Promise<string> {
+    await this.send({ kind: 'put_content', bytesBase64: bytesToBase64(bytes), mediaType });
+    const msg = await this.waitFor('content_stored', 30000, 'error');
+    return (msg as { kind: 'content_stored'; hash: string }).hash;
+  }
+
+  // A cache miss is reported as a content reply with empty bytesBase64 (not an error).
+  async getContent(hash: string): Promise<{ mediaType: string; bytes: Uint8Array } | null> {
+    await this.send({ kind: 'get_content', hash });
+    const msg = await this.waitFor('content', 30000, 'error');
+    const content = msg as { kind: 'content'; hash: string; mediaType: string; bytesBase64: string };
+    if (!content.bytesBase64) return null;
+    return { mediaType: content.mediaType, bytes: base64ToBytes(content.bytesBase64) };
   }
 }
