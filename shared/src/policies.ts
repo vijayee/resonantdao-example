@@ -1,5 +1,14 @@
 export const VOTE_THRESHOLD = 2;
 
+// $RES — the transferable token paid only when a class-specific outcome rule
+// fires. No time-based accrual: balances only move through verified
+// contributions.
+export const RES_CONFIG = {
+  verificationCheckCredit: 2, // C_18 Moon: per completed check, either direction
+  buildingBounty: 12,         // C_1 Magician: delivery bounty on acceptance
+  recordingBaseCredit: 3,     // C_2 Priestess: base credit on accepted record
+} as const;
+
 export const TOKEN_CONFIG: import('./types').TokenConfig = {
   initialTokens: 20,
   distributionRate: 20,
@@ -18,12 +27,15 @@ export const POLICIES = {
   cast_runoff_vote: 'role:member',
   set_token_config: 'role:custodian',
   remove_member: 'role:custodian',
+  submit_contribution: 'role:member',
+  verify_contribution: 'role:member',
 } as const;
 
 export const STATE_NAMES = {
   members: 'members',
   proposals: 'proposals',
   executedProposals: 'executed',
+  contributions: 'contributions',
 } as const;
 
 export const TOKEN_NAMES = {
@@ -40,6 +52,19 @@ export const TOKEN_NAMES = {
   proposalOptionCount: (proposalId: string) => `proposals:${proposalId}:option_count`,
   optionVoteSet: (proposalId: string, index: number) => `votes:${proposalId}:opt${index}`,
   optionVoteCount: (proposalId: string, index: number) => `votes:${proposalId}:opt${index}_count`,
+} as const;
+
+export const RES_NAMES = {
+  balance: (username: string) => `res:${username}`,
+} as const;
+
+export const CONTRIB_NAMES = {
+  // Contribution status register: 0 = pending, 1 = accepted, 2 = rejected.
+  status: (contributionId: string) => `contrib:${contributionId}:st`,
+  // ORSet holding one JSON explanation record per decision (submit, verify).
+  explanations: (contributionId: string) => `contrib:${contributionId}:e`,
+  // Per-member 22-dimension tally register (absence-of-delta = never set).
+  dimensionBalance: (username: string, dimIndex: number) => `dim:${username}:c${dimIndex}`,
 } as const;
 
 export const CUSTODIAN_SEATS = 5;

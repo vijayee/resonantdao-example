@@ -80,6 +80,21 @@ export interface SyncRolesPayload {
   roleVersions: Record<string, number>; // total custodian-role mutations per user
 }
 
+export interface ContributionPayload {
+  contributionId: string;
+  dims: Record<string, number>; // sparse P(a): dimension index -> match weight (0,1]
+  summary: string;
+  evidenceRef: object; // evidence pointer, typed strictly in a later task
+}
+
+export interface VerifyContributionPayload {
+  contributionId: string;
+  submitter: string;
+  dims: Record<string, number>;
+  pass: boolean;
+  reason: string;
+}
+
 export interface TokenConfig {
   initialTokens: number;
   distributionRate: number; // tokens per distribution interval
