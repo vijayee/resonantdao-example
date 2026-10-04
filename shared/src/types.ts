@@ -66,11 +66,6 @@ export interface CastRunoffVotePayload {
   candidate: string;
 }
 
-export interface SetTokenConfigPayload {
-  intervalMs: number;
-  rate: number;
-}
-
 export interface RemoveMemberPayload {
   username: string;
 }
@@ -93,13 +88,6 @@ export interface VerifyContributionPayload {
   dims: Record<string, number>;
   pass: boolean;
   reason: string;
-}
-
-export interface TokenConfig {
-  initialTokens: number;
-  distributionRate: number; // tokens per distribution interval
-  distributionIntervalMs: number;
-  defaultExpiryMs: number;
 }
 
 export type ClientMessage =

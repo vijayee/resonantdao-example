@@ -9,10 +9,7 @@ export const RES_CONFIG = {
   recordingBaseCredit: 3,     // C_2 Priestess: base credit on accepted record
 } as const;
 
-export const TOKEN_CONFIG: import('./types').TokenConfig = {
-  initialTokens: 20,
-  distributionRate: 20,
-  distributionIntervalMs: 30 * 1000, // 30 seconds for the demo
+export const TIMING: { defaultExpiryMs: number } = {
   defaultExpiryMs: 60 * 1000, // 1 minute for the demo
 };
 
@@ -39,8 +36,6 @@ export const STATE_NAMES = {
 } as const;
 
 export const TOKEN_NAMES = {
-  balance: (username: string) => `tokens:${username}`,
-  lastDistribution: (username: string) => `tokens:${username}:last_dist`,
   proposalMirrorSet: (proposalId: string) => `tokens:${proposalId}:mirror`,
   proposalMirrorElement: (proposalId: string, username: string, n: number) => `tokens:${proposalId}:${username}:${n}`,
   voteTypeSet: (proposalId: string) => `votes:${proposalId}:voters`,
@@ -70,11 +65,6 @@ export const CONTRIB_NAMES = {
 export const CUSTODIAN_SEATS = 5;
 export const RUNOFF_SUFFIX = ':runoff';
 export const runoffId = (electionId: string) => `${electionId}${RUNOFF_SUFFIX}`;
-
-export const CONFIG_NAMES = {
-  distributionInterval: () => 'config:distribution_interval',
-  distributionRate: () => 'config:distribution_rate',
-} as const;
 
 export const ELECTION_NAMES = {
   // Keep resource names under CRABS' 63-character key limit. A full UUID (36

@@ -1,7 +1,7 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, SetTokenConfigPayload, StartElectionPayload, VotePayload } from './types';
+import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, StartElectionPayload, VotePayload } from './types';
 import {
-  CONFIG_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES, VOTE_THRESHOLD,
+  CUSTODIAN_SEATS, ELECTION_NAMES, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
 
 function isNonEmptyString(value: unknown): value is string {
@@ -63,7 +63,7 @@ export function makeCreateProposalHandler(
     try { node.addRegister(TOKEN_NAMES.proposalWinner(payload.proposalId), 0); } catch (err) { /* ignore duplicate */ }
 
     const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
-    const expiresAt = typeof payload.expiresAt === 'number' && payload.expiresAt > nowMs ? payload.expiresAt : nowMs + TOKEN_CONFIG.defaultExpiryMs;
+    const expiresAt = typeof payload.expiresAt === 'number' && payload.expiresAt > nowMs ? payload.expiresAt : nowMs + TIMING.defaultExpiryMs;
 
     state.setRegister(TOKEN_NAMES.proposalType(payload.proposalId), payload.proposalType === 'direct' ? 1 : 2, op.signerId);
     state.setRegister(TOKEN_NAMES.proposalExpiresAt(payload.proposalId), expiresAt, op.signerId);
@@ -71,30 +71,6 @@ export function makeCreateProposalHandler(
     state.setAdd(STATE_NAMES.proposals, payload.proposalId, JSON.stringify(payload));
     return 0;
   };
-}
-
-function distributeTokens(state: HandlerState, username: string, nowMs: number): number {
-  const balanceReg = TOKEN_NAMES.balance(username);
-  const lastDistReg = TOKEN_NAMES.lastDistribution(username);
-  let balance = state.getRegister(balanceReg) || 0;
-  let lastDist = state.getRegister(lastDistReg) || 0;
-
-  if (lastDist === 0) {
-    // Registers are initialized at user registration; if missing, fall back to 0.
-    return balance;
-  }
-
-  const interval = state.getRegister(CONFIG_NAMES.distributionInterval()) || TOKEN_CONFIG.distributionIntervalMs;
-  const rate = state.getRegister(CONFIG_NAMES.distributionRate()) || TOKEN_CONFIG.distributionRate;
-  const elapsed = nowMs - lastDist;
-  const intervals = Math.floor(elapsed / interval);
-  if (intervals > 0) {
-    balance += intervals * rate;
-    lastDist += intervals * interval;
-    state.setRegister(balanceReg, balance, 'system');
-    state.setRegister(lastDistReg, lastDist, 'system');
-  }
-  return balance;
 }
 
 export function makeVoteHandler(
@@ -135,10 +111,10 @@ export function makeVoteHandler(
     }
 
     // Quadratic vote: allow multiple votes. Each additional vote costs n^2
-    // tokens from a mirrored per-proposal token pool. Tokens are not globally
+    // $RES from a mirrored per-proposal token pool. Balances are not globally
     // consumed; the mirror tracks the cumulative cost spent on this proposal.
     if (proposalType === 2) {
-      const balance = distributeTokens(state, op.signerId, nowMs);
+      const balance = state.getRegister(RES_NAMES.balance(op.signerId)) || 0;
       const mirrorSet = TOKEN_NAMES.proposalMirrorSet(payload.proposalId);
       let used = 0;
       const maxVoteCheck = 100;
@@ -258,7 +234,7 @@ export function makeStartElectionHandler(
     const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
     const expiresAt = typeof payload.expiresAt === 'number' && payload.expiresAt > nowMs
       ? payload.expiresAt
-      : nowMs + TOKEN_CONFIG.defaultExpiryMs;
+      : nowMs + TIMING.defaultExpiryMs;
 
     state.setRegister(ELECTION_NAMES.expires(id), expiresAt, op.signerId);
     state.setRegister(ELECTION_NAMES.finalized(id), 0, op.signerId);
@@ -412,7 +388,7 @@ export function makeFinalizeElectionHandler(
       try { node.addRegister(ELECTION_NAMES.isRunoff(rid), 0); } catch (err) { /* ignore duplicate */ }
       try { node.addRegister(ELECTION_NAMES.seats(rid), 0); } catch (err) { /* ignore duplicate */ }
 
-      state.setRegister(ELECTION_NAMES.expires(rid), nowMs + TOKEN_CONFIG.defaultExpiryMs, op.signerId);
+      state.setRegister(ELECTION_NAMES.expires(rid), nowMs + TIMING.defaultExpiryMs, op.signerId);
       state.setRegister(ELECTION_NAMES.isRunoff(rid), 1, op.signerId);
       state.setRegister(ELECTION_NAMES.seats(rid), result.runoffSeats, op.signerId);
       state.setRegister(ELECTION_NAMES.finalized(id), 2, op.signerId); // awaiting runoff
@@ -456,8 +432,8 @@ export function makeCastRunoffVoteHandler(
       return -1;
     }
 
-    // Quadratic cost from the voter's global token balance, mirrored per runoff.
-    const balance = distributeTokens(state, op.signerId, nowMs);
+    // Quadratic cost from the voter's global $RES balance, mirrored per runoff.
+    const balance = state.getRegister(RES_NAMES.balance(op.signerId)) || 0;
     const mirror = ELECTION_NAMES.mirrorSet(id);
     let used = 0;
     const maxVoteCheck = 100;
@@ -480,27 +456,6 @@ export function makeCastRunoffVoteHandler(
   };
 }
 
-export function makeSetTokenConfigHandler(
-  _config: { getTimeMs?: () => number } = {}
-) {
-  return (state: HandlerState, op: HandlerOperation): number => {
-    const payload: SetTokenConfigPayload = JSON.parse(op.payload || '{}');
-    if (
-      typeof payload.intervalMs !== 'number' ||
-      !Number.isInteger(payload.intervalMs) ||
-      payload.intervalMs < 1000 ||
-      typeof payload.rate !== 'number' ||
-      !Number.isInteger(payload.rate) ||
-      payload.rate < 1
-    ) {
-      return -1;
-    }
-    state.setRegister(CONFIG_NAMES.distributionInterval(), payload.intervalMs, op.signerId);
-    state.setRegister(CONFIG_NAMES.distributionRate(), payload.rate, op.signerId);
-    return 0;
-  };
-}
-
 export function makeRemoveMemberHandler() {
   return (state: HandlerState, op: HandlerOperation): number => {
     const payload: RemoveMemberPayload = JSON.parse(op.payload || '{}');
@@ -511,8 +466,7 @@ export function makeRemoveMemberHandler() {
       return -1;
     }
     state.setRemove(STATE_NAMES.members, payload.username);
-    state.setRegister(TOKEN_NAMES.balance(payload.username), 0, 'system');
-    state.setRegister(TOKEN_NAMES.lastDistribution(payload.username), 0, 'system');
+    state.setRegister(RES_NAMES.balance(payload.username), 0, 'system');
     return 0;
   };
 }

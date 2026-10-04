@@ -11,10 +11,9 @@ import {
   makeCastBallotHandler,
   makeCastRunoffVoteHandler,
   makeFinalizeElectionHandler,
-  makeSetTokenConfigHandler,
   makeRemoveMemberHandler,
 } from '../../shared/src/handlers';
-import { ELECTION_NAMES, TOKEN_CONFIG, VOTE_THRESHOLD, runoffId } from '../../shared/src/policies';
+import { ELECTION_NAMES, VOTE_THRESHOLD, runoffId } from '../../shared/src/policies';
 
 class MockNode {
   orSets = new Set<string>();
@@ -121,9 +120,10 @@ function setupProposal(
   expect(res).toBe(0);
 }
 
-function initUser(state: MockState, username: string, nowMs: number) {
-  state.setRegister(`tokens:${username}`, TOKEN_CONFIG.initialTokens);
-  state.setRegister(`tokens:${username}:last_dist`, nowMs > 0 ? nowMs : 1);
+function initUser(state: MockState, username: string, balance: number = 20) {
+  // $RES balance is credited only by verified contributions; unit tests
+  // simulate that by writing the balance register directly.
+  state.setRegister(`res:${username}`, balance);
 }
 
 describe('Governance handlers', () => {
@@ -178,7 +178,7 @@ describe('Governance handlers', () => {
   it('charges n^2 across different quadratic options and caps at the mirrored balance', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    initUser(state, 'alice', 0);
+    initUser(state, 'alice');
 
     setupProposal(node, state, 'p1', 'quadratic', 1000, ['Alpha', 'Beta', 'Gamma']);
 
@@ -194,22 +194,6 @@ describe('Governance handlers', () => {
     // Fourth vote would bring cumulative cost to 30, exceeding balance 20.
     expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }))).toBe(-1);
     expect(state.getPNCounter('votes:p1:opt0_count')).toBe(1);
-  });
-
-  it('distributes contribution tokens at the configured interval', () => {
-    const node = new MockNode();
-    const state = new MockState(node);
-    const startTime = 1000;
-    initUser(state, 'alice', startTime);
-
-    setupProposal(node, state, 'p1', 'quadratic', startTime + TOKEN_CONFIG.distributionIntervalMs * 3);
-
-    const vote = makeVoteHandler({ getTimeMs: () => startTime + TOKEN_CONFIG.distributionIntervalMs });
-    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }))).toBe(0);
-
-    expect(state.getRegister('tokens:alice')).toBe(
-      TOKEN_CONFIG.initialTokens + TOKEN_CONFIG.distributionRate
-    );
   });
 
   it('rejects proposals with invalid option lists', () => {
@@ -316,23 +300,6 @@ describe('Governance handlers', () => {
     expect(state.getRegister('proposals:p1:winner')).toBe(0);
   });
 
-  it('honors custodian-configured distribution settings', () => {
-    const node = new MockNode();
-    const state = new MockState(node);
-    // Custodian configured: 5000ms interval, 7 tokens per interval.
-    state.setRegister('config:distribution_interval', 5000);
-    state.setRegister('config:distribution_rate', 7);
-
-    setupProposal(node, state, 'p1', 'quadratic', 20000);
-    initUser(state, 'alice', 0);
-
-    const vote = makeVoteHandler({ getTimeMs: () => 5001 });
-    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p1', choice: 0 }))).toBe(0);
-
-    expect(state.getRegister('tokens:alice')).toBe(
-      TOKEN_CONFIG.initialTokens + 7
-    );
-  });
 });
 
 describe('Election handlers', () => {
@@ -511,8 +478,8 @@ describe('Election handlers', () => {
   }
 
   it('charges n^2 for repeated runoff votes and resolves the seat', () => {
-    initUser(state, 'alice', 0);
-    initUser(state, 'bob', 0);
+    initUser(state, 'alice');
+    initUser(state, 'bob');
     const rid = setupRunoff('e2', ['bob', 'carol'], 1);
 
     const vote = makeCastRunoffVoteHandler({ getTimeMs: () => 0 });
@@ -542,7 +509,7 @@ describe('Election handlers', () => {
   });
 
   it('breaks a tied runoff alphabetically (deadlock guard)', () => {
-    initUser(state, 'alice', 0);
+    initUser(state, 'alice');
     const rid = setupRunoff('e2', ['bob', 'carol'], 1);
     const vote = makeCastRunoffVoteHandler({ getTimeMs: () => 0 });
     expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
@@ -565,27 +532,15 @@ describe('Election handlers', () => {
     expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(-1);
   });
 
-  it('applies custodian token config and removes members', () => {
-    initUser(state, 'dave', 0);
+  it('removes members and zeroes their RES balance', () => {
+    initUser(state, 'dave', 7);
     const addMember = makeAddMemberHandler();
     addMember(state, makeOp('add_member', 'admin', { username: 'dave', publicKeyHex: 'pk-d' }));
-
-    const setConfig = makeSetTokenConfigHandler({ getTimeMs: () => 0 });
-    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 1000, rate: 5 }))).toBe(0);
-    expect(state.getRegister('config:distribution_interval')).toBe(1000);
-    expect(state.getRegister('config:distribution_rate')).toBe(5);
-
-    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 0, rate: 5 }))).toBe(-1);
-    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 1000, rate: 0 }))).toBe(-1);
-    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 999, rate: 5 }))).toBe(-1);
-    expect(setConfig(state, makeOp('set_token_config', 'alice', { intervalMs: 1000, rate: -1 }))).toBe(-1);
-    expect(state.getRegister('config:distribution_interval')).toBe(1000);
 
     const removeMember = makeRemoveMemberHandler();
     expect(removeMember(state, makeOp('remove_member', 'alice', { username: 'dave' }))).toBe(0);
     expect(state.setContains('members', 'dave')).toBe(false);
-    expect(state.getRegister('tokens:dave')).toBe(0);
-    expect(state.getRegister('tokens:dave:last_dist')).toBe(0);
+    expect(state.getRegister('res:dave')).toBe(0);
 
     expect(removeMember(state, makeOp('remove_member', 'alice', { username: 'dave' }))).toBe(-1);
     expect(removeMember(state, makeOp('remove_member', 'alice', { username: 'ghost' }))).toBe(-1);
