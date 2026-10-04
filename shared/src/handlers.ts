@@ -71,9 +71,11 @@ export function makeSubmitContributionHandler(
       submittedAt: nowMs,
     };
     // Explanation record for the submit decision (invariant: every decision
-    // emits an explanation record). Element is the JSON record; tag is the
-    // submitter so records are attributable.
-    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
+    // emits an explanation record). Element is the JSON record; tag is
+    // deterministic and unique per record type — CRABS OR-Sets dedupe by tag,
+    // so reusing op.signerId would collide with other records from the same
+    // signer and silently drop one of them.
+    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), `submit:${op.signerId}`);
     // CRABS OR-Set add dedups by tag, so the tag must be unique per submission
     // (op.signerId would silently drop every contribution after a member's first).
     state.setAdd(STATE_NAMES.contributions, payload.contributionId, payload.contributionId);
@@ -159,7 +161,7 @@ export function makeVerifyContributionHandler(
         calibrationVersion: CALIBRATION_VERSION,
         schemaVersion: schema.schemaVersion,
       };
-      state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
+      state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), `verify:${op.signerId}`);
       return 0;
     }
 
@@ -267,7 +269,7 @@ export function makeSettleContributionHandler(
       settlement: { settler: op.signerId, reason: payload.reason, at: nowMs },
       calibrationVersion: CALIBRATION_VERSION,
     };
-    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(explanation), op.signerId);
+    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(explanation), `settle:${op.signerId}`);
     return 0;
   };
 }
