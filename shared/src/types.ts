@@ -1,3 +1,5 @@
+import { EvidenceRef } from './contribution';
+
 export const DAO_NAME = 'resonant-dao-example';
 
 export interface PublicUser {
@@ -79,7 +81,8 @@ export interface ContributionPayload {
   contributionId: string;
   dims: Record<string, number>; // sparse P(a): dimension index -> match weight (0,1]
   summary: string;
-  evidenceRef: object; // evidence pointer, typed strictly in a later task
+  evidenceRef: EvidenceRef;
+  schemaVersion: string;
 }
 
 export interface VerifyContributionPayload {

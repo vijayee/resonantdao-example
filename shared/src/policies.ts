@@ -60,6 +60,10 @@ export const CONTRIB_NAMES = {
   explanations: (contributionId: string) => `contrib:${contributionId}:e`,
   // Per-member 22-dimension tally register (absence-of-delta = never set).
   dimensionBalance: (username: string, dimIndex: number) => `dim:${username}:c${dimIndex}`,
+  // Lifecycle position register: index into schema.steps (submit auto-complete ⇒ 1).
+  step: (contributionId: string) => `contrib:${contributionId}:step`,
+  // Per-step requirement-completion counter.
+  stepDone: (contributionId: string, stepId: string) => `contrib:${contributionId}:d:${stepId}`,
 } as const;
 
 export const CUSTODIAN_SEATS = 5;

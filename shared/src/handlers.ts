@@ -1,8 +1,9 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, StartElectionPayload, VotePayload } from './types';
+import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, StartElectionPayload, VotePayload } from './types';
 import {
-  CUSTODIAN_SEATS, ELECTION_NAMES, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
+  CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
+import { SCHEMA_VERSION, isValidDims, schemaForDims, validateEvidenceRef } from './contribution';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
@@ -20,6 +21,56 @@ function isValidOptions(value: unknown): value is string[] {
     value.every(isNonEmptyString) &&
     new Set(value).size === value.length
   );
+}
+
+// Every schema starts with a submit step whose op is 'submit_contribution',
+// so a successful submission auto-completes step 0: the lifecycle position
+// register starts at index 1.
+export function makeSubmitContributionHandler(
+  node: { addORSet(name: string): void; addPNCounter(name: string): void; addRegister(name: string, initial?: number): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: ContributionPayload = JSON.parse(op.payload || '{}');
+    if (
+      !isNonEmptyString(payload.contributionId) ||
+      !isNonEmptyString(payload.summary) ||
+      payload.schemaVersion !== SCHEMA_VERSION ||
+      !isValidDims(payload.dims) ||
+      !validateEvidenceRef(payload.evidenceRef) ||
+      !state.setContains(STATE_NAMES.members, op.signerId) ||
+      state.setContains(STATE_NAMES.contributions, payload.contributionId)
+    ) {
+      return -1;
+    }
+
+    const schema = schemaForDims(payload.dims);
+
+    try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(CONTRIB_NAMES.step(payload.contributionId), 1); } catch (err) { /* ignore duplicate */ }
+    for (const step of schema.steps) {
+      try { node.addPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId)); } catch (err) { /* ignore duplicate */ }
+    }
+    state.setRegister(CONTRIB_NAMES.status(payload.contributionId), 0, op.signerId);
+    state.incrementPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, 'submit'), 1, op.signerId);
+
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const record = {
+      contributionId: payload.contributionId,
+      submitter: op.signerId,
+      dims: payload.dims,
+      summary: payload.summary,
+      evidenceRef: payload.evidenceRef,
+      schemaVersion: payload.schemaVersion,
+      submittedAt: nowMs,
+    };
+    // Explanation record for the submit decision (invariant: every decision
+    // emits an explanation record). Element is the JSON record; tag is the
+    // submitter so records are attributable.
+    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
+    state.setAdd(STATE_NAMES.contributions, payload.contributionId, op.signerId);
+    return 0;
+  };
 }
 
 export function makeAddMemberHandler() {

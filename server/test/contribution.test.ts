@@ -56,6 +56,153 @@ import {
   CONTENT_LIMITS, SCHEMA_VERSION, SCHEMAS, DEFAULT_SCHEMA,
   schemaForDims, validateEvidenceRef, stepPaymentsFor,
 } from '../../shared/src/contribution';
+import { makeSubmitContributionHandler } from '../../shared/src/handlers';
+import { CONTRIB_NAMES, STATE_NAMES } from '../../shared/src/policies';
+import { ContributionPayload } from '../../shared/src/types';
+import { HandlerOperation, HandlerState } from 'crabs-wasm';
+
+class MockNode {
+  orSets = new Set<string>();
+  registers = new Map<string, number>();
+  pnCounters = new Map<string, number>();
+
+  addORSet(name: string) {
+    if (this.orSets.has(name)) throw new Error('duplicate_operation');
+    this.orSets.add(name);
+  }
+  addRegister(name: string, initial = 0) {
+    if (this.registers.has(name)) throw new Error('duplicate_operation');
+    this.registers.set(name, initial);
+  }
+  addPNCounter(name: string) {
+    if (this.pnCounters.has(name)) throw new Error('duplicate_operation');
+    this.pnCounters.set(name, 0);
+  }
+}
+
+// Local mock: getRegister returns number | undefined so tests can
+// distinguish "never set" from an actual 0 (unlike handlers.test.ts's
+// fallback-to-zero version).
+class MockState {
+  private sets = new Map<string, Set<string>>();
+  private registers = new Map<string, number>();
+  private pnCounters = new Map<string, number>();
+  private node: MockNode;
+
+  constructor(node: MockNode) {
+    this.node = node;
+  }
+
+  incrementPNCounter(name: string, delta = 1): void {
+    this.pnCounters.set(name, (this.pnCounters.get(name) || 0) + delta);
+  }
+  setRegister(name: string, value: number, _nodeId?: string): void {
+    this.registers.set(name, value);
+  }
+  setAdd(name: string, element: string, _tag = element): void {
+    this.ensureSet(name).add(element);
+  }
+  setRemove(name: string, element: string): void {
+    this.ensureSet(name).delete(element);
+  }
+  getPNCounter(name: string): number {
+    return this.pnCounters.get(name) || 0;
+  }
+  getRegister(name: string): number | undefined {
+    return this.registers.get(name) ?? this.node.registers.get(name);
+  }
+  setContains(name: string, element: string): boolean {
+    return this.sets.has(name) && this.sets.get(name)!.has(element);
+  }
+
+  private ensureSet(name: string): Set<string> {
+    let set = this.sets.get(name);
+    if (!set) {
+      set = new Set();
+      this.sets.set(name, set);
+    }
+    return set;
+  }
+}
+
+function makeOp(type: string, signerId: string, payload: object): HandlerOperation {
+  return {
+    type,
+    signerId,
+    nodeId: 'browser',
+    payload: JSON.stringify(payload),
+  };
+}
+
+// MockState.getRegister returns number | undefined, so it does not satisfy
+// HandlerState structurally; the handler never observes that difference.
+function run(
+  handler: (state: HandlerState, op: HandlerOperation) => number,
+  state: MockState,
+  op: HandlerOperation
+): number {
+  return handler(state as unknown as HandlerState, op);
+}
+
+const GOOD_REF = { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 };
+
+function setupMembers(state: MockState, ...usernames: string[]) {
+  for (const u of usernames) state.setAdd(STATE_NAMES.members, u, u);
+}
+
+function submitOp(payload: Partial<ContributionPayload>): ContributionPayload {
+  return {
+    contributionId: 'c-1',
+    dims: { '2': 1 },
+    summary: 'Wrote an architecture record',
+    evidenceRef: GOOD_REF,
+    schemaVersion: SCHEMA_VERSION,
+    ...payload,
+  } as ContributionPayload;
+}
+
+describe('submit_contribution handler (schema-driven)', () => {
+  it('records the contribution and initializes the lifecycle at the verify step', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'alice');
+    const handler = makeSubmitContributionHandler(node, { getTimeMs: () => 1000 });
+    expect(run(handler, state, makeOp('submit_contribution', 'alice', submitOp({})))).toBe(0);
+    expect(state.setContains(STATE_NAMES.contributions, 'c-1')).toBe(true);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1')) ?? -999).toBe(0);
+    // lifecycle position: submit auto-completed ⇒ current step = index 1
+    expect(state.getRegister(CONTRIB_NAMES.step('c-1'))).toBe(1);
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-1', 'submit'))).toBe(1);
+  });
+
+  it('rejects a non-member submitter', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    const handler = makeSubmitContributionHandler(node);
+    expect(run(handler, state, makeOp('submit_contribution', 'mallory', submitOp({})))).toBe(-1);
+    expect(state.setContains(STATE_NAMES.contributions, 'c-1')).toBe(false);
+  });
+
+  it('rejects duplicate contributionId, invalid dims, bad schemaVersion, bad evidenceRef', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'alice');
+    const handler = makeSubmitContributionHandler(node);
+    expect(run(handler, state, makeOp('submit_contribution', 'alice', submitOp({})))).toBe(0);
+    expect(run(handler, state, makeOp('submit_contribution', 'alice', submitOp({ summary: 'again' })))).toBe(-1);
+    expect(run(handler, state, makeOp('submit_contribution', 'alice', submitOp({ dims: {} })))).toBe(-1);
+    expect(run(handler, state, makeOp('submit_contribution', 'alice', submitOp({ schemaVersion: 'v0' })))).toBe(-1);
+    expect(run(handler, state, makeOp('submit_contribution', 'alice', submitOp({ evidenceRef: { ...GOOD_REF, hash: 'zz' } })))).toBe(-1);
+  });
+
+  it('rejects missing summary', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'alice');
+    const handler = makeSubmitContributionHandler(node);
+    expect(run(handler, state, makeOp('submit_contribution', 'alice', submitOp({ summary: '' })))).toBe(-1);
+  });
+});
 
 describe('step schemas', () => {
   it('version is v1 and content limits are set', () => {
