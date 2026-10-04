@@ -196,6 +196,28 @@ describe('Governance handlers', () => {
     expect(state.getPNCounter('votes:p1:opt0_count')).toBe(1);
   });
 
+  it('rejects a quadratic vote when the balance is below the cumulative cost', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    initUser(state, 'alice', 0);
+    setupProposal(node, state, 'p0', 'quadratic', 100000, ['Yes', 'No'], 0);
+    const vote = makeVoteHandler({ getTimeMs: () => 0 });
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p0', choice: 0 }))).toBe(-1); // first vote costs 1 > 0
+  });
+
+  it('accepts a quadratic vote exactly at the boundary, rejects beyond', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    initUser(state, 'alice', 14); // cumulative 1+4+9 = 14 at exactly 3 votes
+    setupProposal(node, state, 'pb', 'quadratic', 100000, ['Yes', 'No'], 0);
+    const vote = makeVoteHandler({ getTimeMs: () => 0 });
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'pb', choice: 0 }))).toBe(0);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'pb', choice: 0 }))).toBe(0);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'pb', choice: 0 }))).toBe(0); // cumulative 14 <= 14
+    expect(state.getPNCounter('votes:pb:opt0_count')).toBe(3);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'pb', choice: 0 }))).toBe(-1); // 4th vote fails
+  });
+
   it('rejects proposals with invalid option lists', () => {
     const node = new MockNode();
     const state = new MockState(node);

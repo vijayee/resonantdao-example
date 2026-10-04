@@ -1,7 +1,7 @@
 import { Node, KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
 import {
-  CONFIG_NAMES, ELECTION_NAMES, POLICIES, STATE_NAMES, TOKEN_CONFIG, TOKEN_NAMES,
+  CONTRIB_NAMES, ELECTION_NAMES, POLICIES, RES_NAMES, STATE_NAMES, TOKEN_NAMES,
 } from '../../shared/src/policies';
 import {
   makeAddMemberHandler,
@@ -11,8 +11,8 @@ import {
   makeExecuteHandler,
   makeFinalizeElectionHandler,
   makeRemoveMemberHandler,
-  makeSetTokenConfigHandler,
   makeStartElectionHandler,
+  makeSubmitContributionHandler,
   makeVoteHandler,
 } from '../../shared/src/handlers';
 import { SyncRolesPayload } from '../../shared/src/types';
@@ -30,9 +30,8 @@ export class DaoNode {
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addORSet(STATE_NAMES.executedProposals);
+    this.node.addORSet(STATE_NAMES.contributions);
     this.node.addRegister('time_now', 0);
-    this.node.addRegister(CONFIG_NAMES.distributionInterval(), 0);
-    this.node.addRegister(CONFIG_NAMES.distributionRate(), 0);
 
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);
@@ -42,8 +41,11 @@ export class DaoNode {
     this.node.setPolicy('cast_ballot', POLICIES.cast_ballot);
     this.node.setPolicy('finalize_election', POLICIES.finalize_election);
     this.node.setPolicy('cast_runoff_vote', POLICIES.cast_runoff_vote);
-    this.node.setPolicy('set_token_config', POLICIES.set_token_config);
     this.node.setPolicy('remove_member', POLICIES.remove_member);
+    this.node.setPolicy('submit_contribution', POLICIES.submit_contribution);
+    // verify_contribution already has a policy in shared POLICIES, but its
+    // handler arrives in a later task — wire its policy at the same time as
+    // the handler so the node never has a policy without an op handler.
 
     this.node.registerHandlerJs('add_member', makeAddMemberHandler());
     this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
@@ -53,7 +55,7 @@ export class DaoNode {
     this.node.registerHandlerJs('cast_ballot', makeCastBallotHandler({ getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('finalize_election', makeFinalizeElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('cast_runoff_vote', makeCastRunoffVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
-    this.node.registerHandlerJs('set_token_config', makeSetTokenConfigHandler({ getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('submit_contribution', makeSubmitContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
     this.node.registerHandlerJs('sync_roles', () => 0); // admin-signed; roles applied out-of-band
   }
@@ -70,16 +72,17 @@ export class DaoNode {
     this.node.registerUser(username, publicKeyHex);
     this.node.grantRole(username, 'role', 'member', ADMIN_ID);
     this.node.grantRole(username, 'reputation', '1', ADMIN_ID);
-    this.initTokenRegisters(username);
+    this.initResRegisters(username);
     try { this.node.setAdd(STATE_NAMES.members, username, publicKeyHex); } catch (err) { /* ignore duplicate */ }
     // registerUser starts at key version 1; the two grantRole calls above bump it to 3.
     this.userKeyVersions[username] = 3;
     return 3;
   }
 
-  private initTokenRegisters(username: string) {
-    try { this.node.addRegister(TOKEN_NAMES.balance(username), TOKEN_CONFIG.initialTokens); } catch (err) { /* ignore duplicate */ }
-    try { this.node.addRegister(TOKEN_NAMES.lastDistribution(username), Date.now()); } catch (err) { /* ignore duplicate */ }
+  // New members start at $RES 0; balances only move through verified
+  // contributions.
+  private initResRegisters(username: string) {
+    try { this.node.addRegister(RES_NAMES.balance(username), 0); } catch (err) { /* ignore duplicate */ }
   }
 
   getUserKeyVersion(username: string): number {
@@ -119,8 +122,32 @@ export class DaoNode {
     return this.node.getUser(username)?.status === 'active' || false;
   }
 
-  getTokenBalance(username: string): number {
-    return this.node.getRegister(TOKEN_NAMES.balance(username)) || 0;
+  getResBalance(username: string): number {
+    return this.node.getRegister(RES_NAMES.balance(username)) || 0;
+  }
+
+  // Empirical CRABS-wasm truth (pinned by the real-wasm test in
+  // server/test/crabs.test.ts): getRegister on an UNDECLARED resource reads
+  // as 0 — it does not throw and does not return undefined. A declared register
+  // written with 0 is indistinguishable from an undeclared one via getRegister,
+  // which is why there is no hasDimensionBalance getter here; callers must not
+  // rely on any getRegister-based getter for declared-vs-undeclared checks
+  // (use node.setContains for ORSet membership instead). Note the asymmetry:
+  // state.setRegister *does* throw resource_not_found on undeclared registers,
+  // so handlers declare registers before writing them.
+  getDimensionBalance(username: string, dimIndex: number): number {
+    return this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, dimIndex)) || 0;
+  }
+
+  isContributionPending(contributionId: string): boolean {
+    return this.node.setContains(STATE_NAMES.contributions, contributionId) &&
+      this.node.getRegister(CONTRIB_NAMES.status(contributionId)) === 0;
+  }
+
+  getContributionStatus(contributionId: string): 'pending' | 'accepted' | 'rejected' | 'unknown' {
+    if (!this.node.setContains(STATE_NAMES.contributions, contributionId)) return 'unknown';
+    const status = this.node.getRegister(CONTRIB_NAMES.status(contributionId));
+    return status === 1 ? 'accepted' : status === 2 ? 'rejected' : 'pending';
   }
 
   isProposalExecuted(id: string): boolean {

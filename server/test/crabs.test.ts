@@ -3,6 +3,26 @@ import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
 import { DaoNode } from '../src/crabs';
 
 describe('DaoNode', () => {
+  let opCounter = 0;
+
+  // Signs a member operation locally the way the browser client does after a
+  // DaoNode.registerMember bootstrap: signer id, a unique node id per call,
+  // JSON payload + NUL terminator, and the member's current CRABS key version.
+  async function buildSignedMemberOp(
+    dao: DaoNode,
+    username: string,
+    keyPair: KeyPair,
+    type: string,
+    payload: object
+  ): Promise<Operation> {
+    const op = await Operation.create(type);
+    op.signerId = username;
+    op.nodeId = `browser-${++opCounter}`;
+    op.payload = new TextEncoder().encode(JSON.stringify(payload) + '\0');
+    setOperationSignerKeyVersion(op, dao.getUserKeyVersion(username));
+    dao.node.sign(op, keyPair);
+    return op;
+  }
   it('registers a member and executes a user-signed proposal', async () => {
     const dao = new DaoNode();
     await dao.init();
@@ -29,32 +49,45 @@ describe('DaoNode', () => {
     expect(dao.getProposalOptionVotes('p1')).toEqual([0, 0]);
   });
 
-  it('enforces the custodian policy on set_token_config', async () => {
+  it('seeds a zero RES balance and registers a pending contribution', async () => {
     const dao = new DaoNode();
     await dao.init();
-    const key = await KeyPair.generate();
-    dao.registerMember('alice', key.publicKeyHex());
+    const kp = await KeyPair.generate();
+    dao.registerMember('alice', kp.publicKeyHex());
+    expect(dao.getResBalance('alice')).toBe(0);
 
-    const buildConfigOp = async (version: number) => {
-      const op = await Operation.create('set_token_config');
-      op.signerId = 'alice';
-      op.nodeId = 'browser';
-      op.payload = new TextEncoder().encode(JSON.stringify({ intervalMs: 1000, rate: 5 }) + '\0');
-      setOperationSignerKeyVersion(op, version);
-      dao.node.sign(op, key);
-      return op.serialize();
-    };
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kp, 'submit_contribution', {
+      contributionId: 'c-wire-1',
+      dims: { '1': 1 },
+      summary: 'built it',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v1',
+    }));
+    expect(dao.isContributionPending('c-wire-1')).toBe(true);
+    expect(dao.getContributionStatus('c-wire-1')).toBe('pending');
+    // Dimension tallies are only written at settlement; before that the
+    // register is simply undeclared and reads as 0 (pinned below).
+    expect(dao.getDimensionBalance('alice', 1)).toBe(0);
+  });
 
-    // Not a custodian -> policy rejects the execute.
-    const rejectedBytes = await buildConfigOp(3);
-    const rejectedOp = await dao.deserializeOperation(rejectedBytes);
-    expect(() => dao.executeOperation(rejectedOp)).toThrow();
+  it('rejects submit_contribution from an unregistered signer (policy role:member)', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    const kp = await KeyPair.generate();
+    // Not registered as a member.
+    const op = await buildSignedMemberOp(dao, 'nobody', kp, 'submit_contribution', {
+      contributionId: 'c-wire-2',
+      dims: { '2': 1 },
+      summary: 'x',
+      evidenceRef: { hash: 'c'.repeat(64), uri: 'content://' + 'd'.repeat(64), mediaType: 'text/plain', size: 0 },
+      schemaVersion: 'v1',
+    });
+    expect(() => dao.executeOperation(op)).toThrow();
+  });
 
-    // Grant custodian (bumps alice's key_version to 4).
-    dao.grantCustodian('alice');
-    const acceptedBytes = await buildConfigOp(4);
-    dao.executeOperation(await dao.deserializeOperation(acceptedBytes));
-    expect(dao.node.getRegister('config:distribution_interval')).toBe(1000);
-    expect(dao.node.getRegister('config:distribution_rate')).toBe(5);
+  it('pins the truth: getRegister on an undeclared resource reads as 0', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    expect(dao.node.getRegister('no_such_register')).toBe(0);
   });
 });

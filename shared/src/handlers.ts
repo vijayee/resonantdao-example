@@ -47,6 +47,9 @@ export function makeSubmitContributionHandler(
     const schema = schemaForDims(payload.dims);
 
     try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
+    // The real CRABS wrapper rejects state.setRegister on an undeclared
+    // resource, so declare the status register here before writing to it.
+    try { node.addRegister(CONTRIB_NAMES.status(payload.contributionId), 0); } catch (err) { /* ignore duplicate */ }
     try { node.addRegister(CONTRIB_NAMES.step(payload.contributionId), 1); } catch (err) { /* ignore duplicate */ }
     for (const step of schema.steps) {
       try { node.addPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId)); } catch (err) { /* ignore duplicate */ }

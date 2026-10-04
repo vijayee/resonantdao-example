@@ -22,7 +22,6 @@ export const POLICIES = {
   cast_ballot: 'role:member',
   finalize_election: 'role:member',
   cast_runoff_vote: 'role:member',
-  set_token_config: 'role:custodian',
   remove_member: 'role:custodian',
   submit_contribution: 'role:member',
   verify_contribution: 'role:member',
