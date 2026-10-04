@@ -126,15 +126,15 @@ export interface DimensionSchema {
 
 export const SCHEMA_VERSION = 'v1' as const;
 
-const SUBMIT_STEP: StepDef = {
+const SUBMIT_STEP: StepDef = Object.freeze({
   stepId: 'submit',
   title: 'Submission',
   requirement: { mode: 'single', count: 1 },
   actors: ['submitter'],
   op: 'submit_contribution',
-};
+}) as StepDef;
 
-const VERIFY_STEP: StepDef = {
+const VERIFY_STEP: StepDef = Object.freeze({
   stepId: 'verify',
   title: 'Verification',
   requirement: { mode: 'single', count: 1 },
@@ -145,16 +145,16 @@ const VERIFY_STEP: StepDef = {
     { who: 'submitter', rule: 'per-dims' },  // class-specific outcome bounties on acceptance
   ],
   antiGaming: ['no-self', 'written-reason'],
-};
+}) as StepDef;
 
-const SETTLE_STEP: StepDef = {
+const SETTLE_STEP: StepDef = Object.freeze({
   stepId: 'settle',
   title: 'Settlement',
   requirement: { mode: 'single', count: 1 },
   actors: ['submitter'],
   op: 'settle_contribution',
   antiGaming: ['written-reason'],
-};
+}) as StepDef;
 
 export const DEFAULT_SCHEMA: DimensionSchema = {
   dimIndex: -1,
