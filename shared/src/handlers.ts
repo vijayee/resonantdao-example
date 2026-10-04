@@ -218,7 +218,7 @@ export function makeVerifyContributionHandler(
       calibrationVersion: CALIBRATION_VERSION,
       schemaVersion: schema.schemaVersion,
     };
-    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
+    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), `verify:${op.signerId}`);
     return 0;
   };
 }

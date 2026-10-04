@@ -53,6 +53,7 @@ export class AppUI {
   private activeTab: 'register' | 'login' = 'register';
   private memberUsernames = new Set<string>();
   private votedProposals = new Set<string>();
+  private evidenceUrls: string[] = [];
 
   constructor() {
     this.bindAuth();
@@ -935,6 +936,8 @@ export class AppUI {
   private renderContributions() {
     const list = document.getElementById('contributions-list');
     if (!list || !this.dao || !this.wallet) return;
+    for (const url of this.evidenceUrls) URL.revokeObjectURL(url);
+    this.evidenceUrls = [];
     list.innerHTML = '';
     const entries = [...this.dao.getContributions()].reverse();
     if (entries.length === 0) {
@@ -1001,6 +1004,19 @@ export class AppUI {
     evidence.textContent = this.evidenceSummary(entry.record.evidenceRef);
     card.appendChild(evidence);
 
+    const ref = entry.record.evidenceRef;
+    if (ref.uri.startsWith('content://')) {
+      // Lazy load only — the demo clock re-renders every second, so fetch stored
+      // media on click instead of per render (avoids per-second network spam).
+      const loadBtn = document.createElement('button');
+      loadBtn.type = 'button';
+      loadBtn.className = 'button button--secondary contribution-card__evidence-load';
+      loadBtn.textContent = 'Load evidence';
+      loadBtn.disabled = this.submitting;
+      loadBtn.addEventListener('click', () => void this.loadEvidenceMedia(ref, entry.record.contributionId, evidence, loadBtn));
+      card.appendChild(loadBtn);
+    }
+
     if (model.outcome === 'rejected' && entry.verdictReason) {
       const verdict = document.createElement('div');
       verdict.className = 'contribution-card__verdict';
@@ -1051,6 +1067,42 @@ export class AppUI {
   private evidenceSummary(ref: EvidenceRef): string {
     if (ref.uri.startsWith('content://')) return `stored evidence (${(ref.size / 1024).toFixed(1)} KB, ${ref.mediaType})`;
     return `pointer: ${ref.uri}`;
+  }
+
+  // Click-triggered fetch of stored evidence bytes; the load button swaps for
+  // the rendered image or a download link. Errors degrade to a muted note.
+  private async loadEvidenceMedia(
+    ref: EvidenceRef,
+    contributionId: string,
+    row: HTMLElement,
+    button: HTMLElement,
+  ): Promise<void> {
+    const hash = ref.uri.slice('content://'.length);
+    try {
+      const content = await this.client!.getContent(hash);
+      if (!content) throw new Error('evidence unavailable');
+      const blob = new Blob([content.bytes as BlobPart], { type: content.mediaType });
+      const url = URL.createObjectURL(blob);
+      this.evidenceUrls.push(url);
+      if (content.mediaType.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.className = 'contribution-card__evidence-img';
+        img.alt = 'contribution evidence';
+        img.src = url;
+        button.replaceWith(img);
+      } else {
+        const anchor = document.createElement('a');
+        anchor.className = 'contribution-card__evidence-dl';
+        anchor.href = url;
+        anchor.download = `evidence-${contributionId.slice(0, 8)}`;
+        anchor.textContent = `Download evidence (${ref.mediaType})`;
+        button.replaceWith(anchor);
+      }
+    } catch (err) {
+      void err;
+      row.textContent = 'evidence unavailable';
+      button.remove();
+    }
   }
 
   private async onRemoveMember(username: string) {
