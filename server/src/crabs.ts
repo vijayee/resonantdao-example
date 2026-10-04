@@ -11,8 +11,10 @@ import {
   makeExecuteHandler,
   makeFinalizeElectionHandler,
   makeRemoveMemberHandler,
+  makeSettleContributionHandler,
   makeStartElectionHandler,
   makeSubmitContributionHandler,
+  makeVerifyContributionHandler,
   makeVoteHandler,
 } from '../../shared/src/handlers';
 import { SyncRolesPayload } from '../../shared/src/types';
@@ -43,9 +45,8 @@ export class DaoNode {
     this.node.setPolicy('cast_runoff_vote', POLICIES.cast_runoff_vote);
     this.node.setPolicy('remove_member', POLICIES.remove_member);
     this.node.setPolicy('submit_contribution', POLICIES.submit_contribution);
-    // verify_contribution already has a policy in shared POLICIES, but its
-    // handler arrives in a later task — wire its policy at the same time as
-    // the handler so the node never has a policy without an op handler.
+    this.node.setPolicy('verify_contribution', POLICIES.verify_contribution);
+    this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
 
     this.node.registerHandlerJs('add_member', makeAddMemberHandler());
     this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
@@ -56,6 +57,8 @@ export class DaoNode {
     this.node.registerHandlerJs('finalize_election', makeFinalizeElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('cast_runoff_vote', makeCastRunoffVoteHandler({ getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('submit_contribution', makeSubmitContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('verify_contribution', makeVerifyContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
     this.node.registerHandlerJs('sync_roles', () => 0); // admin-signed; roles applied out-of-band
   }

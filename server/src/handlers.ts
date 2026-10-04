@@ -8,6 +8,7 @@ import {
   ServerMessage,
   StoredOperation,
 } from '../../shared/src/types';
+import { CONTENT_LIMITS } from '../../shared/src/contribution';
 
 function base64ToBytes(base64: string): Uint8Array {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -214,6 +215,30 @@ export class ConnectionHandler {
             return this.send(ws, { kind: 'error', message: 'Not authorized for this snapshot' });
           }
           await this.db.putSnapshot(msg.snapshot);
+          break;
+        }
+
+        case 'put_content': {
+          if (!isNonEmptyString(msg.bytesBase64) || !isNonEmptyString(msg.mediaType) || msg.mediaType.length > 64) {
+            return this.send(ws, { kind: 'error', message: 'Invalid put_content payload' });
+          }
+          const bytes = base64ToBytes(msg.bytesBase64);
+          if (bytes.length > CONTENT_LIMITS.maxObjectBytes) {
+            return this.send(ws, { kind: 'error', message: 'Content too large' });
+          }
+          const hash = await this.db.putContent(Buffer.from(bytes), msg.mediaType);
+          this.send(ws, { kind: 'content_stored', hash });
+          break;
+        }
+
+        case 'get_content': {
+          if (!isNonEmptyString(msg.hash) || !/^[0-9a-f]{64}$/.test(msg.hash)) {
+            return this.send(ws, { kind: 'error', message: 'Invalid get_content payload' });
+          }
+          const content = await this.db.getContent(msg.hash);
+          this.send(ws, content
+            ? { kind: 'content', hash: content.hash, mediaType: content.mediaType, bytesBase64: content.bytes }
+            : { kind: 'content', hash: msg.hash, mediaType: '', bytesBase64: '' });
           break;
         }
 

@@ -106,7 +106,9 @@ export type ClientMessage =
   | { kind: 'submit_op'; operationBytes: string }
   | { kind: 'get_log'; after: number }
   | { kind: 'get_snapshot'; username: string }
-  | { kind: 'put_snapshot'; snapshot: EncryptedSnapshot };
+  | { kind: 'put_snapshot'; snapshot: EncryptedSnapshot }
+  | { kind: 'put_content'; bytesBase64: string; mediaType: string }
+  | { kind: 'get_content'; hash: string };
 
 export type ServerMessage =
   | { kind: 'registered'; username: string; publicKeyHex: string; keyVersion: number; attributeMachine: string; members: PublicUser[]; snapshot?: EncryptedSnapshot }
@@ -117,4 +119,6 @@ export type ServerMessage =
   | { kind: 'op_accepted'; index: number }
   | { kind: 'op_rejected'; reason: string }
   | { kind: 'broadcast'; operation: StoredOperation }
+  | { kind: 'content_stored'; hash: string }
+  | { kind: 'content'; hash: string; mediaType: string; bytesBase64: string }
   | { kind: 'error'; message: string };

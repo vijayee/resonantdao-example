@@ -92,4 +92,78 @@ describe('DaoNode', () => {
     await dao.init();
     expect(dao.node.getRegister('no_such_register')).toBe(0);
   });
+
+  it('drives the full lifecycle through the real wasm node: submit, verify, settle', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    const kpAlice = await KeyPair.generate();
+    const kpBob = await KeyPair.generate();
+    dao.registerMember('alice', kpAlice.publicKeyHex());
+    dao.registerMember('bob', kpBob.publicKeyHex());
+
+    // Alice submits a building-dimension contribution; submit auto-completes
+    // step 0, so the lifecycle position register starts at 1 (verify).
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'submit_contribution', {
+      contributionId: 'c-lifec',
+      dims: { '1': 1 },
+      summary: 'built a thing',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v1',
+    }));
+    expect(dao.getContributionStatus('c-lifec')).toBe('pending');
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('c-lifec'))).toBe(1);
+
+    // Bob verifies (no-self anti-gaming honored naturally: bob != alice).
+    // Per-check credit pays bob 2; the final completion pays alice the
+    // per-dims building bounty (12) and advances the step to settle.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'bob', kpBob, 'verify_contribution', {
+      contributionId: 'c-lifec',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'built and matches the claim',
+    }));
+    expect(dao.getContributionStatus('c-lifec')).toBe('pending');
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('c-lifec'))).toBe(2);
+    expect(dao.getResBalance('bob')).toBe(2);
+    expect(dao.getResBalance('alice')).toBe(12);
+    expect(dao.getDimensionBalance('alice', 1)).toBe(1);
+
+    // Alice settles — the submitter's final acknowledgment.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'settle_contribution', {
+      contributionId: 'c-lifec',
+      submitter: 'alice',
+      reason: 'accepting the verified outcome',
+    }));
+    expect(dao.getContributionStatus('c-lifec')).toBe('accepted');
+    expect(dao.node.getPNCounter(CONTRIB_NAMES.stepDone('c-lifec', 'settle'))).toBe(1);
+  });
+
+  it('rejects verify_contribution by the submitter (no-self) through real wasm', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    const kpAlice = await KeyPair.generate();
+    dao.registerMember('alice', kpAlice.publicKeyHex());
+
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'submit_contribution', {
+      contributionId: 'c-noself',
+      dims: { '1': 1 },
+      summary: 'built a thing',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v1',
+    }));
+
+    const selfVerify = await buildSignedMemberOp(dao, 'alice', kpAlice, 'verify_contribution', {
+      contributionId: 'c-noself',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'vouching for myself',
+    });
+    expect(() => dao.executeOperation(selfVerify)).toThrow();
+    expect(dao.getResBalance('alice')).toBe(0);
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('c-noself'))).toBe(1);
+  });
 });
