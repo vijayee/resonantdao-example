@@ -1,4 +1,5 @@
 import { WaveDB } from '@vijayee/wavedb';
+import { createHash } from 'node:crypto';
 import { EncryptedSnapshot, PublicUser, StoredOperation } from '../../shared/src/types';
 
 const DB_PATH = process.env.WAVEDB_PATH || './data/wavedb';
@@ -90,6 +91,17 @@ export class DaoDatabase {
         return user;
       })
     );
+  }
+
+  async putContent(data: Buffer, mediaType: string): Promise<string> {
+    const hash = createHash('sha256').update(data).digest('hex');
+    await this.db.putObject(`content/${hash}`, { hash, mediaType, bytes: data.toString('base64') });
+    return hash;
+  }
+
+  async getContent(hash: string): Promise<{ hash: string; mediaType: string; bytes: string } | null> {
+    if (!/^[0-9a-f]{64}$/.test(hash)) return null;
+    return this.db.getObject<{ hash: string; mediaType: string; bytes: string }>(`content/${hash}`);
   }
 
   close(): void {
