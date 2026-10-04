@@ -56,9 +56,9 @@ import {
   CONTENT_LIMITS, SCHEMA_VERSION, SCHEMAS, DEFAULT_SCHEMA,
   schemaForDims, validateEvidenceRef, stepPaymentsFor,
 } from '../../shared/src/contribution';
-import { makeSubmitContributionHandler } from '../../shared/src/handlers';
-import { CONTRIB_NAMES, STATE_NAMES } from '../../shared/src/policies';
-import { ContributionPayload } from '../../shared/src/types';
+import { makeSubmitContributionHandler, makeVerifyContributionHandler } from '../../shared/src/handlers';
+import { CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
+import { ContributionPayload, VerifyContributionPayload } from '../../shared/src/types';
 import { HandlerOperation, HandlerState } from 'crabs-wasm';
 
 class MockNode {
@@ -113,6 +113,9 @@ class MockState {
   }
   setContains(name: string, element: string): boolean {
     return this.sets.has(name) && this.sets.get(name)!.has(element);
+  }
+  allSetElements(name: string): string[] {
+    return Array.from(this.sets.get(name) ?? []);
   }
 
   private ensureSet(name: string): Set<string> {
@@ -257,5 +260,118 @@ describe('step schemas', () => {
       expect(validateEvidenceRef({ ...good, hash: 'zz'.repeat(32) })).toBe(false);
       expect(validateEvidenceRef(null)).toBe(false);
     });
+  });
+});
+
+function setupSubmitted(
+  state: MockState,
+  node: MockNode,
+  signer = 'alice',
+  contributionId = 'c-1',
+  dims: Record<string, number> = { '2': 1 }
+) {
+  setupMembers(state, signer, 'bob');
+  const handler = makeSubmitContributionHandler(node);
+  run(handler, state, makeOp('submit_contribution', signer, submitOp({ contributionId, dims })));
+  state.setRegister(RES_NAMES.balance(signer), 0);
+  state.setRegister(RES_NAMES.balance('bob'), 0);
+}
+
+function verifyOp(payload: Partial<VerifyContributionPayload>, signer = 'bob'): VerifyContributionPayload {
+  return {
+    contributionId: 'c-1', submitter: 'alice', dims: { '2': 1 }, stepId: 'verify',
+    pass: true, reason: 'checks out',
+    ...payload,
+  } as VerifyContributionPayload;
+}
+
+describe('verify_contribution handler (schema-driven)', () => {
+  it('pays the verifier per completed check regardless of direction, rejects on reject', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node);
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ pass: false, reason: 'no record link' })))).toBe(0);
+    expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
+    expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(2);
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-1', 'verify'))).toBe(1);
+  });
+
+  it('on pass at the final requirement: pays submitter per-dims, updates tallies, advances to settle', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node, 'alice', 'c-multi', { '1': 1, '2': 0.5, '9': 1 });
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob',
+      verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '9': 1 }, reason: 'real artifact' })))).toBe(0);
+    const expected = RES_CONFIG.buildingBounty * 1 + RES_CONFIG.recordingBaseCredit * 0.5;
+    expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(expected);
+    expect(state.getRegister('dim:alice:c1')).toBe(1);
+    expect(state.getRegister('dim:alice:c2')).toBe(0.5);
+    expect(state.getRegister('dim:alice:c9')).toBeUndefined(); // classification-only: never registered
+    expect(state.getRegister(CONTRIB_NAMES.step('c-multi'))).toBe(2); // advanced to settle
+    expect(state.getRegister(CONTRIB_NAMES.status('c-multi'))).toBe(0);
+    expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
+  });
+
+  it('default schema: pass at the terminal verify step finalizes as accepted', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node, 'alice', 'c-term', { '9': 1 });
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob',
+      verifyOp({ contributionId: 'c-term', dims: { '9': 1 } })))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-term'))).toBe(1);
+    expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(0);
+    expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
+  });
+
+  it('rejects self-verification', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node, 'alice', 'c-self');
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(verify, state, makeOp('verify_contribution', 'alice',
+      verifyOp({ contributionId: 'c-self', submitter: 'alice' })))).toBe(-1);
+  });
+
+  it('rejects a second verification after the terminal step finalized', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node, 'alice', 'c-twice', { '9': 1 });
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 } })))).toBe(0);
+    const bobBalance = state.getRegister(RES_NAMES.balance('bob'));
+    expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 } })))).toBe(-1);
+    expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 }, pass: false })))).toBe(-1);
+    expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(bobBalance);
+  });
+
+  it('rejects wrong stepId, unknown contribution, unknown submitter, invalid dims', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node, 'alice', 'c-guards');
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ stepId: 'settle' })))).toBe(-1);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'ghost' })))).toBe(-1);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ submitter: 'ghost-user' })))).toBe(-1);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ dims: { '22': 1 } })))).toBe(-1);
+  });
+
+  it('explanation record captures verifier, payments and versions', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node, 'alice', 'c-expl', { '1': 1 });
+    const verify = makeVerifyContributionHandler(node);
+    run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-expl', dims: { '1': 1 }, reason: 'solid' })));
+    const explanations = state.allSetElements(CONTRIB_NAMES.explanations('c-expl'));
+    expect(explanations).toHaveLength(2); // submit record + verify record
+    const verifyRecord = JSON.parse(explanations.find((e) => e.includes('"verifier"'))!);
+    expect(verifyRecord.stepId).toBe('verify');
+    expect(verifyRecord.verification.verifier).toBe('bob');
+    expect(verifyRecord.payments['alice']).toBe(RES_CONFIG.buildingBounty);
+    expect(verifyRecord.calibrationVersion).toBe('v1');
+    expect(verifyRecord.schemaVersion).toBe('v1');
   });
 });

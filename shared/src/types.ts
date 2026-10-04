@@ -88,6 +88,7 @@ export interface ContributionPayload {
 export interface VerifyContributionPayload {
   contributionId: string;
   submitter: string;
+  stepId: string;
   dims: Record<string, number>;
   pass: boolean;
   reason: string;

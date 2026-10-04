@@ -1,9 +1,12 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, StartElectionPayload, VotePayload } from './types';
+import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
-  CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
+  CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
-import { SCHEMA_VERSION, isValidDims, schemaForDims, validateEvidenceRef } from './contribution';
+import {
+  CALIBRATION_VERSION, SCHEMA_VERSION, dimensionDeltaFor, isValidDims,
+  paymentFor, schemaForDims, validateEvidenceRef,
+} from './contribution';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
@@ -72,6 +75,146 @@ export function makeSubmitContributionHandler(
     // submitter so records are attributable.
     state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
     state.setAdd(STATE_NAMES.contributions, payload.contributionId, op.signerId);
+    return 0;
+  };
+}
+
+// Generic lifecycle verify step (op 'verify_contribution'). The schema is
+// recomputed deterministically from the payload dims on every replica, so the
+// step is resolved against it rather than trusted from the op. Anti-gaming:
+// the verifier must differ from the submitter (the submitter is carried in the
+// payload, asserted by the caller's client flow).
+//
+// Declaration safety (real CRABS wrapper): state.setRegister on an undeclared
+// register throws resource_not_found, so every register this handler might
+// write that was NOT already declared by makeSubmitContributionHandler
+// (status/step registers, per-step done counters, explanations ORSet) is
+// addRegister'd first — balances and dimension tallies.
+export function makeVerifyContributionHandler(
+  node: { addRegister(name: string, initial?: number): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: VerifyContributionPayload = JSON.parse(op.payload || '{}');
+    if (
+      !isNonEmptyString(payload.contributionId) ||
+      !isNonEmptyString(payload.submitter) ||
+      !isNonEmptyString(payload.stepId) ||
+      !isNonEmptyString(payload.reason) ||
+      typeof payload.pass !== 'boolean' ||
+      !isValidDims(payload.dims) ||
+      payload.submitter === op.signerId
+    ) {
+      return -1;
+    }
+    if (
+      !state.setContains(STATE_NAMES.members, payload.submitter) ||
+      !state.setContains(STATE_NAMES.contributions, payload.contributionId)
+    ) {
+      return -1;
+    }
+
+    const statusReg = CONTRIB_NAMES.status(payload.contributionId);
+    const stepReg = CONTRIB_NAMES.step(payload.contributionId);
+    const status = state.getRegister(statusReg);
+    if (status === undefined || status !== 0) {
+      return -1; // already accepted/rejected or never submitted
+    }
+    const stepIndex = state.getRegister(stepReg);
+    if (stepIndex === undefined || !Number.isInteger(stepIndex) || stepIndex < 0) {
+      return -1;
+    }
+    const schema = schemaForDims(payload.dims);
+    const step = schema.steps[stepIndex];
+    if (!step || step.op !== 'verify_contribution' || step.stepId !== payload.stepId) {
+      return -1;
+    }
+
+    // Per-check credit for the ACTOR on every completed verification,
+    // pass or reject (C_18 Moon).
+    const actorBalance = RES_NAMES.balance(op.signerId);
+    try { node.addRegister(actorBalance, 0); } catch (err) { /* ignore duplicate */ }
+    state.setRegister(actorBalance, (state.getRegister(actorBalance) || 0) + RES_CONFIG.verificationCheckCredit, op.signerId);
+
+    const doneName = CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId);
+    state.incrementPNCounter(doneName, 1, op.signerId);
+    const done = state.getPNCounter(doneName) || 0;
+    const isFinal = done >= step.requirement.count;
+
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const verification = { verifier: op.signerId, pass: payload.pass, reason: payload.reason, at: nowMs };
+
+    if (!payload.pass) {
+      // Rejection terminates the lifecycle immediately; dimension tallies are
+      // NOT touched (outcome voided).
+      try { node.addRegister(statusReg, 0); } catch (err) { /* ignore duplicate */ }
+      state.setRegister(statusReg, 2, op.signerId);
+      const record = {
+        contributionId: payload.contributionId,
+        stepId: step.stepId,
+        verification,
+        payments: {} as Record<string, number>,
+        calibrationVersion: CALIBRATION_VERSION,
+        schemaVersion: schema.schemaVersion,
+      };
+      state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
+      return 0;
+    }
+
+    const payments: Record<string, number> = {};
+    if (isFinal) {
+      // Submitter outcome bounties: every non-per-check rule fires once at the
+      // step's final requirement completion. The actor entry (per-check) was
+      // already paid above.
+      let submitterAmount = 0;
+      for (const pay of step.pays ?? []) {
+        if (pay.rule === 'per-dims') {
+          for (const [dimKey, match] of Object.entries(payload.dims)) {
+            submitterAmount += paymentFor(Number(dimKey), match);
+          }
+        } else if (pay.rule === 'flat') {
+          submitterAmount += pay.amount ?? 0;
+        }
+      }
+      if (submitterAmount > 0 && payload.submitter !== op.signerId) {
+        const submitterBalance = RES_NAMES.balance(payload.submitter);
+        try { node.addRegister(submitterBalance, 0); } catch (err) { /* ignore duplicate */ }
+        state.setRegister(submitterBalance, (state.getRegister(submitterBalance) || 0) + submitterAmount, op.signerId);
+        payments[payload.submitter] = submitterAmount;
+      }
+
+      // Dimension tallies grow by the accept delta — but only for dimensions
+      // with an implemented payment rule; classification-only dims (payment 0)
+      // cannot be distinguished from never-set on the register and are skipped.
+      for (const [dimKey, match] of Object.entries(payload.dims)) {
+        const dimIndex = Number(dimKey);
+        if (paymentFor(dimIndex, match) <= 0) {
+          continue;
+        }
+        const tallyReg = CONTRIB_NAMES.dimensionBalance(payload.submitter, dimIndex);
+        try { node.addRegister(tallyReg, 0); } catch (err) { /* ignore duplicate */ }
+        state.setRegister(tallyReg, (state.getRegister(tallyReg) || 0) + dimensionDeltaFor(dimIndex, match), op.signerId);
+      }
+
+      // Step advance: at a terminal step the contribution is accepted.
+      try { node.addRegister(stepReg, 0); } catch (err) { /* ignore duplicate */ }
+      try { node.addRegister(statusReg, 0); } catch (err) { /* ignore duplicate */ }
+      if (stepIndex + 1 < schema.steps.length) {
+        state.setRegister(stepReg, stepIndex + 1, op.signerId);
+      } else {
+        state.setRegister(statusReg, 1, op.signerId);
+      }
+    }
+
+    const record = {
+      contributionId: payload.contributionId,
+      stepId: step.stepId,
+      verification,
+      payments,
+      calibrationVersion: CALIBRATION_VERSION,
+      schemaVersion: schema.schemaVersion,
+    };
+    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
     return 0;
   };
 }
