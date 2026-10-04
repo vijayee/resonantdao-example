@@ -14,6 +14,16 @@ export class TimeoutError extends Error {
   }
 }
 
+// Mirrors the server's content addressing: lowercase hex sha-256 of the raw bytes.
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    throw new Error('Web Crypto API is not available. Content hashing requires a secure browser context.');
+  }
+  const digest = new Uint8Array(await subtle.digest('SHA-256', bytes as BufferSource));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 const SERVER_MESSAGE_KINDS: ServerMessage['kind'][] = [
   'registered',
   'login_ok',
@@ -210,7 +220,8 @@ export class ServerClient {
   waitFor(
     kind: ServerMessage['kind'],
     timeoutMs = 30000,
-    failureKind?: ServerMessage['kind']
+    failureKind?: ServerMessage['kind'],
+    predicate?: (msg: ServerMessage) => boolean
   ): Promise<ServerMessage> {
     return new Promise((resolve, reject) => {
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -225,7 +236,7 @@ export class ServerClient {
       };
 
       const listener = (msg: ServerMessage) => {
-        if (msg.kind === kind) {
+        if (msg.kind === kind && (!predicate || predicate(msg))) {
           cleanup();
           resolve(msg);
         } else if (failureKind !== undefined && msg.kind === failureKind) {
@@ -284,15 +295,26 @@ export class ServerClient {
   }
 
   async putContent(bytes: Uint8Array, mediaType: string): Promise<string> {
+    const hash = await sha256Hex(bytes);
     await this.send({ kind: 'put_content', bytesBase64: bytesToBase64(bytes), mediaType });
-    const msg = await this.waitFor('content_stored', 30000, 'error');
+    const msg = await this.waitFor(
+      'content_stored',
+      30000,
+      'error',
+      (msg) => (msg as { hash: string }).hash === hash
+    );
     return (msg as { kind: 'content_stored'; hash: string }).hash;
   }
 
   // A cache miss is reported as a content reply with empty bytesBase64 (not an error).
   async getContent(hash: string): Promise<{ mediaType: string; bytes: Uint8Array } | null> {
     await this.send({ kind: 'get_content', hash });
-    const msg = await this.waitFor('content', 30000, 'error');
+    const msg = await this.waitFor(
+      'content',
+      30000,
+      'error',
+      (msg) => (msg as { hash: string }).hash === hash
+    );
     const content = msg as { kind: 'content'; hash: string; mediaType: string; bytesBase64: string };
     if (!content.bytesBase64) return null;
     return { mediaType: content.mediaType, bytes: base64ToBytes(content.bytesBase64) };
