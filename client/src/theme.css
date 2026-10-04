@@ -640,3 +640,118 @@ body {
   white-space: nowrap;
   border: 0;
 }
+
+/* Contribution wizard */
+.wizard-fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wizard-fieldset legend {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0 var(--space-1);
+}
+
+.wizard-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+/* Contribution cards */
+.contribution-card {
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.contribution-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.contribution-card__verdict {
+  color: var(--color-danger);
+  font-size: 0.8125rem;
+}
+
+.contribution-card__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.contribution-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.contribution-step {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+}
+
+.contribution-step--complete {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.contribution-step--current {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.contribution-step--locked {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.contribution-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.15rem var(--space-2);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.contribution-pill--pending {
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.contribution-pill--accepted {
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+}
+
+.contribution-pill--rejected {
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}

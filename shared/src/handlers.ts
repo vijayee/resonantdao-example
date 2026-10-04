@@ -74,7 +74,9 @@ export function makeSubmitContributionHandler(
     // emits an explanation record). Element is the JSON record; tag is the
     // submitter so records are attributable.
     state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), op.signerId);
-    state.setAdd(STATE_NAMES.contributions, payload.contributionId, op.signerId);
+    // CRABS OR-Set add dedups by tag, so the tag must be unique per submission
+    // (op.signerId would silently drop every contribution after a member's first).
+    state.setAdd(STATE_NAMES.contributions, payload.contributionId, payload.contributionId);
     return 0;
   };
 }

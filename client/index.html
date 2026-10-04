@@ -131,23 +131,44 @@
               <div id="election-area"></div>
             </section>
 
+            <section class="section-card" aria-labelledby="contribute-title">
+              <div class="section-card__header">
+                <h2 id="contribute-title" class="section-card__title">Contribute</h2>
+              </div>
+              <form id="contribution-form" class="proposal-form">
+                <fieldset id="contribution-step-1" class="wizard-fieldset">
+                  <legend>1 — What kind of contribution?</legend>
+                  <label class="wizard-choice"><input type="radio" name="contrib-dim" value="2" checked /> C_2 Recording — durable, findable record (base credit 3 $RES)</label>
+                  <label class="wizard-choice"><input type="radio" name="contrib-dim" value="1" /> C_1 Building — built something real (bounty 12 $RES)</label>
+                </fieldset>
+                <fieldset id="contribution-step-2" class="wizard-fieldset">
+                  <legend>2 — Describe it and attach evidence</legend>
+                  <input id="contribution-summary" class="form-input" placeholder="What did you make or record?" required />
+                  <input id="contribution-evidence-text" class="form-input" placeholder="Evidence pointer (URL, commit, record id)…" />
+                  <input id="contribution-evidence-file" class="form-input" type="file" />
+                  <div id="contribution-evidence-status" class="muted"></div>
+                </fieldset>
+                <fieldset id="contribution-step-3" class="wizard-fieldset">
+                  <legend>3 — Review</legend>
+                  <div id="contribution-review" class="muted">Fill in the steps above to preview your submission.</div>
+                </fieldset>
+                <div class="proposal-form__actions">
+                  <button class="button button--primary" type="submit">Submit contribution</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="section-card" aria-labelledby="contributions-title">
+              <div class="section-card__header">
+                <h2 id="contributions-title" class="section-card__title">Contributions</h2>
+              </div>
+              <section id="contributions-list" aria-live="polite"></section>
+            </section>
+
             <section class="section-card" aria-labelledby="custodian-admin-title">
               <div class="section-card__header">
                 <h2 id="custodian-admin-title" class="section-card__title">Custodian controls</h2>
               </div>
-              <form id="token-config-form" class="proposal-form hidden">
-                <div class="form-group">
-                  <label class="form-label" for="config-interval">Distribution interval (ms)</label>
-                  <input id="config-interval" class="form-input" type="number" min="1000" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="config-rate">Tokens per interval</label>
-                  <input id="config-rate" class="form-input" type="number" min="1" />
-                </div>
-                <div class="proposal-form__actions">
-                  <button class="button button--primary" type="submit">Apply settings</button>
-                </div>
-              </form>
               <div id="remove-controls" class="remove-controls"></div>
             </section>
           </div>

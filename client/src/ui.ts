@@ -4,9 +4,19 @@ import {
   ExecutePayload,
   ServerMessage,
   StartElectionPayload,
-  SetTokenConfigPayload,
+  SettleContributionPayload,
+  VerifyContributionPayload,
 } from '@shared/types';
-import { BrowserDao, bytesToBase64, bytesToHex, base64ToBytes } from './dao';
+import {
+  CONTENT_LIMITS,
+  DIMENSIONS,
+  EvidenceRef,
+  SCHEMA_VERSION,
+  schemaForDims,
+} from '@shared/contribution';
+import { RES_CONFIG } from '@shared/policies';
+import { ContributionFacts, wizardModel } from '@shared/wizard';
+import { BrowserDao, ContributionMirrorEntry, bytesToBase64, bytesToHex, base64ToBytes } from './dao';
 import { registerWallet, loginWallet } from './eauth-wallet';
 import {
   saveLoginBundle,
@@ -18,6 +28,22 @@ import {
 } from './storage';
 import { ServerClient } from './server-client';
 import { loadCRABS } from './wasm';
+
+// Escape untrusted strings before templating them into innerHTML.
+function esc(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Uniform sha-256 for both evidence paths: stored files and text pointers.
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as ArrayBuffer);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export class AppUI {
   private client = new ServerClient();
@@ -77,10 +103,10 @@ export class AppUI {
     const startElectionBtn = document.getElementById('start-election');
     startElectionBtn?.addEventListener('click', () => void this.onStartElection());
 
-    const tokenConfigForm = document.getElementById('token-config-form') as HTMLFormElement | null;
-    tokenConfigForm?.addEventListener('submit', (ev) => {
+    const contributionForm = document.getElementById('contribution-form') as HTMLFormElement | null;
+    contributionForm?.addEventListener('submit', (ev) => {
       ev.preventDefault();
-      void this.onSetTokenConfig();
+      void this.onSubmitContribution();
     });
 
     // Time-travel control for demo: advance the node clock at a fixed rate so
@@ -99,6 +125,7 @@ export class AppUI {
       this.renderElections();
       this.renderCustodians();
       this.renderCustodianControls();
+      this.renderContributions();
     };
     update();
     setInterval(update, 1000);
@@ -544,6 +571,9 @@ export class AppUI {
     const li = document.createElement('li');
     li.className = 'proposal-card';
 
+    const dao = this.dao;
+    if (!dao) return li;
+
     const header = document.createElement('div');
     header.className = 'proposal-card__header';
 
@@ -576,19 +606,19 @@ export class AppUI {
 
     const typeLabel = document.createElement('div');
     typeLabel.className = 'proposal-card__type';
-    const pType = this.dao.getProposalType(proposal.proposalId);
+    const pType = dao.getProposalType(proposal.proposalId);
     typeLabel.textContent = pType === 'quadratic' ? 'Quadratic Vote' : 'Direct Vote';
     li.appendChild(typeLabel);
 
-    const expiresAt = this.dao.getProposalExpiry(proposal.proposalId);
-    const remainingMs = Math.max(0, expiresAt - this.dao.getNodeTimeMs());
+    const expiresAt = dao.getProposalExpiry(proposal.proposalId);
+    const remainingMs = Math.max(0, expiresAt - dao.getNodeTimeMs());
     const timer = document.createElement('div');
     timer.className = 'proposal-card__timer';
     timer.textContent = executed ? 'Voting closed' : `Closes in ${Math.ceil(remainingMs / 1000)}s`;
     li.appendChild(timer);
 
     const options = proposal.options ?? ['Yes', 'No'];
-    const counts = this.dao.getProposalOptionVotes(proposal.proposalId);
+    const counts = dao.getProposalOptionVotes(proposal.proposalId);
 
     const voteRows = document.createElement('div');
     voteRows.className = 'proposal-card__votes';
@@ -609,10 +639,10 @@ export class AppUI {
 
     let nextCumulativeCost = 0;
     if (pType === 'quadratic' && this.wallet) {
-      const used = this.dao.getProposalTokenUsage(proposal.proposalId, this.wallet.username);
-      const voteCount = this.dao.getProposalVoteCount(proposal.proposalId, this.wallet.username);
+      const used = dao.getProposalTokenUsage(proposal.proposalId, this.wallet.username);
+      const voteCount = dao.getProposalVoteCount(proposal.proposalId, this.wallet.username);
       nextCumulativeCost = ((voteCount + 1) * (voteCount + 2) * (2 * voteCount + 3)) / 6;
-      const balance = this.dao.getTokenBalance(this.wallet.username);
+      const balance = dao.getResBalance(this.wallet.username);
       const tokenInfo = document.createElement('div');
       tokenInfo.className = 'proposal-card__tokens';
       tokenInfo.textContent = `Tokens used here: ${used} | Next vote cost: ${nextCumulativeCost} | Balance: ${balance}`;
@@ -623,7 +653,7 @@ export class AppUI {
     actions.className = 'proposal-card__actions';
 
     const alreadyVoted = this.votedProposals.has(proposal.proposalId);
-    const canVoteQuadratic = pType === 'quadratic' && this.wallet && this.dao.getTokenBalance(this.wallet.username) >= nextCumulativeCost && nextCumulativeCost > 0;
+    const canVoteQuadratic = pType === 'quadratic' && this.wallet && dao.getResBalance(this.wallet.username) >= nextCumulativeCost && nextCumulativeCost > 0;
     const actionsDisabled = executed || this.submitting || (alreadyVoted && !canVoteQuadratic);
 
     options.forEach((label, i) => {
@@ -673,7 +703,7 @@ export class AppUI {
     if (this.dao) {
       const tokenBadge = document.createElement('span');
       tokenBadge.className = 'member-item__tokens';
-      tokenBadge.textContent = `🪙 ${this.dao.getTokenBalance(this.wallet.username)}`;
+      tokenBadge.textContent = `🪙 ${this.dao.getResBalance(this.wallet.username)}`;
       youItem.appendChild(tokenBadge);
     }
     list.appendChild(youItem);
@@ -786,26 +816,241 @@ export class AppUI {
     }
   }
 
-  private async onSetTokenConfig() {
-    if (!this.dao || !this.wallet || this.submitting) return;
-    const intervalMs = parseInt(this.inputValue('config-interval'), 10);
-    const rate = parseInt(this.inputValue('config-rate'), 10);
-    if (!Number.isInteger(intervalMs) || intervalMs < 1000 || !Number.isInteger(rate) || rate < 1) {
-      this.setStatus('Interval must be >= 1000ms and rate >= 1.', 'error');
+  private async onSubmitContribution() {
+    if (!this.dao || !this.wallet || this.client === null || this.submitting) return;
+    const summary = this.inputValue('contribution-summary');
+    if (!summary) {
+      this.setStatus('A summary is required.', 'error');
       return;
     }
+    const dim = Number((document.querySelector('input[name="contrib-dim"]:checked') as HTMLInputElement)?.value ?? 2);
+    const evidenceText = this.inputValue('contribution-evidence-text');
+    const fileInput = document.getElementById('contribution-evidence-file') as HTMLInputElement | null;
+    const file = fileInput?.files?.[0];
+
     this.setSubmitting(true);
     try {
-      const bytes = await this.dao.setTokenConfig(this.wallet.username, { intervalMs, rate });
+      // Evidence priority: attached file → text pointer. Files go to the
+      // content-addressed store; pointers are hashed directly.
+      let evidenceRef: EvidenceRef;
+      if (file) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (bytes.length > CONTENT_LIMITS.maxObjectBytes) {
+          this.setStatus(`Evidence exceeds ${CONTENT_LIMITS.maxObjectBytes / (1024 * 1024)}MB — split it up.`, 'error');
+          return;
+        }
+        const mediaType = file.type || 'application/octet-stream';
+        const hash = await this.client.putContent(bytes, mediaType);
+        evidenceRef = { hash, uri: `content://${hash}`, mediaType, size: bytes.length };
+      } else if (evidenceText) {
+        const bytes = new TextEncoder().encode(evidenceText);
+        evidenceRef = { hash: await sha256Hex(bytes), uri: evidenceText, mediaType: 'text/uri-list', size: bytes.length };
+      } else {
+        this.setStatus('Attach evidence or give a pointer — pay follows proven outcomes.', 'error');
+        return;
+      }
+
+      const payload = {
+        contributionId: crypto.randomUUID(),
+        dims: { [dim]: 1 },
+        summary,
+        evidenceRef,
+        schemaVersion: SCHEMA_VERSION,
+      };
+      this.renderContributionReview(payload);
+      const bytes = await this.dao.submitContribution(this.wallet.username, payload);
       await this.client.submitOp(bytesToBase64(bytes));
       await this.safeExecuteRemote(bytes);
-      this.setStatus('Token settings updated.', 'success');
+      this.setStatus('Contribution submitted — awaiting verification.', 'success');
+      this.clearForm('contribution-form');
+      this.renderContributions();
     } catch (err) {
-      this.setStatus(`Config error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      this.setStatus(`Contribution error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
     } finally {
       this.setSubmitting(false);
     }
+  }
+
+  private async onVerifyContribution(entry: ContributionMirrorEntry) {
+    if (!this.dao || !this.wallet || this.client === null || this.submitting) return;
+    if (entry.submitter === this.wallet.username) return; // no-self verify
+    const pass = confirm('Accept this contribution? OK = accept, Cancel = reject.');
+    const reason = prompt('Written reason for your verification (recorded permanently):') ?? '';
+    if (!reason.trim()) {
+      this.setStatus('A written reason is required for every verification.', 'error');
+      return;
+    }
+    const payload: VerifyContributionPayload = {
+      contributionId: entry.record.contributionId,
+      submitter: entry.submitter,
+      dims: entry.record.dims,
+      stepId: 'verify',
+      pass,
+      reason,
+    };
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.verifyContribution(this.wallet.username, payload);
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus(`Verification recorded (+${RES_CONFIG.verificationCheckCredit} $RES).`, 'success');
+      this.renderContributions();
+    } catch (err) {
+      this.setStatus(`Verify error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onSettleContribution(entry: ContributionMirrorEntry) {
+    if (!this.dao || !this.wallet || this.client === null || this.submitting) return;
+    if (entry.submitter !== this.wallet.username) return;
+    const reason = prompt('Settlement note (recorded permanently):') ?? '';
+    if (!reason.trim()) {
+      this.setStatus('A written reason is required to settle.', 'error');
+      return;
+    }
+    const payload: SettleContributionPayload = {
+      contributionId: entry.record.contributionId,
+      submitter: entry.submitter,
+      reason,
+    };
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.settleContribution(this.wallet.username, payload);
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('Contribution settled.', 'success');
+      this.renderContributions();
+    } catch (err) {
+      this.setStatus(`Settle error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private renderContributions() {
+    const list = document.getElementById('contributions-list');
+    if (!list || !this.dao || !this.wallet) return;
+    list.innerHTML = '';
+    const entries = [...this.dao.getContributions()].reverse();
+    if (entries.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'muted';
+      empty.textContent = 'No contributions yet.';
+      list.appendChild(empty);
+      return;
+    }
+    for (const entry of entries) {
+      list.appendChild(this.buildContributionCard(entry));
+    }
+  }
+
+  private buildContributionCard(entry: ContributionMirrorEntry): HTMLElement {
+    const dao = this.dao;
+    const viewer = this.wallet;
+    if (!dao || !viewer) return document.createElement('div');
+    const schema = schemaForDims(entry.record.dims);
+    const status = dao.getContributionStatus(entry.record.contributionId);
+    const facts: ContributionFacts = {
+      status: status === 'unknown' ? -1 : status === 'accepted' ? 1 : status === 'rejected' ? 2 : 0,
+      stepIndex: dao.getContributionStepIndex(entry.record.contributionId),
+      done: Object.fromEntries(schema.steps.map((s) => [
+        s.stepId, dao.getContributionStepDone(entry.record.contributionId, s.stepId),
+      ])),
+      submitter: entry.submitter,
+    };
+    const model = wizardModel(schema, facts, viewer.username, dao.custodians.includes(viewer.username));
+
+    const card = document.createElement('div');
+    card.className = 'contribution-card';
+    card.dataset.contributionId = entry.record.contributionId;
+
+    const header = document.createElement('div');
+    header.className = 'contribution-card__header';
+    const title = document.createElement('strong');
+    title.textContent = entry.record.summary;
+    const pill = document.createElement('span');
+    pill.className = `contribution-pill contribution-pill--${model.outcome}`;
+    pill.textContent = model.outcome;
+    header.append(title, pill);
+    card.appendChild(header);
+
+    const stepper = document.createElement('div');
+    stepper.className = 'contribution-stepper';
+    model.steps.forEach((step, i) => {
+      const chip = document.createElement('span');
+      chip.className = `contribution-step contribution-step--${step.state}`;
+      chip.textContent = step.state === 'current'
+        ? `${i + 1}. ${step.title} (${step.progress.done}/${step.progress.required})`
+        : `${i + 1}. ${step.title}`;
+      stepper.appendChild(chip);
+    });
+    card.appendChild(stepper);
+
+    const byline = document.createElement('div');
+    byline.className = 'muted';
+    byline.textContent = `by ${entry.submitter}`;
+    card.appendChild(byline);
+
+    const evidence = document.createElement('div');
+    evidence.className = 'muted';
+    evidence.textContent = this.evidenceSummary(entry.record.evidenceRef);
+    card.appendChild(evidence);
+
+    if (model.outcome === 'rejected' && entry.verdictReason) {
+      const verdict = document.createElement('div');
+      verdict.className = 'contribution-card__verdict';
+      verdict.textContent = `Rejected by ${entry.verifiedBy}: ${entry.verdictReason}`;
+      card.appendChild(verdict);
+    }
+
+    const currentStep = model.steps[model.currentStepIndex];
+    if (currentStep) {
+      const actions = document.createElement('div');
+      actions.className = 'contribution-card__actions';
+      for (const actor of ['submitter', 'verifier', 'custodian', 'member'] as const) {
+        const role = currentStep.roles[actor];
+        if (!role || !role.mayAct) continue;
+        if (role.op === 'verify_contribution' && actor === 'verifier') {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'button button--secondary verify-contribution';
+          btn.textContent = 'Verify…';
+          btn.disabled = this.submitting;
+          btn.addEventListener('click', () => void this.onVerifyContribution(entry));
+          actions.appendChild(btn);
+        }
+        if (role.op === 'settle_contribution' && actor === 'submitter') {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'button button--primary settle-contribution';
+          btn.textContent = 'Settle…';
+          btn.disabled = this.submitting;
+          btn.addEventListener('click', () => void this.onSettleContribution(entry));
+          actions.appendChild(btn);
+        }
+      }
+      if (actions.childElementCount > 0) card.appendChild(actions);
+    }
+    return card;
+  }
+
+  private renderContributionReview(payload: { dims: Record<string, number>; summary: string; evidenceRef: EvidenceRef }) {
+    const el = document.getElementById('contribution-review');
+    if (!el) return;
+    const dimLabels = Object.keys(payload.dims)
+      .map((k) => `C_${k} ${DIMENSIONS[Number(k)].name}`)
+      .join(', ');
+    el.innerHTML = `<p><strong>${esc(payload.summary)}</strong></p><p>${esc(dimLabels)} — ${esc(this.evidenceSummary(payload.evidenceRef))}</p>`;
+  }
+
+  private evidenceSummary(ref: EvidenceRef): string {
+    if (ref.uri.startsWith('content://')) return `stored evidence (${(ref.size / 1024).toFixed(1)} KB, ${ref.mediaType})`;
+    return `pointer: ${ref.uri}`;
   }
 
   private async onRemoveMember(username: string) {
@@ -927,7 +1172,7 @@ export class AppUI {
         }
         const cost = document.createElement('div');
         cost.className = 'proposal-card__tokens';
-        cost.textContent = `Tokens used: ${this.dao.getRunoffUsage(election.electionId)} | Balance: ${this.dao.getTokenBalance(this.wallet.username)}`;
+        cost.textContent = `Tokens used: ${this.dao.getRunoffUsage(election.electionId)} | Balance: ${this.dao.getResBalance(this.wallet.username)}`;
         runoffForm.appendChild(cost);
         card.appendChild(runoffForm);
       }
@@ -968,18 +1213,10 @@ export class AppUI {
 
   private renderCustodianControls() {
     const controls = document.getElementById('remove-controls');
-    const configForm = document.getElementById('token-config-form');
     if (!controls || !this.dao || !this.wallet) return;
     const isCustodian = this.dao.custodians.includes(this.wallet.username);
-    configForm?.classList.toggle('hidden', !isCustodian);
     controls.innerHTML = '';
     if (!isCustodian) return;
-
-    const config = this.dao.getDistributionConfig();
-    const intervalInput = document.getElementById('config-interval') as HTMLInputElement | null;
-    const rateInput = document.getElementById('config-rate') as HTMLInputElement | null;
-    if (intervalInput && !intervalInput.value) intervalInput.value = String(config.intervalMs);
-    if (rateInput && !rateInput.value) rateInput.value = String(config.rate);
 
     for (const username of this.memberUsernames) {
       if (username === this.wallet.username) continue;
@@ -1003,8 +1240,8 @@ export class AppUI {
   private renderTokenBalance() {
     const el = document.getElementById('token-balance');
     if (!el || !this.dao || !this.wallet) return;
-    const balance = this.dao.getTokenBalance(this.wallet.username);
-    el.textContent = `🪙 ${balance} tokens`;
+    const balance = this.dao.getResBalance(this.wallet.username);
+    el.textContent = `🪙 ${balance} $RES`;
   }
 
   private inputValue(id: string): string {
