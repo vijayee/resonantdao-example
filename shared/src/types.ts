@@ -1,4 +1,5 @@
 import { EvidenceRef } from './contribution';
+import { RoundEntry } from './round';
 
 export const DAO_NAME = 'resonant-dao-example';
 
@@ -117,6 +118,10 @@ export interface AuditRoundPayload {
 
 export interface ReckonRoundPayload {
   note: string;
+}
+
+export interface CompleteRoundPayload {
+  entries: RoundEntry[]; // the round's settled+accepted contributions (client-collected)
 }
 
 export type ClientMessage =

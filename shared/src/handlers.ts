@@ -1,9 +1,12 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
+import { AddMemberPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, CompleteRoundPayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
-  CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
+  CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RCT_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
-import { CALIBRATION_VERSION_NUMBERS, STAGE_AUDITED, STAGE_OPEN, STAGE_PUBLISHED, STAGE_RECKONED } from './round';
+import {
+  AGGREGATE_ENTRY_LIMIT, CALIBRATION_VERSION_NUMBERS, isValidRoundEntry, roundRctTotals,
+  STAGE_AUDITED, STAGE_OPEN, STAGE_PUBLISHED, STAGE_RECKONED,
+} from './round';
 import {
   CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, dimensionDeltaFor, isValidDims,
   paymentFor, schemaForDims, validateEvidenceRef,
@@ -55,6 +58,10 @@ export function makeSubmitContributionHandler(
     // resource, so declare the status register here before writing to it.
     try { node.addRegister(CONTRIB_NAMES.status(payload.contributionId), 0); } catch (err) { /* ignore duplicate */ }
     try { node.addRegister(CONTRIB_NAMES.step(payload.contributionId), 1); } catch (err) { /* ignore duplicate */ }
+    // Round stamp: the contribution belongs to the round that was current at
+    // submission time; complete_round validates entries against this.
+    const round = state.getRegister(ROUND_NAMES.current()) || 1;
+    try { node.addRegister(CONTRIB_NAMES.contributionRound(payload.contributionId), round); } catch (err) { /* ignore duplicate */ }
     for (const step of schema.steps) {
       try { node.addPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId)); } catch (err) { /* ignore duplicate */ }
     }
@@ -901,6 +908,82 @@ export function makeReckonRoundHandler(
     const record = { stepId: 'reckon', note: payload.note, at: nowMs };
     state.setAdd(ROUND_NAMES.explanations(round), JSON.stringify(record), `reckon:${op.signerId}`);
     state.setRegister(ROUND_NAMES.stage(round), STAGE_RECKONED, op.signerId);
+    return 0;
+  };
+}
+
+// Round-spine op 'complete_round' (C_21): publish the round's aggregated RCT
+// and advance to the next round. The payload carries the round's settled+accepted
+// contributions (client-collected); every entry is validated BEFORE any write —
+// aggregate-or-nothing, so a single bad entry cannot burn a partial publication.
+export function makeCompleteRoundHandler(
+  node: { addRegister(name: string, initial?: number): void; addORSet(name: string): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: CompleteRoundPayload = JSON.parse(op.payload || '{}');
+    if (
+      !Array.isArray(payload.entries) ||
+      payload.entries.length === 0 ||
+      payload.entries.length > AGGREGATE_ENTRY_LIMIT
+    ) {
+      return -1;
+    }
+    if (!state.setContains(STATE_NAMES.members, op.signerId)) {
+      return -1;
+    }
+    const round = state.getRegister(ROUND_NAMES.current()) || 1;
+    if (state.getRegister(ROUND_NAMES.stage(round)) !== STAGE_RECKONED) {
+      return -1;
+    }
+    for (const entry of payload.entries) {
+      if (!isValidRoundEntry(entry)) {
+        return -1;
+      }
+    }
+    const seen = new Set<string>();
+    for (const entry of payload.entries) {
+      if (seen.has(entry.contributionId)) {
+        return -1;
+      }
+      seen.add(entry.contributionId);
+      if (!state.setContains(STATE_NAMES.contributions, entry.contributionId)) {
+        return -1;
+      }
+      // Round-stamp validation: entries belong to the round being completed.
+      if ((state.getRegister(CONTRIB_NAMES.contributionRound(entry.contributionId)) || 0) !== round) {
+        return -1;
+      }
+      // Aggregation input = settled, accepted contributions only.
+      if (state.getRegister(CONTRIB_NAMES.status(entry.contributionId)) !== 1) {
+        return -1;
+      }
+    }
+
+    const alphaFor = (i: number) => state.getRegister(CALIBRATIONS.alpha(i)) || 1;
+    const totals = roundRctTotals(payload.entries, alphaFor);
+    for (const [target, amount] of totals) {
+      try { node.addRegister(RCT_NAMES.balance(target), 0); } catch (err) { /* exists */ }
+      // Published RCT is CUMULATIVE through this round (tallies are cumulative;
+      // alpha changes are forward-looking — see design doc).
+      const prev = state.getRegister(RCT_NAMES.balance(target)) || 0;
+      state.setRegister(RCT_NAMES.balance(target), prev + amount, op.signerId);
+    }
+
+    try { node.addORSet(ROUND_NAMES.explanations(round)); } catch (err) { /* wired at init; lazy here */ }
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const record = {
+      stepId: 'complete',
+      round,
+      entryCount: payload.entries.length,
+      totals: Object.fromEntries(totals),
+      alphaVersion: state.getRegister(CALIBRATIONS.alphaVersion()) || 1,
+      calibrationVersion: state.getRegister(CALIBRATIONS.calibrationVersion()) || 1,
+      at: nowMs,
+    };
+    state.setAdd(ROUND_NAMES.explanations(round), JSON.stringify(record), `complete:${op.signerId}`);
+    state.setRegister(ROUND_NAMES.stage(round), STAGE_PUBLISHED, op.signerId);
+    state.setRegister(ROUND_NAMES.current(), round + 1, op.signerId);
     return 0;
   };
 }

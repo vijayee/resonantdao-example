@@ -176,6 +176,8 @@ describe('submit_contribution handler (schema-driven)', () => {
     // lifecycle position: submit auto-completed ⇒ current step = index 1
     expect(state.getRegister(CONTRIB_NAMES.step('c-1'))).toBe(1);
     expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-1', 'submit'))).toBe(1);
+    // Round stamp: the submission belongs to the round current at submit time.
+    expect(state.getRegister(CONTRIB_NAMES.contributionRound('c-1'))).toBe(1);
   });
 
   it('rejects a non-member submitter', () => {
@@ -579,5 +581,105 @@ describe('round spine: audit + reckon', () => {
     // Simulate unset calibration by direct register write (MockState):
     state.setRegister(CALIBRATIONS.calibrationVersion(), 0);
     expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 'x' } as ReckonRoundPayload))).toBe(-1);
+  });
+});
+
+import { makeCompleteRoundHandler } from '../../shared/src/handlers';
+import { CompleteRoundPayload } from '../../shared/src/types';
+import { RCT_NAMES } from '../../shared/src/policies';
+
+// Drives the full spine: r1-a submitted by alice, verified by bob, settled,
+// then audit -> reckon leaves round 1 at STAGE_RECKONED ready for publish.
+function setupSpineReady(node: MockNode, state: MockState) {
+  setupMembers(state, 'alice', 'bob', 'closer', 'closer2');
+  setupSubmitted(state, node, 'alice', 'r1-a', { '1': 1 });
+  const verify = makeVerifyContributionHandler(node);
+  expect(run(verify, state, makeOp('verify_contribution', 'bob',
+    verifyOp({ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 }, pass: true, reason: 'ok' })))).toBe(0);
+  // settle alice's contribution to exit the 3-step schema cleanly
+  const settle = makeSettleContributionHandler(node);
+  expect(run(settle, state, makeOp('settle_contribution', 'alice',
+    { contributionId: 'r1-a', submitter: 'alice', reason: 'done' } as SettleContributionPayload))).toBe(0);
+
+  try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring */ }
+  const audit = makeAuditRoundHandler(node, { getTimeMs: () => 0 });
+  const reckon = makeReckonRoundHandler(node, { getTimeMs: () => 0 });
+  expect(run(audit, state, makeOp('audit_round', 'closer2', { fair: true, note: 'ok', calibrationVersion: 'v1' } as AuditRoundPayload))).toBe(0);
+  expect(run(reckon, state, makeOp('reckon_round', 'closer2', { note: 'settled' } as ReckonRoundPayload))).toBe(0);
+}
+
+describe('complete_round', () => {
+  it('publishes cumulative RCT totals and advances the round', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    try { node.addRegister(CALIBRATIONS.alpha(1), 2); } catch { /* wiring */ }
+    setupSpineReady(node, state);
+
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } }],
+    } as CompleteRoundPayload))).toBe(0);
+    expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(3);
+    expect(state.getRegister(ROUND_NAMES.current())).toBe(2);
+    expect(state.getRegister(RCT_NAMES.balance('alice'))).toBe(2 * 1); // alpha(1)=2 × match 1
+    const records = state.allSetElements(ROUND_NAMES.explanations(1));
+    const publishRecord = JSON.parse(records.find((e) => e.includes('"stepId":"complete"')) ?? '{}');
+    expect(publishRecord.stepId).toBe('complete');
+    expect(publishRecord.entryCount).toBe(1);
+    expect(publishRecord.totals['alice']).toBe(2);
+    expect(publishRecord.alphaVersion).toBeDefined();
+  });
+
+  it('rejects entries that are unknown, duplicated, or not part of the round', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSpineReady(node, state);
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'ghost', submitter: 'alice', dims: { '1': 1 } }],
+    } as CompleteRoundPayload))).toBe(-1);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [
+        { contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } },
+        { contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } },
+      ],
+    } as CompleteRoundPayload))).toBe(-1);
+    // Round-stamp validation: a REAL contribution from a different round is
+    // not part of round 1.
+    const node2 = new MockNode();
+    const state2 = new MockState(node2);
+    setupSpineReady(node2, state2);
+    state2.setRegister(ROUND_NAMES.current(), 2); // publish round 1 → now in round 2
+    state2.setAdd(STATE_NAMES.contributions, 'r2-x', 'r2-x');
+    state2.setRegister(CONTRIB_NAMES.contributionRound('r2-x'), 2);
+    state2.setRegister(CONTRIB_NAMES.status('r2-x'), 1);
+    // Round-stamp validation: r1-a is real+accepted but belongs to round 1;
+    // once the current round has advanced to 2 (simulated here), it is not
+    // part of the round being completed.
+    state.setRegister(ROUND_NAMES.current(), 2);
+    state.setRegister(ROUND_NAMES.stage(2), 2); // STAGE_RECKONED
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } }],
+    } as CompleteRoundPayload))).toBe(-1);
+  });
+
+  it('rejects before stage 2 and after completion (stage must be RECKONED)', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'closer');
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer', {
+      entries: [],
+    } as CompleteRoundPayload))).toBe(-1); // stage 0, and also empty entries
+  });
+
+  it('rejects empty entries list', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSpineReady(node, state);
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [],
+    } as CompleteRoundPayload))).toBe(-1);
   });
 });

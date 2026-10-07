@@ -30,6 +30,7 @@ export const POLICIES = {
   set_calibration_version: 'role:custodian',
   audit_round: 'role:member',
   reckon_round: 'role:member',
+  complete_round: 'role:member',
 } as const;
 
 export const STATE_NAMES = {
