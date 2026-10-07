@@ -1,10 +1,11 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
+import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
-  CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
+  CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
+import { CALIBRATION_VERSION_NUMBERS } from './round';
 import {
-  CALIBRATION_VERSION, SCHEMA_VERSION, dimensionDeltaFor, isValidDims,
+  CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, dimensionDeltaFor, isValidDims,
   paymentFor, schemaForDims, validateEvidenceRef,
 } from './contribution';
 
@@ -719,6 +720,90 @@ export function makeRemoveMemberHandler() {
     }
     state.setRemove(STATE_NAMES.members, payload.username);
     state.setRegister(RES_NAMES.balance(payload.username), 0, 'system');
+    return 0;
+  };
+}
+
+// Custodian op 'set_rct_alpha': update sparse per-dimension alpha weights
+// (dimension index -> alpha in (0, 10]). Bumps the alpha-version register
+// (previous + 1) and appends an explanation record to the round-agnostic
+// alpha explanation ORSet, so a weight change is always explainable and
+// reproducible from the log.
+export function makeSetRctAlphaHandler(
+  node: { addRegister(name: string, initial?: number): void; addORSet(name: string): void }
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: SetRctAlphaPayload = JSON.parse(op.payload || '{}');
+    if (
+      payload.weights === null || typeof payload.weights !== 'object' || Array.isArray(payload.weights)
+    ) {
+      return -1;
+    }
+    const entries = Object.entries(payload.weights as Record<string, unknown>);
+    if (
+      entries.length === 0 ||
+      !isNonEmptyString(payload.version) ||
+      payload.version.length > 64
+    ) {
+      return -1;
+    }
+    for (const [key, value] of entries) {
+      const dim = Number(key);
+      // Canonical integer string keys only: '01', '1.5', '-1', '22' all fail.
+      // Values are finite alphas in (0, 10].
+      const ok =
+        Number.isInteger(dim) && dim >= 0 && dim < DIMENSION_COUNT &&
+        String(dim) === key &&
+        typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 10;
+      if (!ok) {
+        return -1;
+      }
+    }
+
+    // Declare before write (real wasm: setRegister on an undeclared resource
+    // throws resource_not_found). Declaring before reading the current alpha
+    // version keeps the read well-defined on fresh replicas too.
+    try { node.addRegister(CALIBRATIONS.alphaVersion(), 0); } catch (err) { /* ignore duplicate */ }
+    for (const [key] of entries) {
+      try { node.addRegister(CALIBRATIONS.alpha(Number(key)), 0); } catch (err) { /* ignore duplicate */ }
+    }
+    const newAlphaVersion = (state.getRegister(CALIBRATIONS.alphaVersion()) || 0) + 1;
+    state.setRegister(CALIBRATIONS.alphaVersion(), newAlphaVersion, op.signerId);
+    for (const [key, value] of entries) {
+      state.setRegister(CALIBRATIONS.alpha(Number(key)), value as number, op.signerId);
+    }
+
+    // Explanation record (invariant: every decision emits an explanation
+    // record). Element is the JSON record; the tag is deterministic and unique
+    // per alpha version (CRABS OR-Sets dedupe by tag). The set is declared at
+    // node init by the wiring task; the handler declares it defensively too.
+    const explanation = {
+      alphaVersion: newAlphaVersion,
+      version: payload.version,
+      weights: payload.weights,
+    };
+    try { node.addORSet(CALIBRATIONS.explanations()); } catch (err) { /* ignore duplicate / node-init declared */ }
+    state.setAdd(CALIBRATIONS.explanations(), JSON.stringify(explanation), `alpha:${newAlphaVersion}`);
+    return 0;
+  };
+}
+
+// Custodian op 'set_calibration_version': register the active Justice
+// calibration version. The payload version must be a known CALIBRATIONS
+// entry ('v1' in phase 2); the register stores its numeric index.
+export function makeSetCalibrationVersionHandler(
+  node: { addRegister(name: string, initial?: number): void }
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: SetCalibrationVersionPayload = JSON.parse(op.payload || '{}');
+    const mapped = CALIBRATION_VERSION_NUMBERS.get(payload.version ?? '');
+    if (mapped === undefined) {
+      return -1; // unknown calibration version
+    }
+    // Declare before write (real wasm: setRegister on an undeclared resource
+    // throws resource_not_found) — also on the first-ever registration.
+    try { node.addRegister(CALIBRATIONS.calibrationVersion(), 0); } catch (err) { /* ignore duplicate */ }
+    state.setRegister(CALIBRATIONS.calibrationVersion(), mapped, op.signerId);
     return 0;
   };
 }

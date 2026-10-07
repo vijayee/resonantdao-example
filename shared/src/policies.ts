@@ -26,6 +26,8 @@ export const POLICIES = {
   submit_contribution: 'role:member',
   verify_contribution: 'role:member',
   settle_contribution: 'role:member',
+  set_rct_alpha: 'role:custodian',
+  set_calibration_version: 'role:custodian',
 } as const;
 
 export const STATE_NAMES = {

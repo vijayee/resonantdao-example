@@ -439,3 +439,62 @@ describe('settle_contribution handler', () => {
       settleOp({ contributionId: 'c-reason', reason: '' })))).toBe(-1);
   });
 });
+
+import {
+  makeSetCalibrationVersionHandler, makeSetRctAlphaHandler,
+} from '../../shared/src/handlers';
+import { CALIBRATIONS } from '../../shared/src/policies';
+import { SetCalibrationVersionPayload, SetRctAlphaPayload } from '../../shared/src/types';
+
+describe('calibration ops', () => {
+  it('set_rct_alpha writes sparse weights and bumps alpha version', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    const handler = makeSetRctAlphaHandler(node);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', {
+      weights: { '1': 2, '2': 0.5 }, version: 'alpha-2',
+    } as SetRctAlphaPayload))).toBe(0);
+    expect(state.getRegister(CALIBRATIONS.alpha(1))).toBe(2);
+    expect(state.getRegister(CALIBRATIONS.alpha(2))).toBe(0.5);
+    expect(state.getRegister(CALIBRATIONS.alphaVersion())).toBe(1); // first write bumps 0 -> 1
+  });
+
+  it('set_rct_alpha rejects invalid subsets and weights', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    const handler = makeSetRctAlphaHandler(node);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '22': 1 }, version: 'x' } as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '-1': 1 }, version: 'x' } as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '01': 1 }, version: 'x' } as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '1.5': 1 }, version: 'x' } as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '1': 0 }, version: 'x' } as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '1': 11 }, version: 'x' } as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: [1, 2], version: 'x' } as unknown as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: {}, version: 'x' } as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '1': 2 }, version: '' } as SetRctAlphaPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '1': 2 }, version: 'y'.repeat(65) } as SetRctAlphaPayload))).toBe(-1);
+  });
+
+  it('set_rct_alpha appends an explanation record and bumps per call', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    const handler = makeSetRctAlphaHandler(node);
+    run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '3': 1.5 }, version: 'alpha-1' } as SetRctAlphaPayload));
+    run(handler, state, makeOp('set_rct_alpha', 'cust1', { weights: { '4': 0.25 }, version: 'alpha-2' } as SetRctAlphaPayload));
+    expect(state.getRegister(CALIBRATIONS.alphaVersion())).toBe(2);
+    const records = state.allSetElements(CALIBRATIONS.explanations()).map((e) => JSON.parse(e));
+    expect(records).toHaveLength(2);
+    expect(records[0]).toEqual({ alphaVersion: 1, version: 'alpha-1', weights: { '3': 1.5 } });
+    expect(records[1]).toEqual({ alphaVersion: 2, version: 'alpha-2', weights: { '4': 0.25 } });
+  });
+
+  it('set_calibration_version maps known version to its index', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    const handler = makeSetCalibrationVersionHandler(node);
+    expect(run(handler, state, makeOp('set_calibration_version', 'cust1', { version: 'v1' } as SetCalibrationVersionPayload))).toBe(0);
+    expect(state.getRegister(CALIBRATIONS.calibrationVersion())).toBe(1);
+    expect(run(handler, state, makeOp('set_calibration_version', 'cust1', { version: 'v99' } as SetCalibrationVersionPayload))).toBe(-1);
+    expect(run(handler, state, makeOp('set_calibration_version', 'cust1', {} as unknown as SetCalibrationVersionPayload))).toBe(-1);
+  });
+});

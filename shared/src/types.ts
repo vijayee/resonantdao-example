@@ -100,6 +100,15 @@ export interface SettleContributionPayload {
   reason: string;
 }
 
+export interface SetRctAlphaPayload {
+  weights: Record<string, number>; // sparse: dimension index -> alpha in (0, 10]
+  version: string;                 // alpha version label, recorded in the explanation record
+}
+
+export interface SetCalibrationVersionPayload {
+  version: string; // must be a known calibration version ('v1' in phase 2)
+}
+
 export type ClientMessage =
   | { kind: 'register'; username: string; publicKeyHex: string }
   | { kind: 'login'; username: string }
