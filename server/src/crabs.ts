@@ -1,16 +1,22 @@
 import { Node, KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
 import {
-  CONTRIB_NAMES, ELECTION_NAMES, POLICIES, RES_NAMES, STATE_NAMES, TOKEN_NAMES,
+  CALIBRATIONS, CONTRIB_NAMES, ELECTION_NAMES, POLICIES, RES_NAMES, ROUND_NAMES,
+  RCT_NAMES, STATE_NAMES, TOKEN_NAMES,
 } from '../../shared/src/policies';
 import {
   makeAddMemberHandler,
+  makeAuditRoundHandler,
   makeCastBallotHandler,
   makeCastRunoffVoteHandler,
+  makeCompleteRoundHandler,
   makeCreateProposalHandler,
   makeExecuteHandler,
   makeFinalizeElectionHandler,
+  makeReckonRoundHandler,
   makeRemoveMemberHandler,
+  makeSetCalibrationVersionHandler,
+  makeSetRctAlphaHandler,
   makeSettleContributionHandler,
   makeStartElectionHandler,
   makeSubmitContributionHandler,
@@ -35,6 +41,15 @@ export class DaoNode {
     this.node.addORSet(STATE_NAMES.contributions);
     this.node.addRegister('time_now', 0);
 
+    this.node.addRegister(ROUND_NAMES.current(), 1);
+    this.node.addRegister(ROUND_NAMES.stage(1), 0);
+    this.node.addORSet(ROUND_NAMES.explanations(1));
+    this.node.addRegister(CALIBRATIONS.calibrationVersion(), 1); // pilot bootstrap: 'v1' pre-set; custodians revise via set_calibration_version
+    this.node.addRegister(CALIBRATIONS.alphaVersion(), 0);
+    this.node.addRegister(CALIBRATIONS.voteBase(), 0);
+    this.node.addRegister(CALIBRATIONS.voteCap(), 0);
+    this.node.addORSet(CALIBRATIONS.explanations());
+
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);
     this.node.setPolicy('execute', POLICIES.execute);
@@ -47,6 +62,11 @@ export class DaoNode {
     this.node.setPolicy('submit_contribution', POLICIES.submit_contribution);
     this.node.setPolicy('verify_contribution', POLICIES.verify_contribution);
     this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
+    this.node.setPolicy('audit_round', POLICIES.audit_round);
+    this.node.setPolicy('reckon_round', POLICIES.reckon_round);
+    this.node.setPolicy('complete_round', POLICIES.complete_round);
+    this.node.setPolicy('set_rct_alpha', POLICIES.set_rct_alpha);
+    this.node.setPolicy('set_calibration_version', POLICIES.set_calibration_version);
 
     this.node.registerHandlerJs('add_member', makeAddMemberHandler());
     this.node.registerHandlerJs('create_proposal', makeCreateProposalHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
@@ -61,6 +81,11 @@ export class DaoNode {
     this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
     this.node.registerHandlerJs('sync_roles', () => 0); // admin-signed; roles applied out-of-band
+    this.node.registerHandlerJs('audit_round', makeAuditRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('reckon_round', makeReckonRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('complete_round', makeCompleteRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('set_rct_alpha', makeSetRctAlphaHandler(this.node));
+    this.node.registerHandlerJs('set_calibration_version', makeSetCalibrationVersionHandler(this.node));
   }
 
   registerMember(username: string, publicKeyHex: string): number {
@@ -127,6 +152,22 @@ export class DaoNode {
 
   getResBalance(username: string): number {
     return this.node.getRegister(RES_NAMES.balance(username)) || 0;
+  }
+
+  getCurrentRound(): number {
+    return this.node.getRegister(ROUND_NAMES.current()) || 1;
+  }
+
+  getRoundStage(round: number): number {
+    return this.node.getRegister(ROUND_NAMES.stage(round)) || 0;
+  }
+
+  getRctBalance(username: string): number {
+    return this.node.getRegister(RCT_NAMES.balance(username)) || 0;
+  }
+
+  getCalibrationVersion(): number {
+    return this.node.getRegister(CALIBRATIONS.calibrationVersion()) || 1;
   }
 
   // Empirical CRABS-wasm truth (pinned by the real-wasm test in

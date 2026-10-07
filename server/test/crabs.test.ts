@@ -166,4 +166,76 @@ describe('DaoNode', () => {
     expect(dao.getResBalance('alice')).toBe(0);
     expect(dao.node.getRegister(CONTRIB_NAMES.step('c-noself'))).toBe(1);
   });
+
+  it('drives the full round spine through the real wasm node', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    const kpAlice = await KeyPair.generate();
+    const kpBob = await KeyPair.generate();
+    const kpCloser = await KeyPair.generate();
+    dao.registerMember('alice', kpAlice.publicKeyHex());
+    dao.registerMember('bob', kpBob.publicKeyHex());
+    dao.registerMember('closer', kpCloser.publicKeyHex());
+
+    // Calibration bootstrap: custodian-policy ops (`role:custodian`) cannot be
+    // admin-signed — CRABS enforces the policy against the signer's CRABS
+    // attributes and the admin has no user record, so an admin-signed
+    // set_calibration_version execute throws `unauthorized` (pinned
+    // empirically here; only `sync_roles`, which has NO policy, works
+    // admin-signed). Grant custodian to a member and sign with that member's
+    // key instead — the same path the UI must use.
+    dao.grantCustodian('closer');
+    dao.executeOperation(await buildSignedMemberOp(dao, 'closer', kpCloser, 'set_calibration_version', { version: 'v1' }));
+    expect(dao.getCalibrationVersion()).toBe(1);
+
+    // Alice submits a building-dimension contribution; the submit handler
+    // stamps it with the round that was current at submission time (round 1).
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'submit_contribution', {
+      contributionId: 'r-wasm-1',
+      dims: { '1': 1 },
+      summary: 'built it',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v1',
+    }));
+    expect(dao.getContributionStatus('r-wasm-1')).toBe('pending');
+
+    // Bob verifies accepted (no-self: bob != alice); alice settles — the
+    // aggregation input must be settled-accepted.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'bob', kpBob, 'verify_contribution', {
+      contributionId: 'r-wasm-1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'built and matches the claim',
+    }));
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'settle_contribution', {
+      contributionId: 'r-wasm-1',
+      submitter: 'alice',
+      reason: 'accepting the verified outcome',
+    }));
+    expect(dao.getContributionStatus('r-wasm-1')).toBe('accepted');
+
+    // Spine: alice audits fair (citing the registered calibration), reckons,
+    // then publishes the aggregate and advances the round. NOT closer: the
+    // grantCustodian call above REPLACED closer's single-valued role
+    // attribute, so closer is custodian but no longer role:member and the
+    // member-policy spine ops are closed to them (pinned empirically).
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'audit_round', {
+      fair: true, note: 'fair', calibrationVersion: 'v1',
+    }));
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'reckon_round', {
+      note: 'settled',
+    }));
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'complete_round', {
+      entries: [{ contributionId: 'r-wasm-1', submitter: 'alice', dims: { '1': 1 } }],
+    }));
+
+    expect(dao.getCurrentRound()).toBe(2); // completed round 1 advanced to 2
+    expect(dao.getRoundStage(1)).toBe(3); // published
+    // Arithmetic: alpha(dim 1) unset in CRABS → handler defaults to 1; the
+    // contribution's dim-1 value is 1 → RCT = 1 x 1 = 1.
+    expect(dao.getRctBalance('alice')).toBe(1);
+    expect(dao.getContributionStatus('r-wasm-1')).toBe('accepted');
+  });
 });
