@@ -47,6 +47,8 @@ export const TOKEN_NAMES = {
   proposalOptionCount: (proposalId: string) => `proposals:${proposalId}:option_count`,
   optionVoteSet: (proposalId: string, index: number) => `votes:${proposalId}:opt${index}`,
   optionVoteCount: (proposalId: string, index: number) => `votes:${proposalId}:opt${index}_count`,
+  // Salient-dimension bitmask for a proposal (0 = base-membership-only question).
+  proposalSalient: (proposalId: string) => `proposals:${proposalId}:salient`,
 } as const;
 
 export const RES_NAMES = {
@@ -64,6 +66,28 @@ export const CONTRIB_NAMES = {
   step: (contributionId: string) => `contrib:${contributionId}:step`,
   // Per-step requirement-completion counter.
   stepDone: (contributionId: string, stepId: string) => `contrib:${contributionId}:d:${stepId}`,
+  // Round a contribution belongs to (stamped by the submit handler).
+  contributionRound: (contributionId: string) => `contrib:${contributionId}:round`,
+} as const;
+
+export const ROUND_NAMES = {
+  current: () => 'round:current',
+  stage: (round: number) => `round:${round}:stage`,
+  // One JSON explanation record per spine op, element-tagged `${stepId}:${signer}`.
+  explanations: (round: number) => `round:${round}:e`,
+} as const;
+
+export const RCT_NAMES = {
+  balance: (username: string) => `rct:${username}`,
+} as const;
+
+export const CALIBRATIONS = {
+  alpha: (dimIndex: number) => `config:alpha:${dimIndex}`,
+  alphaVersion: () => 'config:alpha_ver',
+  calibrationVersion: () => 'config:calibration_version',
+  voteBase: () => 'config:vote_base',
+  voteCap: () => 'config:weight_cap',
+  explanations: () => 'config:alpha_explanations',
 } as const;
 
 export const CUSTODIAN_SEATS = 5;
