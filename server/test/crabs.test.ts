@@ -217,10 +217,11 @@ describe('DaoNode', () => {
     expect(dao.getContributionStatus('r-wasm-1')).toBe('accepted');
 
     // Spine: alice audits fair (citing the registered calibration), reckons,
-    // then publishes the aggregate and advances the round. NOT closer: the
-    // grantCustodian call above REPLACED closer's single-valued role
-    // attribute, so closer is custodian but no longer role:member and the
-    // member-policy spine ops are closed to them (pinned empirically).
+    // then publishes the aggregate and advances the round. Historically closer
+    // could NOT run these: grantCustodian replaced closer's single-valued role
+    // attribute, and the member-only policies closed spine ops to custodians
+    // (pinned empirically before commit {fix}); policies are now widened to
+    // 'role:member OR role:custodian' and the spine is open to custodians again.
     dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'audit_round', {
       fair: true, note: 'fair', calibrationVersion: 'v1',
     }));
@@ -237,5 +238,34 @@ describe('DaoNode', () => {
     // contribution's dim-1 value is 1 → RCT = 1 x 1 = 1.
     expect(dao.getRctBalance('alice')).toBe(1);
     expect(dao.getContributionStatus('r-wasm-1')).toBe('accepted');
+  });
+
+  it('a custodian keeps member ops after the custodian grant (role:member OR role:custodian)', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    const kp = await KeyPair.generate();
+    dao.registerMember('pat', kp.publicKeyHex());
+    dao.grantCustodian('pat');
+    // verify_contribution is role-gated: run a submit + self-submitting verify setup
+    const kp2 = await KeyPair.generate();
+    dao.registerMember('quin', kp2.publicKeyHex());
+    const submit = await buildSignedMemberOp(dao, 'pat', kp, 'submit_contribution', {
+      contributionId: 'c-cust', dims: { '2': 1 }, summary: 'custodian contribution',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v1',
+    });
+    dao.executeOperation(submit);
+    const verify = await buildSignedMemberOp(dao, 'quin', kp2, 'verify_contribution', {
+      contributionId: 'c-cust', submitter: 'pat', dims: { '2': 1 }, stepId: 'verify', pass: true, reason: 'custodian verifies fine',
+    });
+    const beforeBob = dao.getResBalance('quin');
+    dao.executeOperation(verify);
+    expect(dao.getResBalance('quin')).toBe(beforeBob + 2);
+
+    // AND the custodian can run a custodian op (role:custodian):
+    dao.grantCustodian('quin');
+    const cal = await buildSignedMemberOp(dao, 'quin', kp2, 'set_calibration_version', { version: 'v1' });
+    dao.executeOperation(cal);
+    expect(dao.getCalibrationVersion()).toBe(1);
   });
 });

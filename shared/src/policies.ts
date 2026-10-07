@@ -14,23 +14,23 @@ export const TIMING: { defaultExpiryMs: number } = {
 };
 
 export const POLICIES = {
-  create_proposal: 'role:member',
-  vote: 'role:member',
-  execute: 'role:member',
-  add_member: 'role:member',
-  start_election: 'role:member',
-  cast_ballot: 'role:member',
-  finalize_election: 'role:member',
-  cast_runoff_vote: 'role:member',
+  create_proposal: 'role:member OR role:custodian',
+  vote: 'role:member OR role:custodian',
+  execute: 'role:member OR role:custodian',
+  add_member: 'role:member OR role:custodian',
+  start_election: 'role:member OR role:custodian',
+  cast_ballot: 'role:member OR role:custodian',
+  finalize_election: 'role:member OR role:custodian',
+  cast_runoff_vote: 'role:member OR role:custodian',
   remove_member: 'role:custodian',
-  submit_contribution: 'role:member',
-  verify_contribution: 'role:member',
-  settle_contribution: 'role:member',
+  submit_contribution: 'role:member OR role:custodian',
+  verify_contribution: 'role:member OR role:custodian',
+  settle_contribution: 'role:member OR role:custodian',
   set_rct_alpha: 'role:custodian',
   set_calibration_version: 'role:custodian',
-  audit_round: 'role:member',
-  reckon_round: 'role:member',
-  complete_round: 'role:member',
+  audit_round: 'role:member OR role:custodian',
+  reckon_round: 'role:member OR role:custodian',
+  complete_round: 'role:member OR role:custodian',
 } as const;
 
 export const STATE_NAMES = {
