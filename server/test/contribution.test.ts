@@ -815,3 +815,150 @@ describe('complete_round', () => {
     } as CompleteRoundPayload))).toBe(-1);
   });
 });
+
+import { makeAppealVerdictHandler } from '../../shared/src/handlers';
+import { AppealVerdictPayload } from '../../shared/src/types';
+
+// Rejected and still within its once-guard window: the exact precondition the
+// appeal op consumes (status register 2, verify step position, appealed unset).
+function rejectedAndAppealable(node: MockNode, state: MockState, id: string) {
+  setupSubmitted(state, node, 'alice', id, { '2': 1 });
+  const verify = makeVerifyContributionHandler(node);
+  expect(run(verify, state, makeOp('verify_contribution', 'bob',
+    verifyOp({ contributionId: id, pass: false, reason: 'insufficient' })))).toBe(0);
+  expect(state.getRegister(CONTRIB_NAMES.status(id))).toBe(2);
+}
+
+describe('appeal_verdict', () => {
+  it('the submitter appeals a rejected contribution: status 3, appealed set, verify step rewound', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    rejectedAndAppealable(node, state, 'c-app1');
+    const appeal = makeAppealVerdictHandler(node, { getTimeMs: () => 5000 });
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-app1', submitter: 'alice', reason: 'evidence was misread' } as AppealVerdictPayload))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app1'))).toBe(STATUS_APPEALED);
+    expect(state.getRegister(CONTRIB_NAMES.appealed('c-app1'))).toBe(1);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-app1'))).toBe(1); // rewind to the verify step
+    const records = state.allSetElements(CONTRIB_NAMES.explanations('c-app1')).map((e) => JSON.parse(e));
+    const appealRecord = records.find((r) => r.stepId === 'appeal');
+    expect(appealRecord).toEqual({
+      contributionId: 'c-app1', stepId: 'appeal', reason: 'evidence was misread', at: 5000,
+    });
+  });
+
+  it('rejects non-submitter, pending, accepted, unknown, and double appeals', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    rejectedAndAppealable(node, state, 'c-app2');
+    const appeal = makeAppealVerdictHandler(node);
+    // The submitter alone may appeal.
+    expect(run(appeal, state, makeOp('appeal_verdict', 'bob',
+      { contributionId: 'c-app2', submitter: 'alice', reason: 'not mine' } as AppealVerdictPayload))).toBe(-1);
+    // A pending contribution (never verified) is never appealable.
+    setupSubmitted(state, node, 'carol2', 'c-app3', { '2': 1 });
+    expect(run(appeal, state, makeOp('appeal_verdict', 'carol2',
+      { contributionId: 'c-app3', submitter: 'carol2', reason: 'pending' } as AppealVerdictPayload))).toBe(-1);
+    // An accepted contribution is final — appeal it and get -1.
+    setupMembers(state, 'dave');
+    setupSubmitted(state, node, 'carol2', 'c-app3b', { '9': 1 });
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(verify, state, makeOp('verify_contribution', 'dave',
+      verifyOp({ contributionId: 'c-app3b', submitter: 'carol2', dims: { '9': 1 } })))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app3b'))).toBe(1);
+    expect(run(appeal, state, makeOp('appeal_verdict', 'carol2',
+      { contributionId: 'c-app3b', submitter: 'carol2', reason: 'accepted' } as AppealVerdictPayload))).toBe(-1);
+    // Unknown contribution.
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-ghost', submitter: 'alice', reason: 'ghost' } as AppealVerdictPayload))).toBe(-1);
+    // First appeal succeeds; the once-guard blocks the second.
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-app2', submitter: 'alice', reason: 'first appeal' } as AppealVerdictPayload))).toBe(0);
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-app2', submitter: 'alice', reason: 'again' } as AppealVerdictPayload))).toBe(-1);
+  });
+
+  it('an appealed contribution re-verifies; verify leaves the status at 3 until settle completes it', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    rejectedAndAppealable(node, state, 'c-app4');
+    const appeal = makeAppealVerdictHandler(node);
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-app4', submitter: 'alice', reason: 'appealing' } as AppealVerdictPayload))).toBe(0);
+    setupMembers(state, 'carol'); // bob is per-pair barred after his rejection check
+    // C_2 is wired: a 3-step v2 schema. Carol's single verify completes the
+    // verify step and ADVANCES to settle; the verify handler only finalizes
+    // the status register at a terminal step, so the status stays
+    // STATUS_APPEALED here — pinned deliberately.
+    expect(run(verify, state, makeOp('verify_contribution', 'carol',
+      verifyOp({ contributionId: 'c-app4', reason: 're-review ok' })))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-app4'))).toBe(2); // advanced to settle
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app4'))).toBe(STATUS_APPEALED);
+    // Settle's status gate accepts STATUS_APPEALED and finalizes acceptance.
+    const settle = makeSettleContributionHandler(node);
+    expect(run(settle, state, makeOp('settle_contribution', 'alice',
+      { contributionId: 'c-app4', submitter: 'alice', reason: 'settled after appeal' } as SettleContributionPayload))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app4'))).toBe(STATUS_ACCEPTED);
+  });
+
+  it('an appealed C_1 flows through the v2 all-parties path: re-review, settle completes', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSubmitted(state, node, 'alice', 'c-app5', { '1': 1 });
+    setupMembers(state, 'carol', 'dave');
+    const verify = makeVerifyContributionHandler(node);
+    // bob rejects (one completed check; the per-pair once guard now records him).
+    expect(run(verify, state, makeOp('verify_contribution', 'bob',
+      verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, pass: false, reason: 'no artifact' })))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app5'))).toBe(STATUS_REJECTED);
+    const appeal = makeAppealVerdictHandler(node);
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-app5', submitter: 'alice', reason: 'artifact exists' } as AppealVerdictPayload))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app5'))).toBe(STATUS_APPEALED);
+    // bob is barred from re-verifying alice (per-pair once) — re-review needs
+    // fresh verifiers, which keeps reciprocal gaming impossible.
+    expect(run(verify, state, makeOp('verify_contribution', 'bob',
+      verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, reason: 'changed my mind' })))).toBe(-1);
+    // The all-parties (2) re-review completes with ONE fresh verifier: the
+    // per-step done PNCounter is append-only and the appeal rewinds only the
+    // step pointer, so bob's rejected check still counts toward the
+    // requirement — carol's accepted check reaches done=2 and is final. The
+    // step advances to settle with the status register at STATUS_APPEALED.
+    expect(run(verify, state, makeOp('verify_contribution', 'carol',
+      verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, reason: 'real' })))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-app5'))).toBe(2);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app5'))).toBe(STATUS_APPEALED);
+    // Past the verify step, further verifies are refused (wrong lifecycle
+    // position) — dave cannot add a second completion.
+    expect(run(verify, state, makeOp('verify_contribution', 'dave',
+      verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, reason: 'late', priorVerifiers: ['bob', 'carol'] })))).toBe(-1);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app5'))).toBe(STATUS_APPEALED);
+    // Settlement accepts the appealed status and finalizes acceptance.
+    const settle = makeSettleContributionHandler(node);
+    expect(run(settle, state, makeOp('settle_contribution', 'alice',
+      { contributionId: 'c-app5', submitter: 'alice', reason: 'settled after appeal' } as SettleContributionPayload))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app5'))).toBe(STATUS_ACCEPTED);
+    // The once-guard survives the whole cycle: no chained appeals.
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-app5', submitter: 'alice', reason: 'one more' } as AppealVerdictPayload))).toBe(-1);
+  });
+
+  it('a re-rejected appeal keeps the once-guard and cannot be appealed again', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    rejectedAndAppealable(node, state, 'c-app6');
+    const appeal = makeAppealVerdictHandler(node);
+    const verify = makeVerifyContributionHandler(node);
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-app6', submitter: 'alice', reason: 'appealing' } as AppealVerdictPayload))).toBe(0);
+    setupMembers(state, 'carol');
+    // The re-review re-rejects: status 2 with the appealed register still 1.
+    expect(run(verify, state, makeOp('verify_contribution', 'carol',
+      verifyOp({ contributionId: 'c-app6', pass: false, reason: 'still insufficient' })))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app6'))).toBe(STATUS_REJECTED);
+    expect(state.getRegister(CONTRIB_NAMES.appealed('c-app6'))).toBe(1);
+    expect(run(appeal, state, makeOp('appeal_verdict', 'alice',
+      { contributionId: 'c-app6', submitter: 'alice', reason: 'one more try' } as AppealVerdictPayload))).toBe(-1);
+  });
+});

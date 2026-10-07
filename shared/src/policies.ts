@@ -26,6 +26,7 @@ export const POLICIES = {
   submit_contribution: 'role:member OR role:custodian',
   verify_contribution: 'role:member OR role:custodian',
   settle_contribution: 'role:member OR role:custodian',
+  appeal_verdict: 'role:member OR role:custodian',
   set_rct_alpha: 'role:custodian',
   set_calibration_version: 'role:custodian',
   audit_round: 'role:member OR role:custodian',
@@ -61,8 +62,11 @@ export const RES_NAMES = {
 } as const;
 
 export const CONTRIB_NAMES = {
-  // Contribution status register: 0 = pending, 1 = accepted, 2 = rejected.
+  // Contribution status register: 0 = pending, 1 = accepted, 2 = rejected,
+  // 3 = appealed (set by appeal_verdict; verify/settle accept 3 like 0).
   status: (contributionId: string) => `contrib:${contributionId}:st`,
+  // Set once per contribution by appeal_verdict (no chained appeals in phase 3).
+  appealed: (contributionId: string) => `contrib:${contributionId}:appealed`,
   // ORSet holding one JSON explanation record per decision (submit, verify).
   explanations: (contributionId: string) => `contrib:${contributionId}:e`,
   // Per-member 22-dimension tally register (absence-of-delta = never set).

@@ -111,6 +111,12 @@ export interface SettleContributionPayload {
   reason: string;
 }
 
+export interface AppealVerdictPayload {
+  contributionId: string;
+  submitter: string; // must equal op.signerId (submitter-only)
+  reason: string;
+}
+
 export interface SetRctAlphaPayload {
   weights: Record<string, number>; // sparse: dimension index -> alpha in (0, 10]
   version: string;                 // alpha version label, recorded in the explanation record

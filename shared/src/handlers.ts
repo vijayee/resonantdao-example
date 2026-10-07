@@ -1,5 +1,5 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, CompleteRoundPayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
+import { AddMemberPayload, AppealVerdictPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, CompleteRoundPayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
   CALIBRATIONS, CHECK_NAMES, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RECIP_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RCT_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
@@ -11,6 +11,7 @@ import {
 import {
   CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, KNOWN_SCHEMA_VERSIONS, dimensionDeltaFor,
   isValidDims, paymentFor, schemaForRecord, validateEvidenceRef,
+  STATUS_APPEALED, STATUS_PENDING, STATUS_REJECTED,
 } from './contribution';
 
 function isNonEmptyString(value: unknown): value is string {
@@ -135,8 +136,8 @@ export function makeVerifyContributionHandler(
     const statusReg = CONTRIB_NAMES.status(payload.contributionId);
     const stepReg = CONTRIB_NAMES.step(payload.contributionId);
     const status = state.getRegister(statusReg);
-    if (status === undefined || status !== 0) {
-      return -1; // already accepted/rejected or never submitted
+    if (status === undefined || (status !== STATUS_PENDING && status !== STATUS_APPEALED)) {
+      return -1; // accepted/terminal, rejected outside an appeal, or never submitted
     }
     const stepIndex = state.getRegister(stepReg);
     if (stepIndex === undefined || !Number.isInteger(stepIndex) || stepIndex < 0) {
@@ -292,8 +293,12 @@ export function makeSettleContributionHandler(
       return -1;
     }
     const statusReg = CONTRIB_NAMES.status(payload.contributionId);
-    if (state.getRegister(statusReg) !== 0) {
-      return -1; // already accepted/rejected, or never submitted
+    const status = state.getRegister(statusReg);
+    // An appealed contribution re-verifies through the same schema path with
+    // the status register left at STATUS_APPEALED (verify only finalizes the
+    // status at a terminal step), so settlement accepts STATUS_APPEALED too.
+    if (status === undefined || (status !== STATUS_PENDING && status !== STATUS_APPEALED)) {
+      return -1; // already accepted/terminal, or never submitted
     }
     if (state.getRegister(CONTRIB_NAMES.step(payload.contributionId)) !== 2) {
       return -1;
@@ -311,6 +316,66 @@ export function makeSettleContributionHandler(
       calibrationVersion: CALIBRATION_VERSION,
     };
     state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(explanation), `settle:${op.signerId}`);
+    return 0;
+  };
+}
+
+// Lifecycle op 'appeal_verdict' (phase 3): the submitter re-opens a REJECTED
+// contribution exactly once. The appealed register is a once-guard that
+// survives re-review — a re-rejection cannot appeal again (no chained
+// appeals). The verify and settle handlers accept STATUS_APPEALED like
+// STATUS_PENDING, so a re-opened contribution flows through the same schema
+// path as a fresh lifecycle (verify advances the step; settle finalizes).
+export function makeAppealVerdictHandler(
+  node: { addRegister(name: string, initial?: number): void; addORSet(name: string): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: AppealVerdictPayload = JSON.parse(op.payload || '{}');
+    if (
+      !isNonEmptyString(payload.contributionId) ||
+      !isNonEmptyString(payload.submitter) ||
+      !isNonEmptyString(payload.reason)
+    ) {
+      return -1;
+    }
+    if (payload.submitter !== op.signerId) {
+      return -1; // appeals are the submitter's alone
+    }
+    if (!state.setContains(STATE_NAMES.contributions, payload.contributionId)) {
+      return -1;
+    }
+    const statusReg = CONTRIB_NAMES.status(payload.contributionId);
+    const appealedReg = CONTRIB_NAMES.appealed(payload.contributionId);
+    if (state.getRegister(statusReg) !== STATUS_REJECTED) {
+      return -1; // only rejected contributions are appealable
+    }
+    // Undeclared appealed register reads undefined (mock) / 0 (real wasm) —
+    // both pass this once-guard.
+    if (state.getRegister(appealedReg) === 1) {
+      return -1; // once per contribution
+    }
+
+    // Declaration-first (real wasm throws resource_not_found on undeclared
+    // writes): the appealed register and the explanations ORSet are declared
+    // here if absent; status/step were declared by the submit handler.
+    try { node.addRegister(appealedReg, 0); } catch (err) { /* exists */ }
+    state.setRegister(appealedReg, 1, op.signerId);
+    state.setRegister(statusReg, STATUS_APPEALED, op.signerId);
+    // Rewind the lifecycle position to the verify step — positional index:
+    // every current schema (v1, v2, default) places verify at index 1, and a
+    // rejection never advances past it.
+    state.setRegister(CONTRIB_NAMES.step(payload.contributionId), 1, op.signerId);
+
+    try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* declared by submit */ }
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const explanation = {
+      contributionId: payload.contributionId,
+      stepId: 'appeal',
+      reason: payload.reason,
+      at: nowMs,
+    };
+    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(explanation), `appeal:${op.signerId}`);
     return 0;
   };
 }
