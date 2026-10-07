@@ -1,7 +1,7 @@
 import { loadCRABS } from './wasm';
 import {
-  CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, POLICIES, RES_NAMES, ROUND_NAMES, RCT_NAMES,
-  STATE_NAMES, TOKEN_NAMES, runoffId,
+  CALIBRATIONS, CHECK_NAMES, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, POLICIES, RES_NAMES, ROUND_NAMES,
+  RCT_NAMES, STATE_NAMES, TOKEN_NAMES, runoffId,
 } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import { derivedVoteBalance } from '@shared/round';
@@ -10,6 +10,7 @@ import {
   CastBallotPayload,
   CastRunoffVotePayload,
   CompleteRoundPayload,
+  AppealVerdictPayload,
   ContributionPayload,
   ExecutePayload,
   FinalizeElectionPayload,
@@ -26,6 +27,7 @@ import {
 } from '@shared/types';
 import {
   makeAddMemberHandler,
+  makeAppealVerdictHandler,
   makeAuditRoundHandler,
   makeCastBallotHandler,
   makeCastRunoffVoteHandler,
@@ -52,6 +54,7 @@ export interface ContributionMirrorEntry {
   verdict?: boolean;
   verdictReason?: string;
   settledBy?: string;
+  appealedBy?: string;
 }
 
 export class BrowserDao {
@@ -120,6 +123,7 @@ export class BrowserDao {
     this.node.setPolicy('submit_contribution', POLICIES.submit_contribution);
     this.node.setPolicy('verify_contribution', POLICIES.verify_contribution);
     this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
+    this.node.setPolicy('appeal_verdict', POLICIES.appeal_verdict);
     this.node.setPolicy('audit_round', POLICIES.audit_round);
     this.node.setPolicy('reckon_round', POLICIES.reckon_round);
     this.node.setPolicy('complete_round', POLICIES.complete_round);
@@ -134,6 +138,7 @@ export class BrowserDao {
     this.node.registerHandlerJs('submit_contribution', makeSubmitContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('verify_contribution', makeVerifyContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('appeal_verdict', makeAppealVerdictHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('audit_round', makeAuditRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('reckon_round', makeReckonRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('complete_round', makeCompleteRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
@@ -191,6 +196,10 @@ export class BrowserDao {
 
   async settleContribution(userId: string, payload: SettleContributionPayload): Promise<Uint8Array> {
     return this.signAndSerialize('settle_contribution', userId, JSON.stringify(payload));
+  }
+
+  async appealVerdict(userId: string, payload: AppealVerdictPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('appeal_verdict', userId, JSON.stringify(payload));
   }
 
   async auditRound(userId: string, payload: AuditRoundPayload): Promise<Uint8Array> {
@@ -323,7 +332,7 @@ export class BrowserDao {
   }
 
   private async mirrorContributionState(op: any): Promise<void> {
-    if (op.type !== 'submit_contribution' && op.type !== 'verify_contribution' && op.type !== 'settle_contribution') {
+    if (op.type !== 'submit_contribution' && op.type !== 'verify_contribution' && op.type !== 'settle_contribution' && op.type !== 'appeal_verdict') {
       return;
     }
     let payload: any = null;
@@ -342,6 +351,11 @@ export class BrowserDao {
           submittedAt: this.getNodeTimeMs(),
         });
       }
+      return;
+    }
+    if (op.type === 'appeal_verdict') {
+      const entry = this.contributions.get(payload.contributionId);
+      if (entry) entry.appealedBy = op.signerId;
       return;
     }
     const entry = this.contributions.get(payload.contributionId);
@@ -466,6 +480,17 @@ export class BrowserDao {
 
   getContributionStepIndex(contributionId: string): number {
     return this.node.getRegister(CONTRIB_NAMES.step(contributionId)) || 0;
+  }
+
+  getVerifierStats(username: string): { total: number; upheld: number } {
+    return {
+      total: this.node.getRegister(CHECK_NAMES.total(username)) || 0,
+      upheld: this.node.getRegister(CHECK_NAMES.upheld(username)) || 0,
+    };
+  }
+
+  getContributionAppealed(contributionId: string): boolean {
+    return (this.node.getRegister(CONTRIB_NAMES.appealed(contributionId)) || 0) === 1;
   }
 
   getContributionStepDone(contributionId: string, stepId: string): number {
