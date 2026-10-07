@@ -28,6 +28,8 @@ export const POLICIES = {
   settle_contribution: 'role:member',
   set_rct_alpha: 'role:custodian',
   set_calibration_version: 'role:custodian',
+  audit_round: 'role:member',
+  reckon_round: 'role:member',
 } as const;
 
 export const STATE_NAMES = {

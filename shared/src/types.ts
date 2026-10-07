@@ -109,6 +109,16 @@ export interface SetCalibrationVersionPayload {
   version: string; // must be a known calibration version ('v1' in phase 2)
 }
 
+export interface AuditRoundPayload {
+  fair: boolean;
+  note: string;
+  calibrationVersion: string; // must match the current registered calibration (numeric map)
+}
+
+export interface ReckonRoundPayload {
+  note: string;
+}
+
 export type ClientMessage =
   | { kind: 'register'; username: string; publicKeyHex: string }
   | { kind: 'login'; username: string }

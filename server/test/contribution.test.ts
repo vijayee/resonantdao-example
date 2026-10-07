@@ -498,3 +498,86 @@ describe('calibration ops', () => {
     expect(run(handler, state, makeOp('set_calibration_version', 'cust1', {} as unknown as SetCalibrationVersionPayload))).toBe(-1);
   });
 });
+
+import {
+  makeAuditRoundHandler, makeReckonRoundHandler,
+} from '../../shared/src/handlers';
+import { ROUND_NAMES } from '../../shared/src/policies';
+import { AuditRoundPayload, ReckonRoundPayload } from '../../shared/src/types';
+
+// Declares the round registers via MockNode (wiring state): a round register
+// that already exists keeps its initial value on re-declare (real wasm:
+// duplicate_operation without reset — pinned in crabs.test.ts).
+function setupRound(node: MockNode, state: MockState, round = 1) {
+  try { node.addRegister(ROUND_NAMES.current(), round); } catch { /* in tests the handler creates it */ }
+  try { node.addRegister(ROUND_NAMES.stage(round), 0); } catch { /* ok */ }
+}
+
+describe('round spine: audit + reckon', () => {
+  it('fair audit advances stage 0 -> 1 with an explanation record', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'alice');
+    // Pilot bootstrap: the calibration register is pre-set at 1 (wiring).
+    try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring pre-sets */ }
+    const audit = makeAuditRoundHandler(node);
+    expect(run(audit, state, makeOp('audit_round', 'alice', { fair: true, note: 'all good', calibrationVersion: 'v1' } as AuditRoundPayload))).toBe(0);
+    expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(1);
+    const records = state.allSetElements(ROUND_NAMES.explanations(1));
+    expect(records).toHaveLength(1);
+    expect(JSON.parse(records[0]).fair).toBe(true);
+  });
+
+  it('unfair audit records the debt and completes the round WITHOUT aggregation', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'alice');
+    try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring */ }
+    const audit = makeAuditRoundHandler(node);
+    expect(run(audit, state, makeOp('audit_round', 'alice', { fair: false, note: 'under-measured care work', calibrationVersion: 'v1' } as AuditRoundPayload))).toBe(0);
+    expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(3); // debt path: round completes with no publish
+    expect(state.getRegister(ROUND_NAMES.current())).toBe(2); // next round begins
+  });
+
+  it('rejects audit with missing note, wrong calibration, or non-open stage', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'alice');
+    setupRound(node, state, 1);
+    try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring */ }
+    const audit = makeAuditRoundHandler(node);
+    expect(run(audit, state, makeOp('audit_round', 'alice', { fair: true, note: '', calibrationVersion: 'v1' } as AuditRoundPayload))).toBe(-1);
+    expect(run(audit, state, makeOp('audit_round', 'alice', { fair: true, note: 'x', calibrationVersion: 'v9' } as AuditRoundPayload))).toBe(-1);
+    expect(run(audit, state, makeOp('audit_round', 'nonmember', { fair: true, note: 'x', calibrationVersion: 'v1' } as AuditRoundPayload))).toBe(-1);
+  });
+
+  it('reckon requires the audited stage and a set calibration register', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'alice');
+    setupRound(node, state, 1);
+    try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring */ }
+    const audit = makeAuditRoundHandler(node);
+    const reckon = makeReckonRoundHandler(node);
+    // Not audited yet:
+    expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 'early' } as ReckonRoundPayload))).toBe(-1);
+    expect(run(audit, state, makeOp('audit_round', 'alice', { fair: true, note: 'ok', calibrationVersion: 'v1' } as AuditRoundPayload))).toBe(0);
+    expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 'records are settled' } as ReckonRoundPayload))).toBe(0);
+    expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(2);
+    expect(state.allSetElements(ROUND_NAMES.explanations(1))).toHaveLength(2);
+  });
+
+  it('reckon is rejected without a calibration register (Justice gate)', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupMembers(state, 'alice');
+    setupRound(node, state, 1);
+    try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring pre-sets; remove this line to see the gate */ }
+    const audit = makeAuditRoundHandler(node);
+    const reckon = makeReckonRoundHandler(node);
+    expect(run(audit, state, makeOp('audit_round', 'alice', { fair: true, note: 'ok', calibrationVersion: 'v1' } as AuditRoundPayload))).toBe(0);
+    // Simulate unset calibration by direct register write (MockState):
+    state.setRegister(CALIBRATIONS.calibrationVersion(), 0);
+    expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 'x' } as ReckonRoundPayload))).toBe(-1);
+  });
+});

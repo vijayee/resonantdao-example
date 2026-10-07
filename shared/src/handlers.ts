@@ -1,9 +1,9 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
+import { AddMemberPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
-  CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
+  CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
-import { CALIBRATION_VERSION_NUMBERS } from './round';
+import { CALIBRATION_VERSION_NUMBERS, STAGE_AUDITED, STAGE_OPEN, STAGE_PUBLISHED, STAGE_RECKONED } from './round';
 import {
   CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, dimensionDeltaFor, isValidDims,
   paymentFor, schemaForDims, validateEvidenceRef,
@@ -804,6 +804,103 @@ export function makeSetCalibrationVersionHandler(
     // throws resource_not_found) — also on the first-ever registration.
     try { node.addRegister(CALIBRATIONS.calibrationVersion(), 0); } catch (err) { /* ignore duplicate */ }
     state.setRegister(CALIBRATIONS.calibrationVersion(), mapped, op.signerId);
+    return 0;
+  };
+}
+
+// Round-spine op 'audit_round' (C_10): a member audits the current round
+// against the current Justice calibration. A fair audit opens the reckon
+// step; an unfair audit records the round's debt and completes it with NO
+// aggregation (the next round begins — retry semantics).
+export function makeAuditRoundHandler(
+  node: { addORSet(name: string): void; addRegister(name: string, initial?: number): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: AuditRoundPayload = JSON.parse(op.payload || '{}');
+    if (
+      typeof payload.fair !== 'boolean' ||
+      !isNonEmptyString(payload.note) ||
+      !isNonEmptyString(payload.calibrationVersion)
+    ) {
+      return -1;
+    }
+    if (!state.setContains(STATE_NAMES.members, op.signerId)) {
+      return -1;
+    }
+    const round = state.getRegister(ROUND_NAMES.current()) || 1;
+    // Undeclared stage register reads as 0 (STAGE_OPEN) — on the real wasm
+    // Node getRegister('undeclared') returns 0, so a fresh round audits.
+    if ((state.getRegister(ROUND_NAMES.stage(round)) ?? 0) !== STAGE_OPEN) {
+      return -1;
+    }
+    // Justice calibration: the audit must cite the currently registered
+    // calibration version ('v1' maps to 1; unset register falls back to 'v1').
+    const registered = state.getRegister(CALIBRATIONS.calibrationVersion()) || 1;
+    if (CALIBRATION_VERSION_NUMBERS.get(payload.calibrationVersion) !== registered) {
+      return -1;
+    }
+
+    // Declare before write (real wasm: setRegister/setAdd on an undeclared
+    // resource throws resource_not_found). Re-declare throws
+    // duplicate_operation WITHOUT resetting, so lazy try-declare is safe.
+    try { node.addORSet(ROUND_NAMES.explanations(round)); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(ROUND_NAMES.stage(round), 0); } catch (err) { /* ignore duplicate */ }
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const record = {
+      stepId: 'audit',
+      fair: payload.fair,
+      note: payload.note,
+      calibrationVersion: payload.calibrationVersion,
+      at: nowMs,
+    };
+    state.setAdd(ROUND_NAMES.explanations(round), JSON.stringify(record), `audit:${op.signerId}`);
+    if (payload.fair) {
+      state.setRegister(ROUND_NAMES.stage(round), STAGE_AUDITED, op.signerId);
+    } else {
+      // Debt path: record stands as the round's debt; round completes with
+      // NO aggregation and the next round begins.
+      state.setRegister(ROUND_NAMES.stage(round), STAGE_PUBLISHED, op.signerId);
+      state.setRegister(ROUND_NAMES.current(), round + 1, op.signerId);
+    }
+    return 0;
+  };
+}
+
+// Round-spine op 'reckon_round' (C_20): a member confirms the round's
+// records are settled, closing the audited round for aggregation. Gated on
+// a current Justice calibration existing in CRABS.
+export function makeReckonRoundHandler(
+  node: { addORSet(name: string): void; addRegister(name: string, initial?: number): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: ReckonRoundPayload = JSON.parse(op.payload || '{}');
+    if (!isNonEmptyString(payload.note)) {
+      return -1;
+    }
+    if (!state.setContains(STATE_NAMES.members, op.signerId)) {
+      return -1;
+    }
+    const round = state.getRegister(ROUND_NAMES.current()) || 1;
+    // ?? 0 mirrors real-wasm undeclared-register reads; 0 can never equal
+    // STAGE_AUDITED, so a fresh round correctly rejects reckoning.
+    if ((state.getRegister(ROUND_NAMES.stage(round)) ?? 0) !== STAGE_AUDITED) {
+      return -1;
+    }
+    // Justice gate: a current calibration must exist in CRABS.
+    if ((state.getRegister(CALIBRATIONS.calibrationVersion()) || 0) < 1) {
+      return -1;
+    }
+
+    // Declare before write (real wasm throws resource_not_found on
+    // undeclared writes; re-declare is a safe duplicate_operation).
+    try { node.addORSet(ROUND_NAMES.explanations(round)); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(ROUND_NAMES.stage(round), 0); } catch (err) { /* ignore duplicate */ }
+    const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
+    const record = { stepId: 'reckon', note: payload.note, at: nowMs };
+    state.setAdd(ROUND_NAMES.explanations(round), JSON.stringify(record), `reckon:${op.signerId}`);
+    state.setRegister(ROUND_NAMES.stage(round), STAGE_RECKONED, op.signerId);
     return 0;
   };
 }
