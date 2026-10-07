@@ -15,6 +15,7 @@ import {
   schemaForDims,
 } from '@shared/contribution';
 import { RES_CONFIG } from '@shared/policies';
+import { STAGE_AUDITED, STAGE_OPEN, STAGE_RECKONED } from '@shared/round';
 import { ContributionFacts, wizardModel } from '@shared/wizard';
 import { BrowserDao, ContributionMirrorEntry, bytesToBase64, bytesToHex, base64ToBytes } from './dao';
 import { registerWallet, loginWallet } from './eauth-wallet';
@@ -110,6 +111,17 @@ export class AppUI {
       void this.onSubmitContribution();
     });
 
+    const auditRoundBtn = document.getElementById('audit-round-btn');
+    auditRoundBtn?.addEventListener('click', () => void this.onAuditRound());
+    const reckonRoundBtn = document.getElementById('reckon-round-btn');
+    reckonRoundBtn?.addEventListener('click', () => void this.onReckonRound());
+    const completeRoundBtn = document.getElementById('complete-round-btn');
+    completeRoundBtn?.addEventListener('click', () => void this.onCompleteRound());
+    const setAlphaBtn = document.getElementById('set-alpha-btn');
+    setAlphaBtn?.addEventListener('click', () => void this.onSetAlpha());
+    const setCalibrationBtn = document.getElementById('set-calibration-btn');
+    setCalibrationBtn?.addEventListener('click', () => void this.onSetCalibration());
+
     // Time-travel control for demo: advance the node clock at a fixed rate so
     // 5-minute expiry and 3-minute token distribution play out quickly.
     this.startDemoClock();
@@ -127,6 +139,7 @@ export class AppUI {
       this.renderCustodians();
       this.renderCustodianControls();
       this.renderContributions();
+      this.renderRound();
     };
     update();
     setInterval(update, 1000);
@@ -415,6 +428,12 @@ export class AppUI {
       options,
       expiresAt: nowMs + 60 * 1000,
     };
+    const salientDims = Array.from(document.querySelectorAll<HTMLInputElement>('.salient-dim:checked'))
+      .map((el) => Number(el.value))
+      .filter((dim) => Number.isInteger(dim));
+    if (salientDims.length > 0) {
+      payload.salientDims = salientDims;
+    }
 
     this.setSubmitting(true);
     try {
@@ -515,6 +534,7 @@ export class AppUI {
     this.renderElections();
     this.renderCustodians();
     this.renderCustodianControls();
+    this.renderRound();
   }
 
   private showAuth() {
@@ -643,10 +663,10 @@ export class AppUI {
       const used = dao.getProposalTokenUsage(proposal.proposalId, this.wallet.username);
       const voteCount = dao.getProposalVoteCount(proposal.proposalId, this.wallet.username);
       nextCumulativeCost = ((voteCount + 1) * (voteCount + 2) * (2 * voteCount + 3)) / 6;
-      const balance = dao.getResBalance(this.wallet.username);
+      const balance = dao.getVoteBalance(proposal.proposalId, this.wallet.username);
       const tokenInfo = document.createElement('div');
       tokenInfo.className = 'proposal-card__tokens';
-      tokenInfo.textContent = `Tokens used here: ${used} | Next vote cost: ${nextCumulativeCost} | Balance: ${balance}`;
+      tokenInfo.textContent = `Tokens used here: ${used} | Next vote cost: ${nextCumulativeCost} | Your balance for this question: ${balance}`;
       li.appendChild(tokenInfo);
     }
 
@@ -654,7 +674,7 @@ export class AppUI {
     actions.className = 'proposal-card__actions';
 
     const alreadyVoted = this.votedProposals.has(proposal.proposalId);
-    const canVoteQuadratic = pType === 'quadratic' && this.wallet && dao.getResBalance(this.wallet.username) >= nextCumulativeCost && nextCumulativeCost > 0;
+    const canVoteQuadratic = pType === 'quadratic' && this.wallet && dao.getVoteBalance(proposal.proposalId, this.wallet.username) >= nextCumulativeCost && nextCumulativeCost > 0;
     const actionsDisabled = executed || this.submitting || (alreadyVoted && !canVoteQuadratic);
 
     options.forEach((label, i) => {
@@ -706,6 +726,10 @@ export class AppUI {
       tokenBadge.className = 'member-item__tokens';
       tokenBadge.textContent = `🪙 ${this.dao.getResBalance(this.wallet.username)}`;
       youItem.appendChild(tokenBadge);
+      const rctBadge = document.createElement('span');
+      rctBadge.className = 'rct-badge';
+      rctBadge.dataset.memberRct = this.wallet.username;
+      youItem.appendChild(rctBadge);
     }
     list.appendChild(youItem);
 
@@ -717,6 +741,12 @@ export class AppUI {
       name.className = 'member-item__name';
       name.textContent = username;
       item.appendChild(name);
+      if (this.dao) {
+        const rctBadge = document.createElement('span');
+        rctBadge.className = 'rct-badge';
+        rctBadge.dataset.memberRct = username;
+        item.appendChild(rctBadge);
+      }
       if (this.dao?.custodians.includes(username)) {
         const badge = document.createElement('span');
         badge.className = 'member-item__badge';
@@ -1122,6 +1152,171 @@ export class AppUI {
       console.error(err);
     } finally {
       this.setSubmitting(false);
+    }
+  }
+
+  private async onAuditRound() {
+    if (!this.dao || !this.wallet || !this.client || this.submitting) return;
+    const fair = confirm('Close the round as FAIR? OK = fair, Cancel = UNFAIR (records the round debt and skips aggregation).');
+    const note = prompt('Audit note (recorded permanently):') ?? '';
+    if (!note.trim()) {
+      this.setStatus('An audit note is required.', 'error');
+      return;
+    }
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.auditRound(this.wallet.username, {
+        fair,
+        note,
+        calibrationVersion: 'v1',
+      });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus(fair ? 'Round audited as fair.' : 'Round closed with a debt record; next round begins.', fair ? 'success' : 'error');
+      this.renderRound();
+    } catch (err) {
+      this.setStatus(`Audit error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onReckonRound() {
+    if (!this.dao || !this.wallet || !this.client || this.submitting) return;
+    const note = prompt('Reckoning note (recorded permanently):') ?? '';
+    if (!note.trim()) {
+      this.setStatus('A reckoning note is required.', 'error');
+      return;
+    }
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.reckonRound(this.wallet.username, { note });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('Round reckoned — ready to complete.', 'success');
+      this.renderRound();
+    } catch (err) {
+      this.setStatus(`Reckon error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onCompleteRound() {
+    if (!this.dao || !this.wallet || !this.client || this.submitting) return;
+    this.setSubmitting(true);
+    try {
+      const currentRound = this.dao.getCurrentRound();
+      const entries = this.dao.getContributions()
+        .filter((entry) => this.dao!.getContributionStatus(entry.record.contributionId) === 'accepted'
+          && this.dao!.getContributionRound(entry.record.contributionId) === currentRound)
+        .map((entry) => ({ contributionId: entry.record.contributionId, submitter: entry.submitter, dims: entry.record.dims }));
+      if (entries.length === 0) {
+        this.setStatus('Nothing settled to aggregate in this round.', 'error');
+        return;
+      }
+      const bytes = await this.dao.completeRound(this.wallet.username, { entries });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus(`Round published — ${entries.length} contribution(s) aggregated.`, 'success');
+      this.renderRound();
+      this.renderTokenBalance();
+    } catch (err) {
+      this.setStatus(`Complete error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onSetAlpha() {
+    if (!this.dao || !this.wallet || !this.client || this.submitting) return;
+    const raw: Record<string, number> = {};
+    const c1 = parseFloat(this.inputValue('alpha-c1'));
+    const c2 = parseFloat(this.inputValue('alpha-c2'));
+    if (Number.isFinite(c1) && c1 > 0) raw['1'] = c1;
+    if (Number.isFinite(c2) && c2 > 0) raw['2'] = c2;
+    const version = this.inputValue('alpha-version');
+    if (Object.keys(raw).length === 0 || !version.trim()) {
+      this.setStatus('At least one weight and a version label are required.', 'error');
+      return;
+    }
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.setRctAlpha(this.wallet.username, { weights: raw, version: version.trim() });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('RCT weights updated.', 'success');
+      this.renderRound();
+    } catch (err) {
+      this.setStatus(`Weights error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onSetCalibration() {
+    if (!this.dao || !this.wallet || !this.client || this.submitting) return;
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.setCalibrationVersion(this.wallet.username, { version: 'v1' });
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('Calibration version set to v1.', 'success');
+      this.renderRound();
+    } catch (err) {
+      this.setStatus(`Calibration error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private renderRound() {
+    if (!this.dao || !this.wallet) return;
+    const stepper = document.getElementById('round-stepper');
+    if (!stepper) return;
+    const current = this.dao.getCurrentRound();
+    const stage = this.dao.getRoundStage(current);
+    const stageNames = ['Open', 'Audited', 'Reckoned', 'Published'];
+    stepper.innerHTML = '';
+    const roundLabel = document.createElement('span');
+    roundLabel.className = 'round-label';
+    roundLabel.textContent = `Round ${current} — stage: ${stageNames[stage] ?? 'unknown'}`;
+    stepper.appendChild(roundLabel);
+    for (let i = 0; i < stageNames.length; i++) {
+      const chip = document.createElement('span');
+      chip.className = i < stage
+        ? 'round-step round-step--complete'
+        : i === stage ? 'round-step round-step--current' : 'round-step round-step--locked';
+      chip.textContent = stageNames[i];
+      stepper.appendChild(chip);
+    }
+
+    const isCustodian = this.dao.custodians.includes(this.wallet.username);
+    const auditBtn = document.getElementById('audit-round-btn');
+    const reckonBtn = document.getElementById('reckon-round-btn');
+    const completeBtn = document.getElementById('complete-round-btn');
+    const alphaForm = document.getElementById('round-alpha-form');
+    if (auditBtn) auditBtn.classList.toggle('hidden', stage !== STAGE_OPEN);
+    if (reckonBtn) reckonBtn.classList.toggle('hidden', stage !== STAGE_AUDITED);
+    if (completeBtn) completeBtn.classList.toggle('hidden', stage !== STAGE_RECKONED);
+    if (alphaForm) alphaForm.classList.toggle('hidden', !isCustodian);
+
+    const explanations = document.getElementById('round-explanations');
+    if (explanations) {
+      const records = this.dao.getRoundRecords(current);
+      explanations.textContent = records.length === 0 ? '' : records.map((r) => `${String(r.stepId)}: ${String(r.note ?? '')}`).join(' | ');
+    }
+
+    // RCT badges in the members list.
+    for (const username of [this.wallet.username, ...this.memberUsernames]) {
+      const el = document.querySelector(`[data-member-rct="${username}"]`);
+      if (!el) continue;
+      el.textContent = `${this.dao.getRctBalance(username)} RCT`;
     }
   }
 

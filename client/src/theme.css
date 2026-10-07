@@ -755,3 +755,49 @@ body {
   color: var(--color-danger);
   border: 1px solid var(--color-danger);
 }
+
+/* Round spine panel */
+.round-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.round-label {
+  font-weight: 600;
+}
+
+.round-step {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+}
+
+.round-step--complete {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.round-step--current {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.round-step--locked {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.rct-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  padding: 0.1rem var(--space-2);
+}

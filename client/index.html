@@ -107,6 +107,12 @@
                   <label class="form-label" for="proposal-options">Options (comma-separated, optional)</label>
                   <input id="proposal-options" class="form-input" type="text" placeholder="e.g. Alpha, Beta, Gamma — leave empty for Yes/No" />
                 </div>
+                <fieldset id="proposal-salient" class="wizard-fieldset">
+                  <legend>Salient dimensions for quadratic votes (empty = base membership only)</legend>
+                  <label class="wizard-choice"><input type="checkbox" class="salient-dim" value="1" /> C_1 Building</label>
+                  <label class="wizard-choice"><input type="checkbox" class="salient-dim" value="2" /> C_2 Recording</label>
+                  <label class="wizard-choice"><input type="checkbox" class="salient-dim" value="18" /> C_18 Verifying</label>
+                </fieldset>
                 <div class="proposal-form__actions">
                   <button class="button button--primary" type="submit">Create proposal</button>
                 </div>
@@ -163,6 +169,34 @@
                 <h2 id="contributions-title" class="section-card__title">Contributions</h2>
               </div>
               <section id="contributions-list" aria-live="polite"></section>
+            </section>
+
+            <section class="section-card" id="round-panel" aria-labelledby="round-title">
+              <div class="section-card__header">
+                <h2 id="round-title" class="section-card__title">Round</h2>
+              </div>
+              <div id="round-stepper" class="round-stepper"></div>
+              <div id="round-explanations" class="muted"></div>
+              <div class="proposal-form__actions">
+                <button id="audit-round-btn" class="button button--secondary hidden" type="button">Audit round…</button>
+                <button id="reckon-round-btn" class="button button--secondary hidden" type="button">Reckon round…</button>
+                <button id="complete-round-btn" class="button button--primary hidden" type="button">Complete round &amp; publish</button>
+              </div>
+              <form id="round-alpha-form" class="proposal-form hidden">
+                <div class="form-group">
+                  <input id="alpha-c1" class="form-input" type="text" placeholder="alpha C_1 (e.g. 2)" />
+                </div>
+                <div class="form-group">
+                  <input id="alpha-c2" class="form-input" type="text" placeholder="alpha C_2 (e.g. 0.5)" />
+                </div>
+                <div class="form-group">
+                  <input id="alpha-version" class="form-input" type="text" placeholder="weights version label" />
+                </div>
+                <div class="proposal-form__actions">
+                  <button id="set-alpha-btn" class="button button--secondary" type="button">Set weights</button>
+                  <button id="set-calibration-btn" class="button button--secondary" type="button">Set calibration v1</button>
+                </div>
+              </form>
             </section>
 
             <section class="section-card" aria-labelledby="custodian-admin-title">
