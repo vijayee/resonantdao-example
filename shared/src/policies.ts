@@ -88,7 +88,9 @@ export const ROUND_NAMES = {
 
 export const RECIP_NAMES = {
   // Members who have verified this submitter at least once (per-pair once +
-  // mutual loop bar). Elements = verifier usernames, tags = contributionId.
+  // mutual loop bar). Elements = verifier usernames, tags =
+  // {verifier}:{contributionId} — tags must be unique per add (two verifiers
+  // of one contribution must not collide on a bare contributionId).
   verifiedBy: (submitter: string) => `recip:${submitter}`,
 } as const;
 

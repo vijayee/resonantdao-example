@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
-import { CONTRIB_NAMES, RES_CONFIG } from '../../shared/src/policies';
+import { CONTRIB_NAMES, RECIP_NAMES, RES_CONFIG } from '../../shared/src/policies';
 import { DaoDatabase } from '../src/db';
 import { DaoNode } from '../src/crabs';
 import { hydrateDao } from '../src/server';
@@ -297,5 +297,235 @@ describe('hydrateDao', () => {
     // entry's dim-1 value is 1 → RCT = 1 x 1 = 1.
     expect(second.getRctBalance('alice')).toBe(1);   // alpha unset→1; tally dim1 = match 1 → RCT = 1×1
     expect(second.getContributionStatus('r-eco1')).toBe('accepted');
+  });
+
+  it('phase-3 v2 lifecycle, appeal, accuracy, and reciprocity state survive hydrateDao op-log replay', async () => {
+    // Full v2 lifecycle with the phase-3 ops, all via signed member ops:
+    // closer's custody bootstrap (set_calibration_version — persisted; the
+    // replayed op warn-skips per the phase-2 pinned key-version behavior);
+    // a two-verifier C_1 under schema v2 (all-parties, count 2); a second
+    // alice contribution ('r-p3-2') that eve REJECTS, alice APPEALS (status
+    // 3, quorum reset), and dave re-verifies to acceptance; plus a bob
+    // submission carol verifies — which is why eve exists: the per-pair-once
+    // reciprocity guard lets each member verify a submitter exactly once,
+    // and carol had already verified alice's two-verifier C_1, so the C_2
+    // rejection needed a fourth verifier. Every op is persisted; a fresh
+    // DaoNode + hydrateDao must restore the contribution statuses, accuracy
+    // registers, and recip: guard sets.
+    const aliceKey = await KeyPair.generate();
+    const bobKey = await KeyPair.generate();
+    const carolKey = await KeyPair.generate();
+    const daveKey = await KeyPair.generate();
+    const eveKey = await KeyPair.generate();
+    const closerKey = await KeyPair.generate();
+
+    const firstDao = new DaoNode();
+    await firstDao.init();
+    for (const [name, key] of [
+      ['alice', aliceKey], ['bob', bobKey], ['carol', carolKey],
+      ['dave', daveKey], ['eve', eveKey], ['closer', closerKey],
+    ] as const) {
+      firstDao.registerMember(name, key.publicKeyHex());
+    }
+
+    let opCounter = 0;
+    async function buildMemberOp(dao: DaoNode, signerId: string, keyPair: KeyPair, type: string, payload: object): Promise<Uint8Array> {
+      const op = await Operation.create(type);
+      op.signerId = signerId;
+      op.nodeId = `browser-${++opCounter}`;
+      op.payload = new TextEncoder().encode(JSON.stringify(payload) + '\0');
+      setOperationSignerKeyVersion(op, dao.getUserKeyVersion(signerId));
+      dao.node.sign(op, keyPair);
+      return op.serialize();
+    }
+
+    // Custody bootstrap: mirrors the spine test above — closer signs post-
+    // custody at key_version 4, which can never replay against the
+    // re-registered (v3) closer, so hydration skips it with a warn while the
+    // calibration value comes from the 'v1' bootstrap preset.
+    firstDao.grantCustodian('closer');
+    const calBytes = await buildMemberOp(firstDao, 'closer', closerKey, 'set_calibration_version', { version: 'v1' });
+
+    // --- Contribution 1 (r-p3-1): v2 C_1, needs ALL two verifiers. ---
+    const submit1Bytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'submit_contribution', {
+      contributionId: 'r-p3-1',
+      dims: { '1': 1 },
+      summary: 'built the phase-3 fixture',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v2',
+    });
+    const verify1aBytes = await buildMemberOp(firstDao, 'bob', bobKey, 'verify_contribution', {
+      contributionId: 'r-p3-1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'first of two checks',
+      priorVerifiers: [],
+    });
+    const verify1bBytes = await buildMemberOp(firstDao, 'carol', carolKey, 'verify_contribution', {
+      contributionId: 'r-p3-1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'second of two checks completes the all-parties quorum',
+      priorVerifiers: ['bob'],
+    });
+    const settle1Bytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'settle_contribution', {
+      contributionId: 'r-p3-1',
+      submitter: 'alice',
+      reason: 'accepting the two-verifier outcome',
+      verifiers: ['bob', 'carol'],
+    });
+
+    // --- Contribution 2 (r-p3-2): rejected → appealed → re-verified. ---
+    const submit2Bytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'submit_contribution', {
+      contributionId: 'r-p3-2',
+      dims: { '2': 1 },
+      summary: 'recorded the phase-3 fixture',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v2',
+    });
+    const reject2Bytes = await buildMemberOp(firstDao, 'eve', eveKey, 'verify_contribution', {
+      contributionId: 'r-p3-2',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '2': 1 },
+      pass: false,
+      reason: 'does not match the claim',
+    });
+    const appeal2Bytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'appeal_verdict', {
+      contributionId: 'r-p3-2',
+      submitter: 'alice',
+      reason: 'the record does match the claim',
+    });
+    const reverify2Bytes = await buildMemberOp(firstDao, 'dave', daveKey, 'verify_contribution', {
+      contributionId: 'r-p3-2',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '2': 1 },
+      pass: true,
+      reason: 'appealed re-review finds the record accurate',
+      // The appeal reset the verify quorum, so the re-review starts from a
+      // fresh (empty) verifier list — dave had not verified alice before.
+      priorVerifiers: [],
+    });
+    const settle2Bytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'settle_contribution', {
+      contributionId: 'r-p3-2',
+      submitter: 'alice',
+      reason: 'the appealed re-review upheld the record',
+      verifiers: ['dave'],
+    });
+
+    // --- Contribution 3 (r-p3-3): bob's record carol verifies — this is
+    // what puts carol into recip:bob (asserted below on the replay). ---
+    const submit3Bytes = await buildMemberOp(firstDao, 'bob', bobKey, 'submit_contribution', {
+      contributionId: 'r-p3-3',
+      dims: { '2': 1 },
+      summary: 'bob records for the reciprocity assert',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v2',
+    });
+    const verify3Bytes = await buildMemberOp(firstDao, 'carol', carolKey, 'verify_contribution', {
+      contributionId: 'r-p3-3',
+      submitter: 'bob',
+      stepId: 'verify',
+      dims: { '2': 1 },
+      pass: true,
+      reason: 'carol has not verified bob before — per-pair fresh',
+      priorVerifiers: [],
+    });
+    const settle3Bytes = await buildMemberOp(firstDao, 'bob', bobKey, 'settle_contribution', {
+      contributionId: 'r-p3-3',
+      submitter: 'bob',
+      reason: 'accepting the recorded outcome',
+      verifiers: ['carol'],
+    });
+
+    const opBytes = [
+      calBytes, submit1Bytes, verify1aBytes, verify1bBytes, settle1Bytes,
+      submit2Bytes, reject2Bytes, appeal2Bytes, reverify2Bytes, settle2Bytes,
+      submit3Bytes, verify3Bytes, settle3Bytes,
+    ];
+    for (const bytes of opBytes) {
+      firstDao.executeOperation(await firstDao.deserializeOperation(bytes));
+    }
+    expect(firstDao.getCurrentRound()).toBe(1);      // no spine ops: round 1 stays open
+    expect(firstDao.getContributionStatus('r-p3-1')).toBe('accepted');
+    expect(firstDao.getContributionStatus('r-p3-2')).toBe('accepted'); // appeal → re-verify → settle
+    expect(firstDao.getContributionAppealed('r-p3-2')).toBe(true);
+    expect(firstDao.getVerifierStats('bob')).toEqual({ total: 1, upheld: 1 });
+
+    for (const [name, key] of [
+      ['alice', aliceKey], ['bob', bobKey], ['carol', carolKey],
+      ['dave', daveKey], ['eve', eveKey],
+    ] as const) {
+      await db.putUser({
+        username: name,
+        publicKeyHex: key.publicKeyHex(),
+        registeredAt: Date.now(),
+        keyVersion: 3,
+      });
+    }
+    // closer persists at keyVersion 4 (custody bump) — see the spine test.
+    await db.putUser({
+      username: 'closer',
+      publicKeyHex: closerKey.publicKeyHex(),
+      registeredAt: Date.now(),
+      keyVersion: 4,
+    });
+    let opIndex = 0;
+    for (const bytes of opBytes) {
+      await db.putOperation(opIndex, { index: opIndex, bytes: bytesToBase64(bytes) });
+      opIndex += 1;
+    }
+
+    // Replay: the persisted closer calibration op warn-skips (phase-2 pinned
+    // behavior — same spy convention as the spine test above); the member ops
+    // replay cleanly onto the fresh node.
+    const warns: unknown[][] = [];
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => warns.push(args));
+    const second = new DaoNode();
+    await second.init();
+    await hydrateDao(db, second);
+    warnSpy.mockRestore();
+    expect(warns.some((args) => String(args[0]).includes('Skipping invalid operation during hydration'))).toBe(true);
+
+    expect(second.getCurrentRound()).toBe(1);
+    expect(second.getContributionStatus('r-p3-1')).toBe('accepted');
+    expect(second.node.getRegister(CONTRIB_NAMES.step('r-p3-1'))).toBe(2); // parked at the settle step
+    // r-p3-2's full appeal arc replays: rejected (status 2) → appeal (status 3,
+    // step rewound to 1, quorum reset) → dave's re-verify advances to 2 →
+    // settle finalizes as accepted, with the once-guard register still set.
+    expect(second.getContributionStatus('r-p3-2')).toBe('accepted');
+    expect(second.getContributionAppealed('r-p3-2')).toBe(true);
+    expect(second.getContributionStatus('r-p3-3')).toBe('accepted');
+    expect(second.getDimensionBalance('alice', 1)).toBe(1);
+    // $RES arithmetic at settle: alice's C_1 bounty (12) fired at the
+    // two-verifier acceptance; her C_2 bounty (3) fired at the APPEALED
+    // re-verification (rejection pays no bounty, appeal re-review does).
+    expect(second.getResBalance('alice')).toBe(RES_CONFIG.buildingBounty + RES_CONFIG.recordingBaseCredit);
+
+    // Verifier-accuracy registers (total counts EVERY completed check — pass
+    // or reject; upheld counts settle-side attestations):
+    //   bob:   1 check (verify r-p3-1)      / upheld 1 (settle1 attests him)
+    //   carol: 2 checks (verify r-p3-1, verify r-p3-3) / upheld 2 (settle1 + settle3 attest her)
+    //   dave:  1 check (re-verify r-p3-2)   / upheld 1 (settle2 attests him)
+    //   eve:   1 check (REJECT r-p3-2)      / upheld 0 (her verdict was overturned — settle2 attests only dave)
+    expect(second.getVerifierStats('bob')).toEqual({ total: 1, upheld: 1 });
+    expect(second.getVerifierStats('carol')).toEqual({ total: 2, upheld: 2 });
+    expect(second.getVerifierStats('dave')).toEqual({ total: 1, upheld: 1 });
+    expect(second.getVerifierStats('eve')).toEqual({ total: 1, upheld: 0 });
+
+    // Reciprocity memory survives replay: everyone who checked a submitter
+    // (verifier-side of the guard set) is still present, including the
+    // rejecting check.
+    expect(second.node.setContains(RECIP_NAMES.verifiedBy('alice'), 'bob')).toBeTruthy(); // real-wasm setContains returns 1
+    expect(second.node.setContains(RECIP_NAMES.verifiedBy('alice'), 'carol')).toBeTruthy();
+    expect(second.node.setContains(RECIP_NAMES.verifiedBy('alice'), 'dave')).toBeTruthy();
+    expect(second.node.setContains(RECIP_NAMES.verifiedBy('alice'), 'eve')).toBeTruthy();
+    expect(second.node.setContains(RECIP_NAMES.verifiedBy('bob'), 'carol')).toBeTruthy();
+    expect(second.node.setContains(RECIP_NAMES.verifiedBy('carol'), 'alice')).toBeFalsy(); // nobody checked carol
   });
 });

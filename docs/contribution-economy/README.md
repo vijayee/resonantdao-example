@@ -418,3 +418,18 @@ outcome rules instead of timed accrual:
   Σ alpha × tally over the question's declared salient dims (mask register;
   elections stay base-only). $RES no longer gates votes. $RCT is publish-only;
   the RCT-as-vote-token question stays open (see the phase-2 spec).
+
+### Phase 3 multi-verifier binding (2026-10-07)
+
+- Phase 3 (2026-10-07): multi-verifier lifecycle — schema v2 declares C_1's
+  verify as `all-parties, count 2` (legacy v1 contributions keep single
+  verify via `schemaForRecord`), both-pass-or-dead; `appeal_verdict`
+  re-opens rejected contributions once (status 3; verifies/settles accept
+  0|3; the appeal resets the verify quorum via decrement so re-review needs
+  the full fresh verifier set); reciprocity guard (per-pair verify-once +
+  mutual loop bar via `recip:` sets); verifier accuracy registers
+  (`check:{u}:total`/`upheld`, fed by settle's client-attested verifier
+  list); wizard surface shows (d/n) progress, appeal button, and accuracy
+  stats. Deferred: Tier 1 random audits, rotating appeal panel,
+  accuracy-vs-chance capture detection, harm adjustments, retrieval
+  economy.

@@ -173,14 +173,17 @@ export function makeVerifyContributionHandler(
 
     // Verifier-accuracy total: one increment per completed check (pass or
     // reject), and the reciprocity record that this verifier checked this
-    // submitter (OR-Set element = signer, tag = contributionId, dedupe-safe
-    // because the per-pair setContains check above precedes every add).
+    // submitter (OR-Set element = signer, tag = {signer}:{contributionId} —
+    // the tag must be unique PER ADD, because CRABS setAdd silently drops an
+    // add whose tag it has already seen even for a different element: two
+    // verifiers of one two-check contribution (and a post-appeal re-verifier
+    // after a reject) must not collide on the bare contributionId).
     // Written alongside the per-check credit so guard sets only ever mutate
     // on verifications that were actually accepted.
     try { node.addRegister(CHECK_NAMES.total(op.signerId), 0); } catch (err) { /* exists */ }
     state.setRegister(CHECK_NAMES.total(op.signerId), (state.getRegister(CHECK_NAMES.total(op.signerId)) || 0) + 1, op.signerId);
     try { node.addORSet(RECIP_NAMES.verifiedBy(payload.submitter)); } catch (err) { /* exists */ }
-    state.setAdd(RECIP_NAMES.verifiedBy(payload.submitter), op.signerId, payload.contributionId);
+    state.setAdd(RECIP_NAMES.verifiedBy(payload.submitter), op.signerId, `${op.signerId}:${payload.contributionId}`);
 
     const doneName = CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId);
     state.incrementPNCounter(doneName, 1, op.signerId);
