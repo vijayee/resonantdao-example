@@ -1,16 +1,23 @@
 import { loadCRABS } from './wasm';
 import {
-  CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, POLICIES, RES_NAMES, STATE_NAMES, TOKEN_NAMES, runoffId,
+  CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, POLICIES, RES_NAMES, ROUND_NAMES, RCT_NAMES,
+  STATE_NAMES, TOKEN_NAMES, runoffId,
 } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
+import { derivedVoteBalance } from '@shared/round';
 import {
+  AuditRoundPayload,
   CastBallotPayload,
   CastRunoffVotePayload,
+  CompleteRoundPayload,
   ContributionPayload,
   ExecutePayload,
   FinalizeElectionPayload,
   ProposalPayload,
+  ReckonRoundPayload,
   RemoveMemberPayload,
+  SetCalibrationVersionPayload,
+  SetRctAlphaPayload,
   StartElectionPayload,
   SettleContributionPayload,
   VerifyContributionPayload,
@@ -19,12 +26,17 @@ import {
 } from '@shared/types';
 import {
   makeAddMemberHandler,
+  makeAuditRoundHandler,
   makeCastBallotHandler,
   makeCastRunoffVoteHandler,
+  makeCompleteRoundHandler,
   makeCreateProposalHandler,
   makeExecuteHandler,
   makeFinalizeElectionHandler,
+  makeReckonRoundHandler,
   makeRemoveMemberHandler,
+  makeSetCalibrationVersionHandler,
+  makeSetRctAlphaHandler,
   makeSettleContributionHandler,
   makeStartElectionHandler,
   makeSubmitContributionHandler,
@@ -80,6 +92,16 @@ export class BrowserDao {
     this.node.addORSet(STATE_NAMES.contributions);
     this.node.addRegister('time_now', 0);
 
+    // Round spine / calibration parity with server bootstrap (server/src/crabs.ts).
+    this.node.addRegister(ROUND_NAMES.current(), 1);
+    this.node.addRegister(ROUND_NAMES.stage(1), 0);
+    this.node.addORSet(ROUND_NAMES.explanations(1));
+    this.node.addRegister(CALIBRATIONS.calibrationVersion(), 1); // pilot bootstrap: matches server
+    this.node.addRegister(CALIBRATIONS.alphaVersion(), 0);
+    this.node.addRegister(CALIBRATIONS.voteBase(), 0);
+    this.node.addRegister(CALIBRATIONS.voteCap(), 0);
+    this.node.addORSet(CALIBRATIONS.explanations());
+
     this.node.setPolicy('create_proposal', POLICIES.create_proposal);
     this.node.setPolicy('vote', POLICIES.vote);
     this.node.setPolicy('execute', POLICIES.execute);
@@ -98,6 +120,11 @@ export class BrowserDao {
     this.node.setPolicy('submit_contribution', POLICIES.submit_contribution);
     this.node.setPolicy('verify_contribution', POLICIES.verify_contribution);
     this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
+    this.node.setPolicy('audit_round', POLICIES.audit_round);
+    this.node.setPolicy('reckon_round', POLICIES.reckon_round);
+    this.node.setPolicy('complete_round', POLICIES.complete_round);
+    this.node.setPolicy('set_rct_alpha', POLICIES.set_rct_alpha);
+    this.node.setPolicy('set_calibration_version', POLICIES.set_calibration_version);
 
     this.node.registerHandlerJs('start_election', makeStartElectionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('cast_ballot', makeCastBallotHandler({ getTimeMs: () => this.getNodeTimeMs() }));
@@ -107,6 +134,11 @@ export class BrowserDao {
     this.node.registerHandlerJs('submit_contribution', makeSubmitContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('verify_contribution', makeVerifyContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('audit_round', makeAuditRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('reckon_round', makeReckonRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('complete_round', makeCompleteRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('set_rct_alpha', makeSetRctAlphaHandler(this.node));
+    this.node.registerHandlerJs('set_calibration_version', makeSetCalibrationVersionHandler(this.node));
     this.node.registerHandlerJs('sync_roles', () => 0);
 
     this.node.registerUser(username, this.signingKey.publicKeyHex());
@@ -159,6 +191,26 @@ export class BrowserDao {
 
   async settleContribution(userId: string, payload: SettleContributionPayload): Promise<Uint8Array> {
     return this.signAndSerialize('settle_contribution', userId, JSON.stringify(payload));
+  }
+
+  async auditRound(userId: string, payload: AuditRoundPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('audit_round', userId, JSON.stringify(payload));
+  }
+
+  async reckonRound(userId: string, payload: ReckonRoundPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('reckon_round', userId, JSON.stringify(payload));
+  }
+
+  async completeRound(userId: string, payload: CompleteRoundPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('complete_round', userId, JSON.stringify(payload));
+  }
+
+  async setRctAlpha(userId: string, payload: SetRctAlphaPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('set_rct_alpha', userId, JSON.stringify(payload));
+  }
+
+  async setCalibrationVersion(userId: string, payload: SetCalibrationVersionPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('set_calibration_version', userId, JSON.stringify(payload));
   }
 
   async removeMember(userId: string, payload: RemoveMemberPayload): Promise<Uint8Array> {
@@ -219,6 +271,7 @@ export class BrowserDao {
       }
       await this.mirrorContributionState(op);
       await this.mirrorElectionState(op);
+      await this.mirrorRoundState(op);
     } finally {
       op.destroy();
     }
@@ -307,6 +360,37 @@ export class BrowserDao {
     return Array.from(this.contributions.values());
   }
 
+  private roundRecords = new Map<number, Array<Record<string, unknown>>>();
+
+  // Simplified round-spine mirror: one record per audit/reckon/complete op,
+  // attributed to the round whose stage was just advanced (complete_round
+  // bumps round:current before this mirror runs, so subtract 1 there).
+  private async mirrorRoundState(op: any): Promise<void> {
+    if (op.type !== 'audit_round' && op.type !== 'reckon_round' && op.type !== 'complete_round') return;
+    let payload: any = null;
+    try {
+      const raw = op.payload;
+      const json = typeof raw === 'string' ? raw : new TextDecoder().decode(raw as Uint8Array);
+      payload = JSON.parse(json.replace(/\0$/, ''));
+    } catch {
+      return;
+    }
+    const roundNo = this.node.getRegister(ROUND_NAMES.current()) || 1;
+    const target = roundNo - (op.type === 'complete_round' ? 1 : 0);
+    const record: Record<string, unknown> = {
+      stepId: op.type === 'complete_round' ? 'complete' : op.type === 'audit_round' ? 'audit' : 'reckon',
+      by: op.signerId,
+      ...payload,
+    };
+    const list = this.roundRecords.get(target) ?? [];
+    list.push(record);
+    this.roundRecords.set(target, list);
+  }
+
+  getRoundRecords(round: number): Array<Record<string, unknown>> {
+    return this.roundRecords.get(round) ?? [];
+  }
+
   private async mirrorElectionState(op: any): Promise<void> {
     if (op.type !== 'start_election' && op.type !== 'finalize_election') {
       return;
@@ -386,6 +470,34 @@ export class BrowserDao {
 
   getContributionStepDone(contributionId: string, stepId: string): number {
     return this.node.getPNCounter(CONTRIB_NAMES.stepDone(contributionId, stepId)) || 0;
+  }
+
+  getCurrentRound(): number {
+    return this.node.getRegister(ROUND_NAMES.current()) || 1;
+  }
+
+  getRoundStage(round: number): number {
+    return this.node.getRegister(ROUND_NAMES.stage(round)) || 0;
+  }
+
+  getRctBalance(username: string): number {
+    return this.node.getRegister(RCT_NAMES.balance(username)) || 0;
+  }
+
+  getContributionRound(contributionId: string): number {
+    return this.node.getRegister(CONTRIB_NAMES.contributionRound(contributionId)) || 0;
+  }
+
+  getVoteBalance(proposalId: string, username: string): number {
+    // UI mirrors the handler's derived-balance math so cards and state agree.
+    const mask = this.node.getRegister(TOKEN_NAMES.proposalSalient(proposalId)) || 0;
+    return derivedVoteBalance(
+      mask,
+      (i) => this.node.getRegister(CALIBRATIONS.alpha(i)) || 1,
+      (i) => this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, i)) || 0,
+      this.node.getRegister(CALIBRATIONS.voteBase()) || 3,
+      this.node.getRegister(CALIBRATIONS.voteCap()) || 50
+    );
   }
 
   getProposalType(id: string): 'direct' | 'quadratic' | null {
