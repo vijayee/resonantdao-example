@@ -274,7 +274,7 @@ export function makeVerifyContributionHandler(
 // Future multi-step schemas will pass dims like verify does to locate the
 // settle step in the schema instead of pinning the register index.
 export function makeSettleContributionHandler(
-  _node: { addRegister(name: string, initial?: number): void },
+  node: { addRegister(name: string, initial?: number): void },
   config: { getTimeMs?: () => number } = {}
 ) {
   return (state: HandlerState, op: HandlerOperation): number => {
@@ -302,6 +302,25 @@ export function makeSettleContributionHandler(
     }
     if (state.getRegister(CONTRIB_NAMES.step(payload.contributionId)) !== 2) {
       return -1;
+    }
+    // Client-attested verifier list (deduped, non-empty strings only) — every
+    // listed verifier must be a member; validated before any write so a bad
+    // list leaves the settlement state untouched.
+    const verifiers = Array.isArray(payload.verifiers)
+      ? [...new Set(payload.verifiers.filter((v) => typeof v === 'string' && v !== ''))]
+      : [];
+    for (const verifier of verifiers) {
+      if (!state.setContains(STATE_NAMES.members, verifier)) {
+        return -1;
+      }
+    }
+
+    // Upheld increments fire on acceptance-at-settle — the phase-3 accuracy
+    // proxy (upheld vs the per-completed-check total written by the verify
+    // handler).
+    for (const verifier of verifiers) {
+      try { node.addRegister(CHECK_NAMES.upheld(verifier), 0); } catch (err) { /* exists */ }
+      state.setRegister(CHECK_NAMES.upheld(verifier), (state.getRegister(CHECK_NAMES.upheld(verifier)) || 0) + 1, op.signerId);
     }
 
     const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, 'settle');

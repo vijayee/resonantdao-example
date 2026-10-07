@@ -109,6 +109,7 @@ export interface SettleContributionPayload {
   contributionId: string;
   submitter: string;
   reason: string;
+  verifiers?: string[]; // client-attested verifiers whose checks this settlement upholds (same PoC trust class as dims/submitter)
 }
 
 export interface AppealVerdictPayload {

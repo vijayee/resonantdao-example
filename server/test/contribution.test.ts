@@ -572,6 +572,39 @@ describe('settle_contribution handler', () => {
     expect(run(settle, state, makeOp('settle_contribution', 'alice',
       settleOp({ contributionId: 'c-reason', reason: '' })))).toBe(-1);
   });
+
+  describe('settle upheld-accuracy increments (phase 3)', () => {
+    it('the settle lists verifiers; each upheld register increments once per listed verifier and upheld == total', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupAtSettle(node, state, 'c-up1');
+      const settle = makeSettleContributionHandler(node);
+      expect(run(settle, state, makeOp('settle_contribution', 'alice', {
+        contributionId: 'c-up1', submitter: 'alice', reason: 'done', verifiers: ['bob', 'bob'],
+      } as SettleContributionPayload))).toBe(0);
+      expect(state.getRegister(CHECK_NAMES.upheld('bob'))).toBe(1); // deduped: listed twice, +1 once
+      expect(state.getRegister(CHECK_NAMES.total('bob'))).toBe(1); // upheld == total
+      expect(state.getRegister(CHECK_NAMES.upheld('ghost'))).toBeUndefined(); // unlisted verifier untouched
+    });
+
+    it('settle rejects non-member verifiers; empty verifiers list is a clean no-op settle', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupAtSettle(node, state, 'c-up2');
+      const settle = makeSettleContributionHandler(node);
+      expect(run(settle, state, makeOp('settle_contribution', 'alice', {
+        contributionId: 'c-up2', submitter: 'alice', reason: 'x', verifiers: ['not-a-member'],
+      } as SettleContributionPayload))).toBe(-1);
+      expect(state.getRegister(CONTRIB_NAMES.status('c-up2'))).toBe(0); // rejected before any write
+      expect(state.getRegister(CHECK_NAMES.upheld('not-a-member'))).toBeUndefined();
+      // PoC: the client-attested list is optional — an empty (or absent) list
+      // settles with nothing tracked.
+      expect(run(settle, state, makeOp('settle_contribution', 'alice', {
+        contributionId: 'c-up2', submitter: 'alice', reason: 'x', verifiers: [],
+      } as SettleContributionPayload))).toBe(0);
+      expect(state.getRegister(CONTRIB_NAMES.status('c-up2'))).toBe(1);
+    });
+  });
 });
 
 import {
