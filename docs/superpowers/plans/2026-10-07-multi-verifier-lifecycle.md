@@ -85,11 +85,14 @@ WIZARD: extend `server/test/wizard.test.ts`:
   });
 
   it('unknown schema versions render read-only; known legacy v1 facts render normally', () => {
-    const legacyModel = wizardModel(schemaForRecord("v1", { "1": 1 }), c1Facts(1, { submit: 1 }), 'alice');
+    const legacyModel = wizardModel(schemaForRecord('v1', { '1': 1 }), c1Facts(1, { submit: 1 }), 'alice');
     expect(legacyModel.readOnly).toBe(false);
+    const stale = { ...schema, schemaVersion: 'v0' };
+    expect(wizardModel(stale, c1Facts(1, { submit: 1 }), 'alice').readOnly).toBe(true);
+  });
 ```
 
-(Adapt the exact call to the actual v1 schema instance exposed for tests — see implementation.)
+(Adapt the v1 schema instance and helper names to the test file's actual imports — schemaForRecord('v1', …) is the clean way to obtain the legacy schema.)
 
 - [ ] **Step 2: Run** both test files → FAIL (new exports missing).
 
