@@ -98,6 +98,9 @@ class MockState {
   incrementPNCounter(name: string, delta = 1): void {
     this.pnCounters.set(name, (this.pnCounters.get(name) || 0) + delta);
   }
+  decrementPNCounter(name: string, delta = 1, _nodeId?: string): void {
+    this.pnCounters.set(name, (this.pnCounters.get(name) || 0) - delta);
+  }
   setRegister(name: string, value: number, _nodeId?: string): void {
     this.registers.set(name, value);
   }
@@ -920,19 +923,27 @@ describe('appeal_verdict', () => {
     // fresh verifiers, which keeps reciprocal gaming impossible.
     expect(run(verify, state, makeOp('verify_contribution', 'bob',
       verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, reason: 'changed my mind' })))).toBe(-1);
-    // The all-parties (2) re-review completes with ONE fresh verifier: the
-    // per-step done PNCounter is append-only and the appeal rewinds only the
-    // step pointer, so bob's rejected check still counts toward the
-    // requirement — carol's accepted check reaches done=2 and is final. The
-    // step advances to settle with the status register at STATUS_APPEALED.
+    // The appeal resets the verify step's done PNCounter: bob's pre-appeal
+    // rejection no longer occupies a quorum slot.
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-app5', 'verify'))).toBe(0);
+    // The all-parties (2) re-review needs the FULL fresh quorum: bob's
+    // rejected check is erased by the counter reset, so ONE fresh verifier
+    // (carol) reaches done=1 of 2 — the step does NOT advance yet.
     expect(run(verify, state, makeOp('verify_contribution', 'carol',
       verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, reason: 'real' })))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-app5'))).toBe(1); // still verifying
+    expect(state.getRegister(CONTRIB_NAMES.status('c-app5'))).toBe(STATUS_APPEALED);
+    // A SECOND fresh verifier completes the fresh quorum: done=2 is final and
+    // the step advances to settle with the status register at STATUS_APPEALED.
+    expect(run(verify, state, makeOp('verify_contribution', 'dave',
+      verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, reason: 'also real', priorVerifiers: ['bob', 'carol'] })))).toBe(0);
     expect(state.getRegister(CONTRIB_NAMES.step('c-app5'))).toBe(2);
     expect(state.getRegister(CONTRIB_NAMES.status('c-app5'))).toBe(STATUS_APPEALED);
     // Past the verify step, further verifies are refused (wrong lifecycle
-    // position) — dave cannot add a second completion.
-    expect(run(verify, state, makeOp('verify_contribution', 'dave',
-      verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, reason: 'late', priorVerifiers: ['bob', 'carol'] })))).toBe(-1);
+    // position, ahead of the reciprocity tiers) — carol cannot add a third
+    // completion.
+    expect(run(verify, state, makeOp('verify_contribution', 'carol',
+      verifyOp({ contributionId: 'c-app5', dims: { '1': 1 }, reason: 'late' })))).toBe(-1);
     expect(state.getRegister(CONTRIB_NAMES.status('c-app5'))).toBe(STATUS_APPEALED);
     // Settlement accepts the appealed status and finalizes acceptance.
     const settle = makeSettleContributionHandler(node);

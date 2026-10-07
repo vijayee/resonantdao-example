@@ -366,6 +366,14 @@ export function makeAppealVerdictHandler(
     // every current schema (v1, v2, default) places verify at index 1, and a
     // rejection never advances past it.
     state.setRegister(CONTRIB_NAMES.step(payload.contributionId), 1, op.signerId);
+    // Reset the verify step's completion counter so the appealed re-review
+    // requires the FULL fresh quorum (decrementPNCounter is exact — PNCounters
+    // support decrement; the pre-appeal verdicts no longer occupy slots).
+    const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, 'verify');
+    const done = state.getPNCounter(doneReg) || 0;
+    if (done > 0) {
+      state.decrementPNCounter(doneReg, done, op.signerId);
+    }
 
     try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* declared by submit */ }
     const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
