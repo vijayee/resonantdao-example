@@ -1,7 +1,7 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
 import { AddMemberPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, CompleteRoundPayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
-  CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RCT_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
+  CALIBRATIONS, CHECK_NAMES, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RECIP_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RCT_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
 import {
   AGGREGATE_ENTRY_LIMIT, CALIBRATION_VERSION_NUMBERS, derivedVoteBalance, encodeSalientMask,
@@ -106,7 +106,7 @@ export function makeSubmitContributionHandler(
 // (status/step registers, per-step done counters, explanations ORSet) is
 // addRegister'd first — balances and dimension tallies.
 export function makeVerifyContributionHandler(
-  node: { addRegister(name: string, initial?: number): void },
+  node: { addRegister(name: string, initial?: number): void; addORSet(name: string): void },
   config: { getTimeMs?: () => number } = {}
 ) {
   return (state: HandlerState, op: HandlerOperation): number => {
@@ -151,11 +151,35 @@ export function makeVerifyContributionHandler(
       return -1;
     }
 
+    // Reciprocity conflict guard — the last validation tier, all-or-nothing:
+    // any barred verifier exits here, before the per-check credit, so a
+    // blocked check pays nothing and mutates no guard set.
+    if (Array.isArray(payload.priorVerifiers) && payload.priorVerifiers.includes(op.signerId)) {
+      return -1; // all-parties: distinct verifiers (client-attested prior list)
+    }
+    if (state.setContains(RECIP_NAMES.verifiedBy(payload.submitter), op.signerId)) {
+      return -1; // per-pair once: this verifier already verified this submitter
+    }
+    if (state.setContains(RECIP_NAMES.verifiedBy(op.signerId), payload.submitter)) {
+      return -1; // mutual loop bar: the submitter previously verified this verifier
+    }
+
     // Per-check credit for the ACTOR on every completed verification,
     // pass or reject (C_18 Moon).
     const actorBalance = RES_NAMES.balance(op.signerId);
     try { node.addRegister(actorBalance, 0); } catch (err) { /* ignore duplicate */ }
     state.setRegister(actorBalance, (state.getRegister(actorBalance) || 0) + RES_CONFIG.verificationCheckCredit, op.signerId);
+
+    // Verifier-accuracy total: one increment per completed check (pass or
+    // reject), and the reciprocity record that this verifier checked this
+    // submitter (OR-Set element = signer, tag = contributionId, dedupe-safe
+    // because the per-pair setContains check above precedes every add).
+    // Written alongside the per-check credit so guard sets only ever mutate
+    // on verifications that were actually accepted.
+    try { node.addRegister(CHECK_NAMES.total(op.signerId), 0); } catch (err) { /* exists */ }
+    state.setRegister(CHECK_NAMES.total(op.signerId), (state.getRegister(CHECK_NAMES.total(op.signerId)) || 0) + 1, op.signerId);
+    try { node.addORSet(RECIP_NAMES.verifiedBy(payload.submitter)); } catch (err) { /* exists */ }
+    state.setAdd(RECIP_NAMES.verifiedBy(payload.submitter), op.signerId, payload.contributionId);
 
     const doneName = CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId);
     state.incrementPNCounter(doneName, 1, op.signerId);

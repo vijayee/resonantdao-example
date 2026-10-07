@@ -82,6 +82,17 @@ export const ROUND_NAMES = {
   explanations: (round: number) => `round:${round}:e`,
 } as const;
 
+export const RECIP_NAMES = {
+  // Members who have verified this submitter at least once (per-pair once +
+  // mutual loop bar). Elements = verifier usernames, tags = contributionId.
+  verifiedBy: (submitter: string) => `recip:${submitter}`,
+} as const;
+
+export const CHECK_NAMES = {
+  total: (username: string) => `check:${username}:total`,
+  upheld: (username: string) => `check:${username}:upheld`,
+} as const;
+
 export const RCT_NAMES = {
   balance: (username: string) => `rct:${username}`,
 } as const;

@@ -59,7 +59,7 @@ import {
   SCHEMA_VERSION_NUMBERS, KNOWN_SCHEMA_VERSIONS,
 } from '../../shared/src/contribution';
 import { makeSettleContributionHandler, makeSubmitContributionHandler, makeVerifyContributionHandler } from '../../shared/src/handlers';
-import { CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
+import { RECIP_NAMES, CHECK_NAMES, CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
 import { ContributionPayload, SettleContributionPayload, VerifyContributionPayload } from '../../shared/src/types';
 import { HandlerOperation, HandlerState } from 'crabs-wasm';
 
@@ -426,6 +426,84 @@ describe('verify_contribution handler (schema-driven)', () => {
     expect(finalRecord.payments['alice']).toBe(RES_CONFIG.buildingBounty);
     expect(finalRecord.calibrationVersion).toBe('v1');
     expect(finalRecord.schemaVersion).toBe('v2');
+  });
+
+  describe('verify reciprocity and accuracy (phase 3)', () => {
+    it('blocks the per-pair repeat: bob cannot verify the same submitter twice, and a barred verifier is paid nothing', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-recip1', { '2': 1 });
+      const verify = makeVerifyContributionHandler(node);
+      // C_2 single verify: bob completes it once.
+      expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-recip1' })))).toBe(0);
+      const bobBalanceAfterFirst = state.getRegister(RES_NAMES.balance('bob'));
+      expect(bobBalanceAfterFirst).toBe(RES_CONFIG.verificationCheckCredit);
+      // A new contribution from alice: bob is blocked by the reciprocity set —
+      // -1 fires BEFORE the per-check credit. (setupSubmitted resets the demo
+      // balance registers, so compare against the fresh baseline.)
+      setupSubmitted(state, node, 'alice', 'c-recip2', { '2': 1 });
+      const bobBalanceBeforeBlocked = state.getRegister(RES_NAMES.balance('bob'));
+      expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-recip2' })))).toBe(-1);
+      expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(bobBalanceBeforeBlocked); // unchanged: no credit
+      expect(state.getRegister(CHECK_NAMES.total('bob'))).toBe(1); // blocked check not counted
+      expect(state.setContains(RECIP_NAMES.verifiedBy('alice'), 'bob')).toBe(true); // pin the guard set
+    });
+
+    it('blocks the mutual loop: a member cannot verify back a submitter who previously verified them', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-loop1', { '2': 1 });
+      const verify = makeVerifyContributionHandler(node);
+      expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-loop1' })))).toBe(0);
+      // bob's contribution, verified by alice — MUTUAL LOOP BAR: bob already
+      // verified alice (recip:alice ⊇ bob), and a member may verify a
+      // submitter only if that submitter never verified them.
+      setupSubmitted(state, node, 'bob', 'c-loop2', { '2': 1 });
+      expect(run(verify, state, makeOp('verify_contribution', 'alice',
+        verifyOp({ contributionId: 'c-loop2', submitter: 'bob' })))).toBe(-1);
+      expect(state.setContains(RECIP_NAMES.verifiedBy('alice'), 'bob')).toBe(true); // barred pair recorded
+      // bob's repeat attempt on alice is barred too (per-pair once).
+      setupSubmitted(state, node, 'alice', 'c-loop3', { '2': 1 });
+      expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-loop3' })))).toBe(-1);
+    });
+
+    it('a signer listed in priorVerifiers is rejected (all-parties distinct actors); unlisted verifiers pass', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-pv1', { '2': 1 });
+      setupMembers(state, 'carol');
+      const verify = makeVerifyContributionHandler(node);
+      // Client attests bob already verified this completion → refusal for bob.
+      expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-pv1', priorVerifiers: ['bob'] })))).toBe(-1);
+      expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(0); // no credit on refusal
+      // carol is NOT listed → verification proceeds.
+      expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-pv1', priorVerifiers: ['bob'] })))).toBe(0);
+      expect(state.getRegister(CONTRIB_NAMES.step('c-pv1'))).toBe(2); // single C_2 verify completed
+    });
+
+    it('accuracy: per-verifier total increments once per completed check (two-verifier C_1)', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-acc', { '1': 1 });
+      setupMembers(state, 'carol');
+      const verify = makeVerifyContributionHandler(node);
+      expect(run(verify, state, makeOp('verify_contribution', 'bob',
+        verifyOp({ contributionId: 'c-acc', dims: { '1': 1 }, reason: 'real artifact' })))).toBe(0);
+      expect(run(verify, state, makeOp('verify_contribution', 'carol',
+        verifyOp({ contributionId: 'c-acc', dims: { '1': 1 }, reason: 'real too' })))).toBe(0);
+      expect(state.getRegister(CHECK_NAMES.total('bob'))).toBe(1);
+      expect(state.getRegister(CHECK_NAMES.total('carol'))).toBe(1);
+    });
+
+    it('accuracy: rejected checks also count toward the verifier total', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-acc-rej', { '2': 1 });
+      const verify = makeVerifyContributionHandler(node);
+      expect(run(verify, state, makeOp('verify_contribution', 'bob',
+        verifyOp({ contributionId: 'c-acc-rej', pass: false, reason: 'no record link' })))).toBe(0);
+      expect(state.getRegister(CHECK_NAMES.total('bob'))).toBe(1);
+    });
   });
 });
 

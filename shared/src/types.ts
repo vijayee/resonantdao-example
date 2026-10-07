@@ -98,6 +98,11 @@ export interface VerifyContributionPayload {
   // defaults to SCHEMA_VERSION ('v2') when omitted, so legacy v1 records
   // verify under v1 rules only when the payload states 'v1' explicitly.
   schemaVersion?: string;
+  // Client-attested usernames of verifiers on earlier completions of this
+  // step (same PoC trust class as dims/submitter). The handler refuses the
+  // signer when they appear in this list — the deterministic all-parties
+  // distinct-actor rule CRABS cannot express handler-side on its own.
+  priorVerifiers?: string[];
 }
 
 export interface SettleContributionPayload {
