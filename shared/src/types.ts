@@ -32,6 +32,7 @@ export interface ProposalPayload {
   proposalType: ProposalType;
   options: string[]; // 2-10 non-empty, unique options; binary = ['Yes','No']
   expiresAt: number; // epoch ms
+  salientDims?: number[]; // question-declared salient dimensions (0..21, unique); absent = base-only
 }
 
 export interface VotePayload {

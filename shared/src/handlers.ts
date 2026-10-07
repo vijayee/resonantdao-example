@@ -4,7 +4,8 @@ import {
   CALIBRATIONS, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RCT_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
 import {
-  AGGREGATE_ENTRY_LIMIT, CALIBRATION_VERSION_NUMBERS, isValidRoundEntry, roundRctTotals,
+  AGGREGATE_ENTRY_LIMIT, CALIBRATION_VERSION_NUMBERS, derivedVoteBalance, encodeSalientMask,
+  isValidRoundEntry, roundRctTotals,
   STAGE_AUDITED, STAGE_OPEN, STAGE_PUBLISHED, STAGE_RECKONED,
 } from './round';
 import {
@@ -307,6 +308,13 @@ export function makeCreateProposalHandler(
     ) {
       return -1;
     }
+    if (payload.salientDims !== undefined) {
+      try {
+        encodeSalientMask(payload.salientDims);
+      } catch (err) {
+        return -1;
+      }
+    }
 
     const optionCount = payload.options.length;
     try { node.addRegister(TOKEN_NAMES.proposalOptionCount(payload.proposalId), 0); } catch (err) { /* ignore duplicate */ }
@@ -318,6 +326,7 @@ export function makeCreateProposalHandler(
     try { node.addORSet(TOKEN_NAMES.proposalMirrorSet(payload.proposalId)); } catch (err) { /* ignore duplicate */ }
     try { node.addRegister(TOKEN_NAMES.proposalType(payload.proposalId), 0); } catch (err) { /* ignore duplicate */ }
     try { node.addRegister(TOKEN_NAMES.proposalExpiresAt(payload.proposalId), 0); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(TOKEN_NAMES.proposalSalient(payload.proposalId), 0); } catch (err) { /* ignore duplicate */ }
     try { node.addRegister(TOKEN_NAMES.proposalExecuted(payload.proposalId), 0); } catch (err) { /* ignore duplicate */ }
     try { node.addRegister(TOKEN_NAMES.proposalPassed(payload.proposalId), 0); } catch (err) { /* ignore duplicate */ }
     try { node.addRegister(TOKEN_NAMES.proposalWinner(payload.proposalId), 0); } catch (err) { /* ignore duplicate */ }
@@ -328,6 +337,8 @@ export function makeCreateProposalHandler(
     state.setRegister(TOKEN_NAMES.proposalType(payload.proposalId), payload.proposalType === 'direct' ? 1 : 2, op.signerId);
     state.setRegister(TOKEN_NAMES.proposalExpiresAt(payload.proposalId), expiresAt, op.signerId);
     state.setRegister(TOKEN_NAMES.proposalOptionCount(payload.proposalId), optionCount, op.signerId);
+    const salientMask = payload.salientDims !== undefined ? encodeSalientMask(payload.salientDims) : 0;
+    state.setRegister(TOKEN_NAMES.proposalSalient(payload.proposalId), salientMask, op.signerId);
     state.setAdd(STATE_NAMES.proposals, payload.proposalId, JSON.stringify(payload));
     return 0;
   };
@@ -371,10 +382,17 @@ export function makeVoteHandler(
     }
 
     // Quadratic vote: allow multiple votes. Each additional vote costs n^2
-    // $RES from a mirrored per-proposal token pool. Balances are not globally
-    // consumed; the mirror tracks the cumulative cost spent on this proposal.
+    // against a salient-derived balance (base + capped alpha-weighted salient
+    // tallies), mirrored per proposal. Balances are not globally consumed; the
+    // mirror tracks the cumulative cost spent on this proposal.
     if (proposalType === 2) {
-      const balance = state.getRegister(RES_NAMES.balance(op.signerId)) || 0;
+      const balance = derivedVoteBalance(
+        state.getRegister(TOKEN_NAMES.proposalSalient(payload.proposalId)) || 0,
+        (i) => state.getRegister(CALIBRATIONS.alpha(i)) || 1,
+        (i) => state.getRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, i)) || 0,
+        state.getRegister(CALIBRATIONS.voteBase()) || 3,
+        state.getRegister(CALIBRATIONS.voteCap()) || 50
+      );
       const mirrorSet = TOKEN_NAMES.proposalMirrorSet(payload.proposalId);
       let used = 0;
       const maxVoteCheck = 100;
@@ -692,8 +710,9 @@ export function makeCastRunoffVoteHandler(
       return -1;
     }
 
-    // Quadratic cost from the voter's global $RES balance, mirrored per runoff.
-    const balance = state.getRegister(RES_NAMES.balance(op.signerId)) || 0;
+    // Elections declare no salience → base-only balance; cumulative quadratic
+    // cost mechanics (mirror ORSet, n² gating) are unchanged.
+    const balance = state.getRegister(CALIBRATIONS.voteBase()) || 3;
     const mirror = ELECTION_NAMES.mirrorSet(id);
     let used = 0;
     const maxVoteCheck = 100;

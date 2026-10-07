@@ -13,7 +13,7 @@ import {
   makeFinalizeElectionHandler,
   makeRemoveMemberHandler,
 } from '../../shared/src/handlers';
-import { ELECTION_NAMES, VOTE_THRESHOLD, runoffId } from '../../shared/src/policies';
+import { ELECTION_NAMES, STATE_NAMES, VOTE_THRESHOLD, runoffId } from '../../shared/src/policies';
 
 class MockNode {
   orSets = new Set<string>();
@@ -122,9 +122,66 @@ function setupProposal(
 
 function initUser(state: MockState, username: string, balance: number = 20) {
   // $RES balance is credited only by verified contributions; unit tests
-  // simulate that by writing the balance register directly.
+  // simulate that by writing the balance register directly. Only pins
+  // remove_member zeroing — quadratic votes no longer read res:.
   state.setRegister(`res:${username}`, balance);
 }
+
+// Settled contribution tally for one dimension of a submitter — the input
+// that salient-derived vote balances are computed from.
+function seedTally(state: MockState, username: string, dimIndex: number, value: number) {
+  state.setRegister(`dim:${username}:c${dimIndex}`, value);
+}
+
+describe('salient-derived vote balance', () => {
+  it('quadratic vote draws from base + salient tallies (not res: register)', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupProposal(node, state, 'p-sal', 'quadratic', 100000);
+    // C_1 salient; alice settled building contributions → tally 10 → balance 3 + 10 = 13
+    state.setRegister('proposals:p-sal:salient', (1 << 1));
+    seedTally(state, 'alice', 1, 10);
+    // alice has NO res: register at all — proves the vote reads tallies, not tokens
+    const vote = makeVoteHandler({ getTimeMs: () => 0 });
+    // 3 quadratic votes at cumulative 1+4+9=14 > 13 → exactly 2 votes
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p-sal', choice: 0 }))).toBe(0);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p-sal', choice: 0 }))).toBe(0);
+    expect(state.getPNCounter('votes:p-sal:opt0_count')).toBe(2);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p-sal', choice: 0 }))).toBe(-1);
+  });
+
+  it('base-only proposals (empty salient mask) give every member the base balance', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupProposal(node, state, 'p-base', 'quadratic', 100000);
+    state.setRegister('proposals:p-base:salient', 0);
+    const vote = makeVoteHandler({ getTimeMs: () => 0 });
+    // base 3: cumulative 1+4 = 5 > 3 → exactly 1 vote
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p-base', choice: 0 }))).toBe(0);
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p-base', choice: 0 }))).toBe(-1);
+    // base is identical for a member with NO contributions
+    state.setAdd(STATE_NAMES.members, 'nobody', 'nobody');
+    expect(vote(state, makeOp('vote', 'nobody', { proposalId: 'p-base', choice: 0 }))).toBe(0);
+  });
+
+  it('create_proposal writes the salient mask from payload; invalid subsets rejected', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    const nowMs = 0;
+    const make = makeCreateProposalHandler(node, { getTimeMs: () => nowMs });
+    expect(make(state, makeOp('create_proposal', 'alice', {
+      proposalId: 'p1', title: 'T', description: 'D', proposalType: 'quadratic', options: ['Yes', 'No'], expiresAt: 1000, salientDims: [1, 18],
+    }))).toBe(0);
+    expect(state.getRegister('proposals:p1:salient')).toBe((1 << 1) | (1 << 18));
+    expect(make(state, makeOp('create_proposal', 'alice', {
+      proposalId: 'p2', title: 'T', description: 'D', proposalType: 'direct', options: ['Yes', 'No'], expiresAt: 1000,
+    }))).toBe(0);
+    expect(state.getRegister('proposals:p2:salient')).toBe(0); // absent → base-only
+    expect(make(state, makeOp('create_proposal', 'alice', {
+      proposalId: 'p3', title: 'T', description: 'D', proposalType: 'direct', options: ['Yes', 'No'], expiresAt: 1000, salientDims: [22],
+    }))).toBe(-1);
+  });
+});
 
 describe('Governance handlers', () => {
   it('rejects duplicate direct votes from the same user', () => {
@@ -175,12 +232,14 @@ describe('Governance handlers', () => {
     expect(state.getPNCounter('votes:p1:opt1_count')).toBe(0);
   });
 
-  it('charges n^2 across different quadratic options and caps at the mirrored balance', () => {
+  it('charges n^2 across different quadratic options and caps at the salient-derived balance', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    initUser(state, 'alice');
 
     setupProposal(node, state, 'p1', 'quadratic', 1000, ['Alpha', 'Beta', 'Gamma']);
+    // C_1 salient; tally 17 → balance base 3 + 17 = 20.
+    state.setRegister('proposals:p1:salient', (1 << 1));
+    seedTally(state, 'alice', 1, 17);
 
     const vote = makeVoteHandler({ getTimeMs: () => 0 });
     // Cumulative costs after n votes: 1, 5, 14. Balance is 20, so three votes succeed.
@@ -199,17 +258,24 @@ describe('Governance handlers', () => {
   it('rejects a quadratic vote when the balance is below the cumulative cost', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    initUser(state, 'alice', 0);
     setupProposal(node, state, 'p0', 'quadratic', 100000, ['Yes', 'No'], 0);
+    // Base-only balance 3 (the `|| 3` floor makes a zero balance unreachable,
+    // so the minimal allow-then-reject pin is: vote 1 costs 1 <= 3, vote 2
+    // costs cumulative 5 > 3). No mask register, no tallies seeded.
+    state.setRegister('proposals:p0:salient', 0);
     const vote = makeVoteHandler({ getTimeMs: () => 0 });
-    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p0', choice: 0 }))).toBe(-1); // first vote costs 1 > 0
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p0', choice: 0 }))).toBe(0); // vote 1 costs 1 <= 3
+    expect(vote(state, makeOp('vote', 'alice', { proposalId: 'p0', choice: 0 }))).toBe(-1); // vote 2 costs 5 > 3
+    expect(state.getPNCounter('votes:p0:opt0_count')).toBe(1); // rejected vote records nothing
   });
 
   it('accepts a quadratic vote exactly at the boundary, rejects beyond', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    initUser(state, 'alice', 14); // cumulative 1+4+9 = 14 at exactly 3 votes
     setupProposal(node, state, 'pb', 'quadratic', 100000, ['Yes', 'No'], 0);
+    // C_1 salient; tally 11 → balance base 3 + 11 = 14, cumulative 1+4+9 = 14 at exactly 3 votes
+    state.setRegister('proposals:pb:salient', (1 << 1));
+    seedTally(state, 'alice', 1, 11);
     const vote = makeVoteHandler({ getTimeMs: () => 0 });
     expect(vote(state, makeOp('vote', 'alice', { proposalId: 'pb', choice: 0 }))).toBe(0);
     expect(vote(state, makeOp('vote', 'alice', { proposalId: 'pb', choice: 0 }))).toBe(0);
@@ -499,30 +565,25 @@ describe('Election handlers', () => {
     return rid;
   }
 
-  it('charges n^2 for repeated runoff votes and resolves the seat', () => {
-    initUser(state, 'alice');
-    initUser(state, 'bob');
+  it('charges quadratic runoff votes at the base balance and resolves the seat', () => {
     const rid = setupRunoff('e2', ['bob', 'carol'], 1);
 
     const vote = makeCastRunoffVoteHandler({ getTimeMs: () => 0 });
-    // alice: cumulative 1, 5, 14 <= 20 -> three votes on bob
+    // Runoffs are base-only: balance 3. alice: cumulative 1 <= 3 -> one vote for bob
     expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
-    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
-    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
-    expect(state.getPNCounter(ELECTION_NAMES.candVotes(rid, 'bob'))).toBe(3);
+    expect(state.getPNCounter(ELECTION_NAMES.candVotes(rid, 'bob'))).toBe(1);
+    // alice's 2nd vote costs cumulative 5 > 3 -> rejected
+    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(-1);
+    expect(state.getPNCounter(ELECTION_NAMES.candVotes(rid, 'bob'))).toBe(1);
 
     // bob: 1 vote for carol
     expect(vote(state, makeOp('cast_runoff_vote', 'bob', { electionId: rid, candidate: 'carol' }))).toBe(0);
     expect(state.getPNCounter(ELECTION_NAMES.candVotes(rid, 'carol'))).toBe(1);
 
-    // alice's 4th vote would cost cumulative 30 > 20 -> rejected
-    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(-1);
-    expect(state.getPNCounter(ELECTION_NAMES.candVotes(rid, 'bob'))).toBe(3);
-
     // Unknown candidate rejected
     expect(vote(state, makeOp('cast_runoff_vote', 'carol', { electionId: rid, candidate: 'alice' }))).toBe(-1);
 
-    // Runoff finalize: bob wins the single seat; parent finalized
+    // Runoff finalize: 1-1 tie for the single seat -> alphabetical deadlock guard, bob wins
     const finalize = makeFinalizeElectionHandler(node, { getTimeMs: () => 100001 });
     expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: rid, candidates: ['bob', 'carol'] }))).toBe(0);
     expect(state.getRegister(ELECTION_NAMES.finalized(rid))).toBe(1);
@@ -531,11 +592,11 @@ describe('Election handlers', () => {
   });
 
   it('breaks a tied runoff alphabetically (deadlock guard)', () => {
-    initUser(state, 'alice');
     const rid = setupRunoff('e2', ['bob', 'carol'], 1);
     const vote = makeCastRunoffVoteHandler({ getTimeMs: () => 0 });
+    // base-only: one vote per voter. alice -> bob, bob -> carol => tie 1-1
     expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'bob' }))).toBe(0);
-    expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: rid, candidate: 'carol' }))).toBe(0);
+    expect(vote(state, makeOp('cast_runoff_vote', 'bob', { electionId: rid, candidate: 'carol' }))).toBe(0);
     // tie 1-1 for one seat -> alphabetical: 'bob' < 'carol'
     const finalize = makeFinalizeElectionHandler(node, { getTimeMs: () => 100001 });
     expect(finalize(state, makeOp('finalize_election', 'alice', { electionId: rid, candidates: ['bob', 'carol'] }))).toBe(0);
@@ -547,7 +608,6 @@ describe('Election handlers', () => {
     startElection('e5');
     const vote = makeCastRunoffVoteHandler({ getTimeMs: () => 0 });
     expect(vote(state, makeOp('cast_runoff_vote', 'alice', { electionId: 'e5', candidate: 'bob' }))).toBe(-1);
-    initUser(state, 'alice', 0);
     const rid = setupRunoff('e2', ['bob', 'carol'], 1);
     const fin = makeFinalizeElectionHandler(node, { getTimeMs: () => 100001 });
     fin(state, makeOp('finalize_election', 'alice', { electionId: rid, candidates: ['bob', 'carol'] }));
