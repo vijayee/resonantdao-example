@@ -1,11 +1,12 @@
 import { Node, KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
 import {
-  CALIBRATIONS, CONTRIB_NAMES, ELECTION_NAMES, POLICIES, RES_NAMES, ROUND_NAMES,
+  CALIBRATIONS, CHECK_NAMES, CONTRIB_NAMES, ELECTION_NAMES, POLICIES, RES_NAMES, ROUND_NAMES,
   RCT_NAMES, STATE_NAMES, TOKEN_NAMES,
 } from '../../shared/src/policies';
 import {
   makeAddMemberHandler,
+  makeAppealVerdictHandler,
   makeAuditRoundHandler,
   makeCastBallotHandler,
   makeCastRunoffVoteHandler,
@@ -62,6 +63,7 @@ export class DaoNode {
     this.node.setPolicy('submit_contribution', POLICIES.submit_contribution);
     this.node.setPolicy('verify_contribution', POLICIES.verify_contribution);
     this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
+    this.node.setPolicy('appeal_verdict', POLICIES.appeal_verdict);
     this.node.setPolicy('audit_round', POLICIES.audit_round);
     this.node.setPolicy('reckon_round', POLICIES.reckon_round);
     this.node.setPolicy('complete_round', POLICIES.complete_round);
@@ -79,6 +81,7 @@ export class DaoNode {
     this.node.registerHandlerJs('submit_contribution', makeSubmitContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('verify_contribution', makeVerifyContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('appeal_verdict', makeAppealVerdictHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
     this.node.registerHandlerJs('sync_roles', () => 0); // admin-signed; roles applied out-of-band
     this.node.registerHandlerJs('audit_round', makeAuditRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
@@ -192,6 +195,17 @@ export class DaoNode {
     if (!this.node.setContains(STATE_NAMES.contributions, contributionId)) return 'unknown';
     const status = this.node.getRegister(CONTRIB_NAMES.status(contributionId));
     return status === 1 ? 'accepted' : status === 2 ? 'rejected' : 'pending';
+  }
+
+  getVerifierStats(username: string): { total: number; upheld: number } {
+    return {
+      total: this.node.getRegister(CHECK_NAMES.total(username)) || 0,
+      upheld: this.node.getRegister(CHECK_NAMES.upheld(username)) || 0,
+    };
+  }
+
+  getContributionAppealed(contributionId: string): boolean {
+    return (this.node.getRegister(CONTRIB_NAMES.appealed(contributionId)) || 0) === 1;
   }
 
   isProposalExecuted(id: string): boolean {

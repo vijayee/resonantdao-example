@@ -1,6 +1,6 @@
 import { KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
-import { CONTRIB_NAMES } from '../../shared/src/policies';
+import { CONTRIB_NAMES, RES_CONFIG } from '../../shared/src/policies';
 import { DaoNode } from '../src/crabs';
 
 describe('DaoNode', () => {
@@ -273,5 +273,166 @@ describe('DaoNode', () => {
     const cal = await buildSignedMemberOp(dao, 'quin', kp2, 'set_calibration_version', { version: 'v1' });
     dao.executeOperation(cal);
     expect(dao.getCalibrationVersion()).toBe(1);
+  });
+
+  it('v2 two-verifier lifecycle through the real wasm node', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    const kpAlice = await KeyPair.generate();
+    const kpBob = await KeyPair.generate();
+    const kpCarol = await KeyPair.generate();
+    dao.registerMember('alice', kpAlice.publicKeyHex());
+    dao.registerMember('bob', kpBob.publicKeyHex());
+    dao.registerMember('carol', kpCarol.publicKeyHex());
+
+    // Alice submits a C_1 (building) contribution under the v2 schema, whose
+    // verify step is all-parties with quorum 2 — two DISTINCT verifiers.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'submit_contribution', {
+      contributionId: 'r-v2-1',
+      dims: { '1': 1 },
+      summary: 'built a thing',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v2',
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-v2-1'))).toBe(1); // verify step
+
+    // First of the two required verifications (bob != alice, no-self holds
+    // naturally). Quorum incomplete, so the step does NOT advance yet — bob
+    // is paid only his per-check credit.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'bob', kpBob, 'verify_contribution', {
+      contributionId: 'r-v2-1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'built and matches the claim',
+      priorVerifiers: [],
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-v2-1'))).toBe(1); // quorum 1/2
+    expect(dao.getResBalance('bob')).toBe(RES_CONFIG.verificationCheckCredit); // 1 completed check x 2
+    expect(dao.getVerifierStats('bob')).toEqual({ total: 1, upheld: 0 });
+
+    // Re-verifying the same contribution is barred: the client-attested
+    // priorVerifiers list already contains bob, and the reciprocity
+    // per-pair-once guard would bar him anyway. All-or-nothing — the blocked
+    // check pays nothing and mutates no state.
+    const repeat = await buildSignedMemberOp(dao, 'bob', kpBob, 'verify_contribution', {
+      contributionId: 'r-v2-1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'trying to fill both verifier slots myself',
+      priorVerifiers: ['bob'],
+    });
+    expect(() => dao.executeOperation(repeat)).toThrow();
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-v2-1'))).toBe(1);
+    expect(dao.getResBalance('bob')).toBe(RES_CONFIG.verificationCheckCredit); // unchanged
+    expect(dao.node.getPNCounter(CONTRIB_NAMES.stepDone('r-v2-1', 'verify'))).toBe(1);
+
+    // Second distinct verifier completes the all-parties quorum: the bounty
+    // fires once and the step advances to settle.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'carol', kpCarol, 'verify_contribution', {
+      contributionId: 'r-v2-1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'built and matches the claim',
+      priorVerifiers: ['bob'],
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-v2-1'))).toBe(2);
+    expect(dao.getResBalance('carol')).toBe(RES_CONFIG.verificationCheckCredit); // 1 completed check x 2
+    // Submitter bounty fired once at final acceptance: building 12 +
+    // recording 0 (this record is C_1 only).
+    expect(dao.getResBalance('alice')).toBe(RES_CONFIG.buildingBounty);
+    expect(dao.getDimensionBalance('alice', 1)).toBe(1);
+
+    // Alice settles, attesting both verifiers — each upheld rises to the
+    // number of checks this settlement upholds (one each).
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'settle_contribution', {
+      contributionId: 'r-v2-1',
+      submitter: 'alice',
+      reason: 'accepting the two-verifier outcome',
+      verifiers: ['bob', 'carol'],
+    }));
+    expect(dao.getContributionStatus('r-v2-1')).toBe('accepted');
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-v2-1'))).toBe(2);
+    expect(dao.getVerifierStats('bob')).toEqual({ total: 1, upheld: 1 });
+    expect(dao.getVerifierStats('carol')).toEqual({ total: 1, upheld: 1 });
+  });
+
+  it('appeal through the real wasm node: rejected → appealed → re-verified → accepted', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    const kpAlice = await KeyPair.generate();
+    const kpBob = await KeyPair.generate();
+    const kpCarol = await KeyPair.generate();
+    dao.registerMember('alice', kpAlice.publicKeyHex());
+    dao.registerMember('bob', kpBob.publicKeyHex());
+    dao.registerMember('carol', kpCarol.publicKeyHex());
+
+    // Alice submits a C_2 (recording) contribution under v2 — a single
+    // verifier completes the verify step's quorum.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'submit_contribution', {
+      contributionId: 'r-appeal-1',
+      dims: { '2': 1 },
+      summary: 'recorded a thing',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v2',
+    }));
+    expect(dao.getContributionStatus('r-appeal-1')).toBe('pending');
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-appeal-1'))).toBe(1);
+
+    // Bob rejects: the outcome voids the lifecycle immediately (status 2).
+    dao.executeOperation(await buildSignedMemberOp(dao, 'bob', kpBob, 'verify_contribution', {
+      contributionId: 'r-appeal-1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '2': 1 },
+      pass: false,
+      reason: 'does not match the claim',
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.status('r-appeal-1'))).toBe(2); // rejected
+    expect(dao.getResBalance('bob')).toBe(RES_CONFIG.verificationCheckCredit); // per-check credit pays either direction
+    expect(dao.getVerifierStats('bob')).toEqual({ total: 1, upheld: 0 });
+
+    // Alice appeals (her own key — appeals are the submitter's alone):
+    // status 3, once-guard set, verify quorum reset for a fresh re-review.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'appeal_verdict', {
+      contributionId: 'r-appeal-1',
+      submitter: 'alice',
+      reason: 'the record does match the claim',
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.status('r-appeal-1'))).toBe(3); // appealed
+    expect(dao.getContributionAppealed('r-appeal-1')).toBe(true);
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-appeal-1'))).toBe(1);
+    expect(dao.node.getPNCounter(CONTRIB_NAMES.stepDone('r-appeal-1', 'verify'))).toBe(0); // fresh quorum
+
+    // Carol re-verifies accepted → the bounty fires and the step advances.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'carol', kpCarol, 'verify_contribution', {
+      contributionId: 'r-appeal-1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '2': 1 },
+      pass: true,
+      reason: 'the record matches the claim',
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-appeal-1'))).toBe(2);
+    expect(dao.getResBalance('carol')).toBe(RES_CONFIG.verificationCheckCredit); // 1 x 2
+    // Recording bounty fired at acceptance: building 0 + recording 3.
+    expect(dao.getResBalance('alice')).toBe(RES_CONFIG.recordingBaseCredit);
+
+    // Alice settles attesting only carol: bob's rejected check was overturned,
+    // so his upheld stays 0 while carol's rises to 1.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'settle_contribution', {
+      contributionId: 'r-appeal-1',
+      submitter: 'alice',
+      reason: 'the appealed re-review upheld the record',
+      verifiers: ['carol'],
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.status('r-appeal-1'))).toBe(1); // accepted
+    expect(dao.getVerifierStats('bob')).toEqual({ total: 1, upheld: 0 });
+    expect(dao.getVerifierStats('carol')).toEqual({ total: 1, upheld: 1 });
   });
 });
