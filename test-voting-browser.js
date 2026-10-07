@@ -3,9 +3,13 @@ const { chromium } = require('playwright');
 const PASSWORD = 'TestPassword123!';
 const BASE_URL = 'http://localhost:9000/';
 // Run against a freshly started dev server (`npm run dev:server` with an
-// empty database): members replay the full op log at registration, and an
-// earlier session's ops can leave a new replica unauthenticated against old
-// signers, leaving their pages without prior-state content.
+// empty database — e.g. WAVEDB_PATH=/tmp/dao-p2-e2e): members replay the full
+// op log at registration, and an earlier session's ops can leave a new
+// replica unauthenticated against old signers, leaving their pages without
+// prior-state content. The phase-2 round extension below (audit → reckon →
+// complete, then a salient quadratic proposal on the published round) also
+// REQUIRES the fresh DB: the spine publishes round 1's accepted contributions
+// and re-running on a used database would find no open round to close.
 
 async function runUser(username, headless = true) {
   const browser = await chromium.launch({ headless });
@@ -25,12 +29,15 @@ async function runUser(username, headless = true) {
   return { browser, page };
 }
 
-async function createProposal(page, title, type, options = '') {
+async function createProposal(page, title, type, options = '', salientDims = []) {
   await page.selectOption('#proposal-type', type);
   await page.fill('#proposal-title', title);
   await page.fill('#proposal-description', `${type} proposal test`);
   if (options) {
     await page.fill('#proposal-options', options);
+  }
+  for (const dim of salientDims) {
+    await page.check(`.salient-dim[value="${dim}"]`);
   }
   await page.click('#proposal-form button[type="submit"]');
   const card = page.locator(`.proposal-card:has(.proposal-card__title:text-is("${title}"))`).first();
@@ -130,17 +137,47 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
   console.log('CONTRIBUTION STATUS PILL: accepted');
 }
 
+// One round-spine step: click the persistent stage-gated round-panel button
+// (armed dialogs first) and retry until the NEXT stage's button becomes
+// visible — its appearance proves the op was executed, mirroring how the
+// wizard loop waits for the settle button. The spine ops need no extra UI
+// data besides the dialogs: complete collects the round's accepted entries
+// (contribution id, submitter, dims) itself. Spine policies are
+// 'role:member OR role:custodian', so a plain member can close the round.
+async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
+  if (note !== null) {
+    dialogAnswer = note;
+  }
+  let ready = false;
+  for (let attempt = 0; !ready && attempt < 15; attempt++) {
+    if (await actor.page.locator(`#${buttonId}`).isVisible().catch(() => false)) {
+      await actor.page.locator(`#${buttonId}`).click({ force: true }).catch(() => {});
+      await actor.page.waitForTimeout(1500);
+    }
+    ready = await actor.page
+      .locator(`#${nextButtonId}:not(.hidden)`)
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!ready) {
+    const statusBar = await actor.page.locator('#status').textContent();
+    throw new Error(`Round spine stuck at ${buttonId}; ${nextButtonId} never became visible. Status bar: ${statusBar || '(empty)'}`);
+  }
+}
+
 (async () => {
   let alice = null;
   let bob = null;
   try {
-  alice = await runUser('alice_e2e_' + Math.floor(Math.random() * 10000));
+  const aliceName = 'alice_e2e_' + Math.floor(Math.random() * 10000);
+  const bobName = 'bob_e2e_' + Math.floor(Math.random() * 10000);
+  alice = await runUser(aliceName);
   const directId = await createProposal(alice.page, 'Multi-choice direct', 'direct', 'Alpha, Beta, Gamma');
   console.log('Created multi-choice direct proposal', directId);
 
   await voteOption(alice.page, directId, 'Beta');
 
-  bob = await runUser('bob_e2e_' + Math.floor(Math.random() * 10000));
+  bob = await runUser(bobName);
   await voteOption(bob.page, directId, 'Alpha');
 
   const directTallies = await getOptionTallies(alice.page, directId);
@@ -150,31 +187,82 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
   }
 
   // --- Contribution wizard flow (submit -> verify -> settle) ---
-  // Runs before quadratic voting: quadratic vote n costs n^2 $RES (1+4+9 = 14
-  // for three votes) and $RES is earned only through verified contributions.
+  // Runs before quadratic voting: the settled contributions fund the round's
+  // $RES bounties and — since phase 2 — the C-dimension tallies that set the
+  // salient quadratic vote balance ($RES itself no longer gates votes).
   alice.page.on('dialog', (dialog) => dialog.accept(dialogAnswer));
   bob.page.on('dialog', (dialog) => dialog.accept(dialogAnswer));
 
   // Cycle 1: alice submits a Building claim; bob verifies; alice settles.
-  // Pays alice the C_1 bounty (12 $RES) and bob the C_18 check credit (2 $RES).
+  // Pays alice the C_1 bounty (12 $RES) and gives her a C_1 tally of 1.
   await runWizardCycle(alice, bob, '1', 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000), 'built and matches the claim', 'accepting the verified outcome');
 
   // Cycle 2: bob submits a Recording claim; alice verifies; bob settles.
   // Pays bob the C_2 base credit (3 $RES) and alice a C_18 check credit
-  // (2 $RES), bringing alice to exactly 14 — enough for 1+4+9 quadratic votes.
+  // (2 $RES); bob's settle gives him a C_2 tally of 1.
   await runWizardCycle(bob, alice, '2', 'Wizard-recorded e2e demo ' + Math.floor(Math.random() * 10000), 'the record is attributed and findable', 'accepting the verified outcome');
 
+  // --- Round spine close (phase 2) ---
+  // alice (any member — spine policies are 'role:member OR role:custodian')
+  // audits the round fair against the registered v1 calibration, reckons,
+  // then completes: complete_round aggregates BOTH accepted contributions
+  // (alice C_1 1, bob C_2 1) into cumulative RCT (alpha defaults to 1, so
+  // alice publishes 1 RCT) and advances to Round 2.
+  console.log('Closing round 1 through the spine (audit → reckon → complete)');
+  await runRoundSpineStep(alice, 'audit-round-btn', 'reckon-round-btn', 'phase-2 e2e audit note: fair against v1');
+  console.log('ROUND STAGE: audited');
+  await runRoundSpineStep(alice, 'reckon-round-btn', 'complete-round-btn', 'phase-2 e2e reckon note: records settled');
+  console.log('ROUND STAGE: reckoned');
+  dialogAnswer = '';
+  // The complete button collects the accepted entries itself; success is
+  // proven by the stepper label advancing to Round 2.
+  let round2 = false;
+  for (let attempt = 0; !round2 && attempt < 15; attempt++) {
+    if (await alice.page.locator('#complete-round-btn').isVisible().catch(() => false)) {
+      await alice.page.locator('#complete-round-btn').click({ force: true }).catch(() => {});
+    }
+    round2 = await alice.page
+      .locator('.round-label', { hasText: 'Round 2' })
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!round2) {
+    const statusBar = await alice.page.locator('#status').textContent();
+    throw new Error(`Round never advanced to 2 after complete. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('ROUND PUBLISHED: round 2 is open');
+
+  // --- Quadratic voting (base-only funding since phase 2) ---
+  // Without salient dims a quadratic proposal grants the base balance (3), so
+  // alice's first vote (cumulative cost 1) counts and her second (cumulative
+  // 1+4=5 > 3) is rejected by the server — surfaced as 'Vote error' in the
+  // status bar.
   const qId = await createProposal(alice.page, 'Multi-choice quadratic', 'quadratic', 'Red, Green, Blue');
   console.log('Created multi-choice quadratic proposal', qId);
 
-  for (let i = 0; i < 3; i++) {
+  // Retry-until-counted: the demo clock can swallow clicks.
+  let firstLanded = false;
+  for (let attempt = 0; !firstLanded && attempt < 15; attempt++) {
     await voteOption(alice.page, qId, 'Red');
+    const tallies = await getOptionTallies(alice.page, qId);
+    firstLanded = tallies[0] === '1';
   }
-
+  dialogAnswer = '';
+  let baseVoteRejected = false;
+  for (let attempt = 0; !baseVoteRejected && attempt < 15; attempt++) {
+    await voteOption(alice.page, qId, 'Red');
+    baseVoteRejected = (await alice.page.locator('#status').textContent()).includes('Vote error');
+  }
   const qTallies = await getOptionTallies(alice.page, qId);
   console.log('QUADRATIC TALLIES:', qTallies);
-  if (JSON.stringify(qTallies) !== JSON.stringify(['3', '0', '0'])) {
-    throw new Error(`Expected ['3','0','0'] on quadratic proposal, got ${JSON.stringify(qTallies)}`);
+  if (!firstLanded) {
+    throw new Error(`First base-only quadratic vote never landed; tallies ${JSON.stringify(qTallies)}`);
+  }
+  if (!baseVoteRejected) {
+    throw new Error(`Second base-only quadratic vote (cumulative 1+4=5 > base 3) was not rejected. Tallies: ${JSON.stringify(qTallies)}`);
+  }
+  if (JSON.stringify(qTallies) !== JSON.stringify(['1', '0', '0'])) {
+    throw new Error(`Expected ['1','0','0'] on base-only quadratic proposal, got ${JSON.stringify(qTallies)}`);
   }
 
   // --- Custodian election flow ---
@@ -207,8 +295,9 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
   await alice.page.waitForTimeout(2000);
 
   // Custodian controls appear for alice (a winner with the most picks).
-  // The set_token_config custodian op and its form were deleted; voting now
-  // spends the $RES balance directly, so skip straight to member removal.
+  // The set_token_config custodian op and its form were deleted; since
+  // phase 2, votes are gated by the salient-derived balance (not $RES), so
+  // skip straight to member removal.
   const removeBtn = alice.page.locator('.remove-member').first();
   try {
     await removeBtn.waitFor({ state: 'visible', timeout: 30000 });
@@ -221,6 +310,50 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
   }
 
   console.log('Custodian election smoke flow completed');
+
+  // --- Phase-2 round extension: salient quadratic on the published round ---
+  // Round 2 is open after the spine. alice publishes her C_1 contribution's
+  // tally (1; alpha defaults to 1) into the proposal's salient mask, so her
+  // vote balance is base 3 + 1x1 = 4: the first vote (cumulative 1) counts
+  // and the second (cumulative 1+4=5 > 4) is rejected.
+  const sId = await createProposal(alice.page, 'Salient quadratic round 2', 'quadratic', 'One, Two, Three', ['1']);
+  console.log('Created C_1-salient quadratic proposal on round 2', sId);
+
+  let salientFirstLanded = false;
+  for (let attempt = 0; !salientFirstLanded && attempt < 15; attempt++) {
+    await voteOption(alice.page, sId, 'One');
+    const tallies = await getOptionTallies(alice.page, sId);
+    salientFirstLanded = tallies[0] === '1';
+  }
+  let salientVoteRejected = false;
+  for (let attempt = 0; !salientVoteRejected && attempt < 15; attempt++) {
+    await voteOption(alice.page, sId, 'One');
+    salientVoteRejected = (await alice.page.locator('#status').textContent()).includes('Vote error');
+  }
+  const sTallies = await getOptionTallies(alice.page, sId);
+  console.log('SALIENT QUADRATIC TALLIES:', sTallies);
+  if (!salientFirstLanded) {
+    throw new Error(`First salient quadratic vote never landed; tallies ${JSON.stringify(sTallies)}`);
+  }
+  if (!salientVoteRejected) {
+    throw new Error(`Second salient quadratic vote (cumulative 1+4=5 > balance 4) was not rejected. Tallies: ${JSON.stringify(sTallies)}`);
+  }
+  if (JSON.stringify(sTallies) !== JSON.stringify(['1', '0', '0'])) {
+    throw new Error(`Expected ['1','0','0'] on salient quadratic proposal, got ${JSON.stringify(sTallies)}`);
+  }
+
+  // Round panel advanced with the spine and the published RCT badge shows.
+  const roundLabel = await alice.page.locator('.round-label').textContent();
+  console.log('ROUND PANEL:', roundLabel);
+  if (!roundLabel.startsWith('Round 2')) {
+    throw new Error(`Expected round panel to show 'Round 2 ...', got '${roundLabel}'`);
+  }
+  const rctBadge = await alice.page.locator(`[data-member-rct="${aliceName}"]`).textContent();
+  console.log('ALICE RCT BADGE:', rctBadge);
+  if (rctBadge.trim() !== '1 RCT') {
+    throw new Error(`Expected alice's RCT badge to read '1 RCT', got '${rctBadge.trim()}'`);
+  }
+
   console.log('Smoke test passed');
   } catch (err) {
     // Dump per-page diagnostics so failures stay legible: the status bar,
@@ -229,6 +362,7 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
       if (!u?.page) continue;
       try {
         console.log(`[${name} status]`, await u.page.locator('#status').textContent());
+        console.log(`[${name} round]`, await u.page.locator('.round-label').textContent());
         console.log(`[${name} proposals]`, (await u.page.locator('#proposals').innerHTML()).slice(0, 400));
         console.log(`[${name} contributions]`, (await u.page.locator('#contributions-list').innerHTML()).slice(0, 400));
       } catch (e) {

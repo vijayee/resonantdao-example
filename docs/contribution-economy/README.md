@@ -397,12 +397,24 @@ outcome rules instead of timed accrual:
 - Evidence content lives out-of-band in a content-addressed WaveDB store
   (`put_content`/`get_content` by sha-256); CRABS carries only hash pointers.
 - Timed accrual (`distributeTokens`), the `set_token_config` custodian op, and
-  the initial seed grant are deleted; voting spends the `$RES` balance with the
-  same quadratic mechanics.
+  the initial seed grant are deleted; voting spends the `$RES` balance with
+  the same quadratic mechanics (phase 1 only — superseded by the salient
+  phase-2 binding below).
 - Deferred (open issues, invariants not yet honored end-to-end): multi-party
   step modes (C_8 all-parties), tiered verification (Tier 1 random audits,
   Tier 2 dual-reviewer with conflict-of-interest checks, Tier 3 appeal panel),
-  harm checks, retrieval bonuses (C_2 usage bonus), round spine C_10/C_20/C_21
-  and `$RCT` aggregation, null-vs-verified-zero preservation in the 22-vector,
-  reviewer-capture hardening, and the payload-attested dims/submitter trust in
-  `verify_contribution`.
+  harm checks, retrieval bonuses (C_2 usage bonus), null-vs-verified-zero
+  preservation in the 22-vector, reviewer-capture hardening, and the
+  payload-attested dims/submitter trust in `verify_contribution`.
+
+### Phase 2 round binding (2026-10-06)
+
+- Phase 2 (2026-10-06): round spine (`audit_round` C_10 fair close with debt
+  path, `reckon_round` C_20 behind the Justice calibration gate,
+  `complete_round` C_21 payload-driven aggregation), published per-member
+  `$RCT = Σ alpha_i × match` (cumulative, alpha forward-looking — pilot
+  calibration caveat), custodian `set_rct_alpha`/`set_calibration_version`
+  ops, and salient-dimension quadratic voting: vote balance = base + capped
+  Σ alpha × tally over the question's declared salient dims (mask register;
+  elections stay base-only). $RES no longer gates votes. $RCT is publish-only;
+  the RCT-as-vote-token question stays open (see the phase-2 spec).
