@@ -94,6 +94,10 @@ export interface VerifyContributionPayload {
   dims: Record<string, number>;
   pass: boolean;
   reason: string;
+  // Schema version the contribution was submitted under; the verify handler
+  // defaults to SCHEMA_VERSION ('v2') when omitted, so legacy v1 records
+  // verify under v1 rules only when the payload states 'v1' explicitly.
+  schemaVersion?: string;
 }
 
 export interface SettleContributionPayload {

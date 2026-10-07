@@ -123,6 +123,9 @@ describe('DaoNode', () => {
       dims: { '1': 1 },
       pass: true,
       reason: 'built and matches the claim',
+      // Legacy v1 record verifies under v1 rules (single verify); the verify
+      // payload must state the record's schema version — omitted means v2.
+      schemaVersion: 'v1',
     }));
     expect(dao.getContributionStatus('c-lifec')).toBe('pending');
     expect(dao.node.getRegister(CONTRIB_NAMES.step('c-lifec'))).toBe(2);
@@ -208,6 +211,9 @@ describe('DaoNode', () => {
       dims: { '1': 1 },
       pass: true,
       reason: 'built and matches the claim',
+      // Legacy v1 record verifies under v1 rules (single verify); the verify
+      // payload must state the record's schema version — omitted means v2.
+      schemaVersion: 'v1',
     }));
     dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'settle_contribution', {
       contributionId: 'r-wasm-1',

@@ -9,8 +9,8 @@ import {
   STAGE_AUDITED, STAGE_OPEN, STAGE_PUBLISHED, STAGE_RECKONED,
 } from './round';
 import {
-  CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, dimensionDeltaFor, isValidDims,
-  paymentFor, schemaForDims, validateEvidenceRef,
+  CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, KNOWN_SCHEMA_VERSIONS, dimensionDeltaFor,
+  isValidDims, paymentFor, schemaForRecord, validateEvidenceRef,
 } from './contribution';
 
 function isNonEmptyString(value: unknown): value is string {
@@ -43,7 +43,9 @@ export function makeSubmitContributionHandler(
     if (
       !isNonEmptyString(payload.contributionId) ||
       !isNonEmptyString(payload.summary) ||
-      payload.schemaVersion !== SCHEMA_VERSION ||
+      // Version gate: BOTH v1 (legacy) and v2 accepted — legacy submissions
+      // keep verifying under the rules they were submitted under.
+      !KNOWN_SCHEMA_VERSIONS(payload.schemaVersion) ||
       !isValidDims(payload.dims) ||
       !validateEvidenceRef(payload.evidenceRef) ||
       !state.setContains(STATE_NAMES.members, op.signerId) ||
@@ -52,7 +54,7 @@ export function makeSubmitContributionHandler(
       return -1;
     }
 
-    const schema = schemaForDims(payload.dims);
+    const schema = schemaForRecord(payload.schemaVersion, payload.dims);
 
     try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
     // The real CRABS wrapper rejects state.setRegister on an undeclared
@@ -116,6 +118,9 @@ export function makeVerifyContributionHandler(
       !isNonEmptyString(payload.reason) ||
       typeof payload.pass !== 'boolean' ||
       !isValidDims(payload.dims) ||
+      // Optional record version: when present it must be known (legacy 'v1'
+      // or current 'v2'); omitted defaults to SCHEMA_VERSION below.
+      (payload.schemaVersion !== undefined && !KNOWN_SCHEMA_VERSIONS(payload.schemaVersion)) ||
       payload.submitter === op.signerId
     ) {
       return -1;
@@ -137,7 +142,10 @@ export function makeVerifyContributionHandler(
     if (stepIndex === undefined || !Number.isInteger(stepIndex) || stepIndex < 0) {
       return -1;
     }
-    const schema = schemaForDims(payload.dims);
+    // Schema resolution: from the record's schema version (payload-attested,
+    // defaulting to current 'v2') + the payload dims — legacy v1 records
+    // verify under the v1 rules they were submitted under.
+    const schema = schemaForRecord(payload.schemaVersion ?? SCHEMA_VERSION, payload.dims);
     const step = schema.steps[stepIndex];
     if (!step || step.op !== 'verify_contribution' || step.stepId !== payload.stepId) {
       return -1;

@@ -117,6 +117,9 @@ describe('hydrateDao', () => {
       dims: { '1': 1 },
       pass: true,
       reason: 'built and matches the claim',
+      // Legacy v1 record verifies under v1 rules (single verify); the verify
+      // payload must state the record's schema version — omitted means v2.
+      schemaVersion: 'v1',
     });
     const settleBytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'settle_contribution', {
       contributionId: 'c-hyd',
@@ -216,6 +219,9 @@ describe('hydrateDao', () => {
       dims: { '1': 1 },
       pass: true,
       reason: 'built and matches the claim',
+      // Legacy v1 record verifies under v1 rules (single verify); the verify
+      // payload must state the record's schema version — omitted means v2.
+      schemaVersion: 'v1',
     });
     const settleBytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'settle_contribution', {
       contributionId: 'r-eco1',

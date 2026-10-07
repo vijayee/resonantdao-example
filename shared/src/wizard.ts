@@ -1,9 +1,9 @@
 // Pure projection of replica contribution facts into a per-viewer wizard model.
 // All lifecycle rules come from static step schemas; nothing here mutates state.
-import { DimensionSchema, SCHEMA_VERSION, StepDef } from './contribution';
+import { DimensionSchema, SCHEMA_VERSION_NUMBERS, StepDef, STATUS_ACCEPTED, STATUS_APPEALED, STATUS_PENDING } from './contribution';
 
 export interface ContributionFacts {
-  status: number;               // 0 pending, 1 accepted, 2 rejected, -1 unknown
+  status: number;               // 0 pending, 1 accepted, 2 rejected, 3 appealed, -1 unknown
   stepIndex: number;            // current step position in schema.steps
   done: Record<string, number>; // stepId -> completed requirements
   submitter: string;
@@ -24,10 +24,11 @@ export interface WizardStep {
 
 export interface WizardModel {
   schemaVersion: string;
-  readOnly: boolean;      // schema mismatch or unknown lifecycle → render read-only
+  readOnly: boolean;      // unknown schema version or unknown lifecycle → render read-only
   outcome: 'pending' | 'accepted' | 'rejected';
   currentStepIndex: number;
   steps: WizardStep[];
+  appealed?: boolean;     // true while facts.status === 3 (rendered like pending)
 }
 
 function actorAllowed(actor: string, facts: ContributionFacts, viewerId: string, viewerIsCustodian: boolean): boolean {
@@ -51,7 +52,10 @@ export function wizardModel(
   viewerId: string,
   viewerIsCustodian = false
 ): WizardModel {
-  const readOnly = schema.schemaVersion !== SCHEMA_VERSION || facts.status === -1;
+  // Unknown schema versions (stale replicas) render read-only; known versions
+  // — current 'v2' AND legacy 'v1' — render normally. Status -1 is an unknown
+  // lifecycle.
+  const readOnly = !SCHEMA_VERSION_NUMBERS.has(schema.schemaVersion) || facts.status === -1;
   if (readOnly) {
     return {
       schemaVersion: schema.schemaVersion,
@@ -62,12 +66,12 @@ export function wizardModel(
     };
   }
 
-  if (facts.status !== 0) {
+  if (facts.status !== STATUS_PENDING && facts.status !== STATUS_APPEALED) {
     // Settled: every requirement is final; surface the verdict.
     return {
       schemaVersion: schema.schemaVersion,
       readOnly: false,
-      outcome: facts.status === 1 ? 'accepted' : 'rejected',
+      outcome: facts.status === STATUS_ACCEPTED ? 'accepted' : 'rejected',
       currentStepIndex: -1,
       steps: schema.steps.map((s) => stepView(s, facts, viewerId, viewerIsCustodian, 'complete', false)),
     };
@@ -89,6 +93,7 @@ export function wizardModel(
     readOnly: false,
     outcome: 'pending',
     currentStepIndex,
+    appealed: facts.status === STATUS_APPEALED, // status 3 renders like pending (0)
     steps: schema.steps.map((s, i) => stepView(s, facts, viewerId, viewerIsCustodian, seen[i], true)),
   };
 }

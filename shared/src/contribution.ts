@@ -124,7 +124,23 @@ export interface DimensionSchema {
   steps: StepDef[];
 }
 
-export const SCHEMA_VERSION = 'v1' as const;
+// Contribution status register values.
+export const STATUS_PENDING = 0 as const;
+export const STATUS_ACCEPTED = 1 as const;
+export const STATUS_REJECTED = 2 as const;
+export const STATUS_APPEALED = 3 as const; // set by appeal_verdict; verify accepts 3 like 0
+
+export const SCHEMA_VERSION = 'v2' as const;
+
+// Known schema versions (unknown → wizardModel renders read-only). The number
+// is the version's publication order — v2 supersedes v1.
+export const SCHEMA_VERSION_NUMBERS = new Map<string, number>([
+  ['v1', 1],
+  ['v2', 2],
+]);
+export function KNOWN_SCHEMA_VERSIONS(version: string): boolean {
+  return SCHEMA_VERSION_NUMBERS.has(version);
+}
 
 const SUBMIT_STEP: StepDef = Object.freeze({
   stepId: 'submit',
@@ -156,6 +172,30 @@ const SETTLE_STEP: StepDef = Object.freeze({
   antiGaming: ['written-reason'],
 }) as StepDef;
 
+// v2's heavier C_1 verification: two distinct verifiers, all-parties.
+const C1_VERIFY_V2: StepDef = {
+  ...VERIFY_STEP,
+  requirement: { mode: 'all-parties', count: 2 },
+};
+
+// Legacy v1 schemas (single-verify everywhere) — kept so contributions
+// submitted before v2 keep verifying under the rules they were submitted under.
+const LEGACY_DEFAULT_SCHEMA: DimensionSchema = {
+  dimIndex: -1,
+  schemaVersion: 'v1',
+  steps: [SUBMIT_STEP, VERIFY_STEP],
+};
+const LEGACY_SCHEMAS: Map<number, DimensionSchema> = new Map();
+for (const dimIndex of [1, 2, 18]) {
+  LEGACY_SCHEMAS.set(dimIndex, {
+    dimIndex,
+    schemaVersion: 'v1',
+    steps: [SUBMIT_STEP, VERIFY_STEP, SETTLE_STEP],
+  });
+}
+
+// Current (v2) schemas. Export names kept: SCHEMAS/DEFAULT_SCHEMA point at the
+// v2 set, so importers are unchanged.
 export const DEFAULT_SCHEMA: DimensionSchema = {
   dimIndex: -1,
   schemaVersion: SCHEMA_VERSION,
@@ -167,7 +207,7 @@ for (const dimIndex of [1, 2, 18]) {
   SCHEMAS.set(dimIndex, {
     dimIndex,
     schemaVersion: SCHEMA_VERSION,
-    steps: [SUBMIT_STEP, VERIFY_STEP, SETTLE_STEP],
+    steps: [SUBMIT_STEP, dimIndex === 1 ? C1_VERIFY_V2 : VERIFY_STEP, SETTLE_STEP],
   });
 }
 
@@ -177,6 +217,22 @@ export function schemaForDims(dims: Record<string, number>): DimensionSchema {
     .filter((i) => SCHEMAS.has(i))
     .sort((a, b) => a - b);
   return wired.length > 0 ? SCHEMAS.get(wired[0])! : DEFAULT_SCHEMA;
+}
+
+// Resolve the schema a RECORD was submitted under: version + dims. Unknown
+// versions throw — callers validate with KNOWN_SCHEMA_VERSIONS first; the
+// wizard's read-only gate uses the version-known check, not the throw.
+export function schemaForRecord(schemaVersion: string, dims: Record<string, number>): DimensionSchema {
+  if (!KNOWN_SCHEMA_VERSIONS(schemaVersion)) {
+    throw new Error(`unknown schema version: ${schemaVersion}`);
+  }
+  const map = schemaVersion === 'v1' ? LEGACY_SCHEMAS : SCHEMAS;
+  const fallback = schemaVersion === 'v1' ? LEGACY_DEFAULT_SCHEMA : DEFAULT_SCHEMA;
+  const wired = Object.keys(dims)
+    .map(Number)
+    .filter((i) => map.has(i))
+    .sort((a, b) => a - b);
+  return wired.length > 0 ? map.get(wired[0])! : fallback;
 }
 
 // Payment helper: who receives what when a verify step completes.

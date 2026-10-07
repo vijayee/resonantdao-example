@@ -1,4 +1,4 @@
-import { DEFAULT_SCHEMA, SCHEMAS, DimensionSchema, SCHEMA_VERSION, StepDef } from '../../shared/src/contribution';
+import { DEFAULT_SCHEMA, SCHEMAS, DimensionSchema, SCHEMA_VERSION, StepDef, schemaForRecord } from '../../shared/src/contribution';
 import { wizardModel, ContributionFacts } from '../../shared/src/wizard';
 
 function c1Facts(stepIndex: number, done: Record<string, number>, status = 0): ContributionFacts {
@@ -18,12 +18,15 @@ describe('wizardModel', () => {
   });
 
   it('offers the settle action only to the submitter at the settle step', () => {
-    const m = wizardModel(schema, c1Facts(2, { submit: 1, verify: 1 }), 'alice');
+    // C_2 (like C_1, a 3-step schema but single-verify) so one verify completes
+    // the step — C_1 v2 requires two completed verifications.
+    const singleSchema = SCHEMAS.get(2)!;
+    const m = wizardModel(singleSchema, c1Facts(2, { submit: 1, verify: 1 }), 'alice');
     const settle = m.steps[2];
     expect(settle.state).toBe('current');
     expect(settle.roles.submitter?.mayAct).toBe(true);
     // A different viewer at the same step: submitter-only action is not offered.
-    const m2 = wizardModel(schema, c1Facts(2, { submit: 1, verify: 1 }), 'bob');
+    const m2 = wizardModel(singleSchema, c1Facts(2, { submit: 1, verify: 1 }), 'bob');
     expect(m2.steps[2].roles.submitter?.mayAct).toBe(false);
   });
 
@@ -70,6 +73,21 @@ describe('wizardModel', () => {
     expect(m.outcome).toBe('pending');
     expect(m.currentStepIndex).toBe(-1);
     expect(m.steps.every((s) => s.state === 'locked')).toBe(true);
+  });
+
+  it('status 3 (appealed) renders like pending on the verify step + appealed flag', () => {
+    const m = wizardModel(schema, c1Facts(1, { submit: 1 }, 3), 'bob');
+    expect(m.outcome).toBe('pending');
+    expect(m.appealed).toBe(true);
+    expect(m.currentStepIndex).toBe(1);
+    expect(m.steps[1].state).toBe('current');
+  });
+
+  it('unknown schema versions render read-only; known legacy v1 facts render normally', () => {
+    const legacyModel = wizardModel(schemaForRecord('v1', { '1': 1 }), c1Facts(1, { submit: 1 }), 'alice');
+    expect(legacyModel.readOnly).toBe(false);
+    const stale = { ...schema, schemaVersion: 'v0' };
+    expect(wizardModel(stale, c1Facts(1, { submit: 1 }), 'alice').readOnly).toBe(true);
   });
 
   it('gates custodian-actor steps on viewerIsCustodian', () => {

@@ -54,7 +54,9 @@ describe('contribution registry', () => {
 
 import {
   CONTENT_LIMITS, SCHEMA_VERSION, SCHEMAS, DEFAULT_SCHEMA,
-  schemaForDims, validateEvidenceRef, stepPaymentsFor,
+  schemaForDims, schemaForRecord, validateEvidenceRef, stepPaymentsFor,
+  STATUS_PENDING, STATUS_ACCEPTED, STATUS_REJECTED, STATUS_APPEALED,
+  SCHEMA_VERSION_NUMBERS, KNOWN_SCHEMA_VERSIONS,
 } from '../../shared/src/contribution';
 import { makeSettleContributionHandler, makeSubmitContributionHandler, makeVerifyContributionHandler } from '../../shared/src/handlers';
 import { CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
@@ -210,8 +212,8 @@ describe('submit_contribution handler (schema-driven)', () => {
 });
 
 describe('step schemas', () => {
-  it('version is v1 and content limits are set', () => {
-    expect(SCHEMA_VERSION).toBe('v1');
+  it('version is v2 and content limits are set', () => {
+    expect(SCHEMA_VERSION).toBe('v2');
     expect(CONTENT_LIMITS.maxObjectBytes).toBe(8 * 1024 * 1024);
     expect(CONTENT_LIMITS.maxInlineEvidenceChars).toBe(2000);
   });
@@ -220,7 +222,7 @@ describe('step schemas', () => {
     for (const dim of [1, 2, 18]) {
       const schema = SCHEMAS.get(dim)!;
       expect(schema.dimIndex).toBe(dim);
-      expect(schema.schemaVersion).toBe('v1');
+      expect(schema.schemaVersion).toBe('v2');
       expect(schema.steps.map((s) => s.stepId)).toEqual(['submit', 'verify', 'settle']);
       expect(schema.steps[0].op).toBe('submit_contribution');
       expect(schema.steps[1].op).toBe('verify_contribution');
@@ -265,6 +267,41 @@ describe('step schemas', () => {
   });
 });
 
+describe('schema v2 (two-verifier C_1) and legacy resolution', () => {
+  it('exposes status constants (status register values)', () => {
+    expect(STATUS_PENDING).toBe(0);
+    expect(STATUS_ACCEPTED).toBe(1);
+    expect(STATUS_REJECTED).toBe(2);
+    expect(STATUS_APPEALED).toBe(3);
+  });
+
+  it('v2 default: C_1 requires all-parties count 2; C_2/C_18 stay single', () => {
+    for (const dim of [2, 18]) {
+      expect(SCHEMAS.get(dim)!.steps[1].requirement).toEqual({ mode: 'single', count: 1 });
+    }
+    const c1 = SCHEMAS.get(1)!.steps[1];
+    expect(c1.requirement).toEqual({ mode: 'all-parties', count: 2 });
+  });
+
+  it('schemaForRecord v2 vs v1: two-verifier C_1 only in v2; legacy resolves single-verify', () => {
+    const v2c1 = schemaForRecord('v2', { '1': 1 });
+    expect(v2c1.steps[1].requirement).toEqual({ mode: 'all-parties', count: 2 });
+    const v1c1 = schemaForRecord('v1', { '1': 1 });
+    expect(v1c1.steps[1].requirement).toEqual({ mode: 'single', count: 1 });
+    expect(v1c1.steps.map((s) => s.stepId)).toEqual(['submit', 'verify', 'settle']); // legacy 3-step
+    expect(schemaForRecord('v1', { '9': 1 }).schemaVersion).toBe('v1'); // legacy default: 2-step, dimIndex -1
+    expect(() => schemaForRecord('v9', { '1': 1 })).toThrow(); // unknown version → callers reject
+  });
+
+  it('known-schema-version map covers v1 and v2 only', () => {
+    expect([...SCHEMA_VERSION_NUMBERS.keys()].sort()).toEqual(['v1', 'v2']);
+    expect(SCHEMA_VERSION).toBe('v2');
+    expect(KNOWN_SCHEMA_VERSIONS('v1')).toBe(true);
+    expect(KNOWN_SCHEMA_VERSIONS('v2')).toBe(true);
+    expect(KNOWN_SCHEMA_VERSIONS('v0')).toBe(false);
+  });
+});
+
 function setupSubmitted(
   state: MockState,
   node: MockNode,
@@ -304,9 +341,18 @@ describe('verify_contribution handler (schema-driven)', () => {
     const node = new MockNode();
     const state = new MockState(node);
     setupSubmitted(state, node, 'alice', 'c-multi', { '1': 1, '2': 0.5, '9': 1 });
+    setupMembers(state, 'carol'); // v2: C_1 needs a second distinct verifier
     const verify = makeVerifyContributionHandler(node);
+    // First completed check (bob): requirement (all-parties, 2) not yet final —
+    // no submitter payout, lifecycle does not advance.
     expect(run(verify, state, makeOp('verify_contribution', 'bob',
       verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '9': 1 }, reason: 'real artifact' })))).toBe(0);
+    expect(state.getRegister(RES_NAMES.balance('alice')) ?? 0).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-multi'))).toBe(1);
+    // Second completed check (carol): final requirement completes — payout,
+    // tallies, and step advance fire exactly once, here.
+    expect(run(verify, state, makeOp('verify_contribution', 'carol',
+      verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '9': 1 }, reason: 'also real' })))).toBe(0);
     const expected = RES_CONFIG.buildingBounty * 1 + RES_CONFIG.recordingBaseCredit * 0.5;
     expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(expected);
     expect(state.getRegister('dim:alice:c1')).toBe(1);
@@ -365,16 +411,21 @@ describe('verify_contribution handler (schema-driven)', () => {
     const node = new MockNode();
     const state = new MockState(node);
     setupSubmitted(state, node, 'alice', 'c-expl', { '1': 1 });
+    setupMembers(state, 'carol'); // v2: C_1 needs a second distinct verifier
     const verify = makeVerifyContributionHandler(node);
     run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-expl', dims: { '1': 1 }, reason: 'solid' })));
+    run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-expl', dims: { '1': 1 }, reason: 'solid too' })));
     const explanations = state.allSetElements(CONTRIB_NAMES.explanations('c-expl'));
-    expect(explanations).toHaveLength(2); // submit record + verify record
-    const verifyRecord = JSON.parse(explanations.find((e) => e.includes('"verifier"'))!);
-    expect(verifyRecord.stepId).toBe('verify');
-    expect(verifyRecord.verification.verifier).toBe('bob');
-    expect(verifyRecord.payments['alice']).toBe(RES_CONFIG.buildingBounty);
-    expect(verifyRecord.calibrationVersion).toBe('v1');
-    expect(verifyRecord.schemaVersion).toBe('v1');
+    expect(explanations).toHaveLength(3); // submit record + 2 verify records
+    const verifyRecords = explanations.filter((e) => e.includes('"verifier"')).map((e) => JSON.parse(e));
+    expect(verifyRecords).toHaveLength(2);
+    // The final verifier's record carries the one-time submission payout.
+    const finalRecord = verifyRecords.find((r) => r.payments['alice'] !== undefined);
+    expect(finalRecord.verification.verifier).toBe('carol');
+    expect(finalRecord.stepId).toBe('verify');
+    expect(finalRecord.payments['alice']).toBe(RES_CONFIG.buildingBounty);
+    expect(finalRecord.calibrationVersion).toBe('v1');
+    expect(finalRecord.schemaVersion).toBe('v2');
   });
 });
 
@@ -588,14 +639,17 @@ import { makeCompleteRoundHandler } from '../../shared/src/handlers';
 import { CompleteRoundPayload } from '../../shared/src/types';
 import { RCT_NAMES } from '../../shared/src/policies';
 
-// Drives the full spine: r1-a submitted by alice, verified by bob, settled,
-// then audit -> reckon leaves round 1 at STAGE_RECKONED ready for publish.
+// Drives the full spine: r1-a submitted by alice, verified by bob AND carol
+// (v2 two-verifier C_1 review), settled, then audit -> reckon leaves round 1
+// at STAGE_RECKONED ready for publish.
 function setupSpineReady(node: MockNode, state: MockState) {
-  setupMembers(state, 'alice', 'bob', 'closer', 'closer2');
+  setupMembers(state, 'alice', 'bob', 'carol', 'closer', 'closer2');
   setupSubmitted(state, node, 'alice', 'r1-a', { '1': 1 });
   const verify = makeVerifyContributionHandler(node);
   expect(run(verify, state, makeOp('verify_contribution', 'bob',
     verifyOp({ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 }, pass: true, reason: 'ok' })))).toBe(0);
+  expect(run(verify, state, makeOp('verify_contribution', 'carol',
+    verifyOp({ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 }, pass: true, reason: 'ok too' })))).toBe(0);
   // settle alice's contribution to exit the 3-step schema cleanly
   const settle = makeSettleContributionHandler(node);
   expect(run(settle, state, makeOp('settle_contribution', 'alice',
