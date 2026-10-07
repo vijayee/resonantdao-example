@@ -4,6 +4,7 @@ import {
   ExecutePayload,
   ServerMessage,
   StartElectionPayload,
+  AppealVerdictPayload,
   SettleContributionPayload,
   VerifyContributionPayload,
 } from '@shared/types';
@@ -14,7 +15,7 @@ import {
   SCHEMA_VERSION,
   schemaForDims,
 } from '@shared/contribution';
-import { RES_CONFIG } from '@shared/policies';
+import { RECIP_NAMES, RES_CONFIG } from '@shared/policies';
 import { STAGE_AUDITED, STAGE_OPEN, STAGE_RECKONED } from '@shared/round';
 import { ContributionFacts, wizardModel } from '@shared/wizard';
 import { BrowserDao, ContributionMirrorEntry, bytesToBase64, bytesToHex, base64ToBytes } from './dao';
@@ -905,7 +906,29 @@ export class AppUI {
 
   private async onVerifyContribution(entry: ContributionMirrorEntry) {
     if (!this.dao || !this.wallet || this.client === null || this.submitting) return;
+    const dao = this.dao;
     if (entry.submitter === this.wallet.username) return; // no-self verify
+    // Distinct-actor rule, client-attested: this contribution's prior verifier
+    // is barred from re-verifying — the same priorVerifiers list the server
+    // re-checks. After an appeal this one check also excludes the original
+    // verifier from the re-verification (spec D-note).
+    const prior = entry.verifiedBy ? [entry.verifiedBy] : [];
+    if (prior.includes(this.wallet.username)) {
+      this.setStatus('You already verified this contribution.', 'error');
+      return;
+    }
+    // Per-pair reciprocity (per-pair once + mutual loop bar) — read from the
+    // replicated CRABS state directly (deterministic, same guards as the
+    // server handler), because the mirror's single verifiedBy field cannot
+    // represent both verifiers of a two-check step.
+    const verifier = this.wallet.username;
+    if (
+      dao.node.setContains(RECIP_NAMES.verifiedBy(entry.submitter), verifier) ||
+      dao.node.setContains(RECIP_NAMES.verifiedBy(verifier), entry.submitter)
+    ) {
+      this.setStatus('You already verified this submitter’s earlier work — reciprocity bars re-verification.', 'error');
+      return;
+    }
     const pass = confirm('Accept this contribution? OK = accept, Cancel = reject.');
     const reason = prompt('Written reason for your verification (recorded permanently):') ?? '';
     if (!reason.trim()) {
@@ -919,6 +942,7 @@ export class AppUI {
       stepId: 'verify',
       pass,
       reason,
+      priorVerifiers: prior,
     };
     this.setSubmitting(true);
     try {
@@ -957,6 +981,34 @@ export class AppUI {
       this.renderContributions();
     } catch (err) {
       this.setStatus(`Settle error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+    } finally {
+      this.setSubmitting(false);
+    }
+  }
+
+  private async onAppealContribution(entry: ContributionMirrorEntry) {
+    if (!this.dao || !this.wallet || this.client === null || this.submitting) return;
+    if (entry.submitter !== this.wallet.username) return; // submitter-only
+    const reason = prompt('Appeal reason (recorded permanently):') ?? '';
+    if (!reason.trim()) {
+      this.setStatus('A written reason is required to appeal.', 'error');
+      return;
+    }
+    const payload: AppealVerdictPayload = {
+      contributionId: entry.record.contributionId,
+      submitter: entry.submitter,
+      reason,
+    };
+    this.setSubmitting(true);
+    try {
+      const bytes = await this.dao.appealVerdict(this.wallet.username, payload);
+      await this.client.submitOp(bytesToBase64(bytes));
+      await this.safeExecuteRemote(bytes);
+      this.setStatus('Appeal recorded — awaiting re-verification.', 'success');
+      this.renderContributions();
+    } catch (err) {
+      this.setStatus(`Appeal error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
     } finally {
       this.setSubmitting(false);
@@ -1007,8 +1059,13 @@ export class AppUI {
     const title = document.createElement('strong');
     title.textContent = entry.record.summary;
     const pill = document.createElement('span');
-    pill.className = `contribution-pill contribution-pill--${model.outcome}`;
-    pill.textContent = model.outcome;
+    // status 3 (appealed) reads as 'pending' off getContributionStatus —
+    // surface it explicitly until re-review finalizes. The appealed register
+    // survives settlement, so gate on the still-open lifecycle, not the flag.
+    const appealed =
+      dao.getContributionAppealed(entry.record.contributionId) && status === 'pending';
+    pill.className = `contribution-pill contribution-pill--${appealed ? 'appealed' : model.outcome}`;
+    pill.textContent = appealed ? 'appealed' : model.outcome;
     header.append(title, pill);
     card.appendChild(header);
 
@@ -1054,6 +1111,27 @@ export class AppUI {
       card.appendChild(verdict);
     }
 
+    if (appealed) {
+      const note = document.createElement('div');
+      note.className = 'muted';
+      note.textContent = 'appealed — awaiting re-verification';
+      card.appendChild(note);
+    } else if (
+      model.outcome === 'rejected' &&
+      entry.submitter === viewer.username &&
+      // Once-guard off the register getter (not the mirror): a re-rejection
+      // after an unsuccessful appeal cannot be appealed again.
+      !dao.getContributionAppealed(entry.record.contributionId)
+    ) {
+      const appealBtn = document.createElement('button');
+      appealBtn.type = 'button';
+      appealBtn.className = 'button button--secondary appeal-contribution';
+      appealBtn.textContent = 'Appeal…';
+      appealBtn.disabled = this.submitting;
+      appealBtn.addEventListener('click', () => void this.onAppealContribution(entry));
+      card.appendChild(appealBtn);
+    }
+
     const currentStep = model.steps[model.currentStepIndex];
     if (currentStep) {
       const actions = document.createElement('div');
@@ -1062,10 +1140,14 @@ export class AppUI {
         const role = currentStep.roles[actor];
         if (!role || !role.mayAct) continue;
         if (role.op === 'verify_contribution' && actor === 'verifier') {
+          const stats = dao.getVerifierStats(viewer.username);
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'button button--secondary verify-contribution';
-          btn.textContent = 'Verify…';
+          // A prior verifier on this contribution (first of two checks, or the
+          // original verdict on an appealed card) marks this check as the 2nd.
+          btn.textContent = entry.verifiedBy ? 'Verify (2nd)' : 'Verify…';
+          btn.title = `Your checks: ${stats.total} (${stats.upheld} upheld)`;
           btn.disabled = this.submitting;
           btn.addEventListener('click', () => void this.onVerifyContribution(entry));
           actions.appendChild(btn);

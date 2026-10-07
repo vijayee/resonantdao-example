@@ -756,6 +756,11 @@ body {
   border: 1px solid var(--color-danger);
 }
 
+.contribution-pill--appealed {
+  color: #d97706;
+  border: 1px solid #d97706;
+}
+
 /* Round spine panel */
 .round-stepper {
   display: flex;
