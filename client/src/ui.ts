@@ -971,6 +971,7 @@ export class AppUI {
       contributionId: entry.record.contributionId,
       submitter: entry.submitter,
       reason,
+      verifiers: entry.verifiers ?? [],
     };
     this.setSubmitting(true);
     try {

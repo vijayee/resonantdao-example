@@ -51,6 +51,7 @@ export interface ContributionMirrorEntry {
   submitter: string;
   submittedAt: number;
   verifiedBy?: string;
+  verifiers?: string[];
   verdict?: boolean;
   verdictReason?: string;
   settledBy?: string;
@@ -362,6 +363,7 @@ export class BrowserDao {
     if (entry) {
       if (op.type === 'verify_contribution') {
         entry.verifiedBy = op.signerId;
+        entry.verifiers = [...(entry.verifiers ?? []), op.signerId];
         entry.verdict = payload.pass;
         entry.verdictReason = payload.reason;
       } else {
