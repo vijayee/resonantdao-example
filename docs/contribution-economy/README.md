@@ -433,3 +433,8 @@ outcome rules instead of timed accrual:
   stats. Deferred: Tier 1 random audits, rotating appeal panel,
   accuracy-vs-chance capture detection, harm adjustments, retrieval
   economy.
+- Fix (2026-10-08): client-wasm wire-drift — elections broke because the
+  vendored client binary (wire v4) couldn't deserialize server ops (wire v5,
+  sync_roles); `npm run copy-wasm` re-syncs and the cross-binary format guard
+  (`server/test/crabs-wasm-format.test.ts`) fails fast when CRABS rebuilds
+  drift the formats again.

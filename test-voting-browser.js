@@ -10,6 +10,15 @@ const BASE_URL = 'http://localhost:9000/';
 // complete, then a salient quadratic proposal on the published round) also
 // REQUIRES the fresh DB: the spine publishes round 1's accepted contributions
 // and re-running on a used database would find no open round to close.
+//
+// The custodian-election section below is ALSO the regression assert for the
+// client-wasm wire-drift fix (issue #37): election finalize makes the server
+// broadcast a server-signed sync_roles op, which a drifted vendored binary
+// cannot deserialize ('Failed to apply update: Operation.deserialize failed')
+// so every later client-signed op dies key_stale on the server. With the
+// re-synced wasm the grant must APPLY (custodians list renders) and alice's
+// post-election ops must be accepted — asserted below, plus a second election
+// cycle to prove the key-version catch-up repeats.
 
 async function runUser(username, headless = true) {
   const browser = await chromium.launch({ headless });
@@ -474,17 +483,18 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // --- Custodian election flow ---
   // carol and dave registered (live pages) back in the contribution flows;
   // the candidates list is every member set — alphabetical, so alice is
-  // still the first checkbox candidate.
+  // still the first checkbox candidate on every page and wins both cycles
+  // (2-0, no tie, no runoff).
   //
-  // KNOWN FAILURE (pre-existing, reproduced on a control run with no
-  // phase-3 ops): after finalize the server broadcasts a sync_roles op that
-  // every page fails to apply ("Operation.deserialize failed"), so clients
-  // never learn the custodian key-version bump — alice is then signing at
-  // the pre-grant version and her next proposal op dies with key_stale on
-  // the server. The phase-2 salient section below therefore cannot run in
-  // this script until that sync path is fixed; the phase-3 sections above
-  // (two-verifier C_1, wizard cycle, appeal arc, spine) are the coverage
-  // this file was extended for.
+  // This section is the wire-drift regression proof (issue #37): finalize
+  // makes the server broadcast a SERVER-signed sync_roles op, which under
+  // the drift (vendored wire-v4 client wasm vs wire-v5 server ops) no page
+  // could apply — 'Failed to apply update: Operation.deserialize failed' —
+  // leaving every signer at their pre-grant key version (key_stale on their
+  // next op). npm run copy-wasm re-synced the vendored binary (wire v5) and
+  // server/test/crabs-wasm-format.test.ts guards the pair, so the asserts
+  // below must hold: the grant applies (custodians badge), the custodian
+  // controls render, and the post-election ops are accepted.
 
   // Start the election from alice's page.
   await alice.page.click('#start-election');
@@ -508,20 +518,53 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   await alice.page.click('.finalize-election');
   await alice.page.waitForTimeout(2000);
 
-  // Custodian controls appear for alice (a winner with the most picks).
-  // The set_token_config custodian op and its form were deleted; since
-  // phase 2, votes are gated by the salient-derived balance (not $RES), so
-  // skip straight to member removal.
+  // Finalize makes the server broadcast a SERVER-signed sync_roles op — the
+  // call the wire-drift bug broke (failed deserialize → 'Failed to apply
+  // update'). The demo clock re-renders the custodians list every second, so
+  // alice's seat badge appearing proves the grant APPLIED on her client,
+  // which is also what catches her key version up (without it her next op
+  // dies key_stale on the server).
+  let syncRolesApplied = false;
+  for (let attempt = 0; !syncRolesApplied && attempt < 15; attempt++) {
+    syncRolesApplied = await alice.page
+      .locator('#custodians .member-item__badge', { hasText: aliceName })
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  const postFinalizeStatus = (await alice.page.locator('#status').textContent()) || '';
+  if (!syncRolesApplied) {
+    throw new Error(`sync_roles grant never applied on the client after finalize (custodians list never showed alice). Status bar: ${postFinalizeStatus || '(empty)'}`);
+  }
+  if (postFinalizeStatus.includes('Failed to apply update') || postFinalizeStatus.includes('key_stale')) {
+    throw new Error(`sync_roles apply surfaced an error after finalize. Status bar: ${postFinalizeStatus}`);
+  }
+  console.log('SYNC_ROLES APPLY: applied — alice in the custodians list, key version caught up');
+
+  // Custodian controls render once the grant applied (alice is a winner with
+  // the most picks). The set_token_config custodian op and its form were
+  // deleted; since phase 2, votes are gated by the salient-derived balance
+  // (not $RES), so skip straight to member removal — the removal is also
+  // alice's first custodian-signed op after the grant, so a failed key
+  // catch-up would surface here as 'Remove error: ...'. Single shot (no
+  // retry): a re-click could target the next member's row after re-render.
   const removeBtn = alice.page.locator('.remove-member').first();
-  try {
-    await removeBtn.waitFor({ state: 'visible', timeout: 30000 });
-  } catch (err) {
-    console.log('alice is not a custodian; skipping member removal');
+  let removedName = null;
+  let controlsReady = false;
+  for (let attempt = 0; !controlsReady && attempt < 10; attempt++) {
+    controlsReady = (await removeBtn.count()) > 0;
+    if (!controlsReady) await alice.page.waitForTimeout(1000);
   }
-  if (await removeBtn.count()) {
-    await removeBtn.click({ force: true });
-    await alice.page.waitForTimeout(1500);
+  if (!controlsReady) {
+    throw new Error('Custodian controls (.remove-member) never rendered even though the sync_roles grant applied.');
   }
+  await removeBtn.click({ force: true });
+  await alice.page.waitForTimeout(1500);
+  const removeStatus = (await alice.page.locator('#status').textContent()) || '';
+  if (!removeStatus.includes('removed from the DAO.')) {
+    throw new Error(`Custodian member removal never succeeded. Status bar: ${removeStatus || '(empty)'}`);
+  }
+  removedName = (removeStatus.match(/^(.+?) removed from the DAO\.$/) || [])[1] || null;
+  console.log('CUSTODIAN REMOVAL ACCEPTED:', removedName);
 
   console.log('Custodian election smoke flow completed');
 
@@ -531,24 +574,14 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // vote balance is base 3 + 1x1 = 4: the first vote (cumulative 1) counts
   // and the second (cumulative 1+4=5 > 4) is rejected.
   //
-  // The proposal creation is EXPECTED to fail with key_stale on the current
-  // build: the election's finalize broadcast (sync_roles) never applies
-  // client-side (pre-existing bug — KNOWN FAILURE note above), so alice's
-  // signature carries her pre-grant key version. Degrade explicitly: log the
-  // known issue and keep only the asserts that stay runnable (the round panel
-  // and the published RCT badge); re-arm this section when the sync path is
-  // fixed.
+  // This creation is the post-election acceptance proof (issue #37): under
+  // the wasm wire-drift it died key_stale — sync_roles never applied, so
+  // alice kept signing at her pre-grant key version. submitOp resolves only
+  // on the server's op_accepted, so the rendered card plus the tallies below
+  // prove the fix (apply + catch-up) end-to-end.
   let sId = null;
-  try {
-    sId = await createProposal(alice.page, 'Salient quadratic round 2', 'quadratic', 'One, Two, Three', ['1']);
-    console.log('Created C_1-salient quadratic proposal on round 2', sId);
-  } catch (err) {
-    const statusText = await alice.page.locator('#status').textContent();
-    if (!(statusText || '').includes('key_stale')) {
-      throw err; // different failure — still broken, surface it
-    }
-    console.log('KNOWN ISSUE: salient quadratic proposal creation hit key_stale — pre-existing sync_roles apply failure after election finalize; skipping the salient voting asserts.');
-  }
+  sId = await createProposal(alice.page, 'Salient quadratic round 2', 'quadratic', 'One, Two, Three', ['1']);
+  console.log('Created C_1-salient quadratic proposal on round 2', sId);
 
   if (sId) {
     let salientFirstLanded = false;
@@ -586,6 +619,75 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   if (rctBadge.trim() !== '1 RCT') {
     throw new Error(`Expected alice's RCT badge to read '1 RCT', got '${rctBadge.trim()}'`);
   }
+
+  // --- Second election cycle (compact repeat, issue #37) ---
+  // One grant is easy; the drift bug compounded across cycles, so repeat
+  // the loop: start → ballots → expiry → finalize → sync_roles apply → and
+  // prove the catch-up again with an accepted post-cycle op. Whoever the
+  // removal took out cannot cast ballots (cast_ballot needs
+  // member/custodian), so that page is skipped.
+  console.log('Second election cycle: start → ballot → expiry → finalize');
+  const secondCycleVoters = [bob, carol, dave]
+    .map((user, i) => ({ user, name: [bobName, carolName, daveName][i] }))
+    .filter((v) => v.name !== removedName);
+  if (!secondCycleVoters.length) {
+    throw new Error('No second-cycle voter left: the removal took the only other member with a live page');
+  }
+  const secondVoter = secondCycleVoters[0];
+
+  // Ballot submit with retry: the demo clock re-renders the election cards
+  // every second — it detaches Playwright element handles mid-action and can
+  // swallow a click in flight — so click from inside the page (check the
+  // first candidate, press the open card's ballot submit) and retry until
+  // the card marks the ballot as cast ('you voted' in the countdown line).
+  // Cycle 1's card is finalized (no ballot form), so the ballot widgets on
+  // these pages belong to this second election only.
+  const castRepeatBallot = async (user, label) => {
+    await user.page.locator('.ballot-option').first().waitFor({ state: 'visible', timeout: 30000 });
+    let cast = false;
+    for (let attempt = 0; !cast && attempt < 10; attempt++) {
+      await user.page.evaluate(() => {
+        const first = [...document.querySelectorAll('.ballot-option')][0];
+        if (first) first.click();
+        const submit = [...document.querySelectorAll('#election-area button')]
+          .find((b) => b.textContent.includes('Submit ballot'));
+        if (submit) submit.click();
+      });
+      cast = await user.page
+        .locator('.proposal-card__type:has-text("you voted")')
+        .first()
+        .waitFor({ state: 'visible', timeout: 3000 })
+        .then(() => true, () => false);
+    }
+    if (!cast) {
+      const st = await user.page.locator('#status').textContent();
+      throw new Error(`Second-cycle ballot never registered on ${label}'s page. Status bar: ${st || '(empty)'}`);
+    }
+  };
+
+  await alice.page.click('#start-election');
+  await alice.page.waitForTimeout(1500);
+  await castRepeatBallot(alice, 'alice');
+  await castRepeatBallot(secondVoter.user, secondVoter.name);
+
+  await alice.page.waitForTimeout(62000);
+  await alice.page.click('.finalize-election');
+  await alice.page.waitForTimeout(2000);
+  const repeatFinalizeStatus = (await alice.page.locator('#status').textContent()) || '';
+  if (!repeatFinalizeStatus.includes('Election finalized.')) {
+    throw new Error(`Second finalize never reported success (a failed sync_roles apply would overwrite the status). Status bar: ${repeatFinalizeStatus || '(empty)'}`);
+  }
+
+  // The strongest repeat-cycle assert: alice's first client-signed op after
+  // the SECOND key-version bump must be accepted by the server (submitOp
+  // resolves only on op_accepted) and rendered back.
+  const c2Id = await createProposal(alice.page, 'Second-cycle direct', 'direct', 'Yes, No');
+  console.log('Post-second-cycle op accepted:', c2Id);
+  const c2Status = (await alice.page.locator('#status').textContent()) || '';
+  if (c2Status.includes('Rejected:') || c2Status.includes('key_stale') || c2Status.includes('Failed to apply update')) {
+    throw new Error(`Post-second-cycle op failed. Status bar: ${c2Status}`);
+  }
+  console.log('SECOND ELECTION CYCLE: sync_roles applied and the post-cycle op accepted');
 
   console.log('Smoke test passed');
   } catch (err) {
