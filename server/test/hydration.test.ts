@@ -528,4 +528,116 @@ describe('hydrateDao', () => {
     expect(second.node.setContains(RECIP_NAMES.verifiedBy('bob'), 'carol')).toBeTruthy();
     expect(second.node.setContains(RECIP_NAMES.verifiedBy('carol'), 'alice')).toBeFalsy(); // nobody checked carol
   });
+
+  it('harm-adjusted lifecycle factor survives hydrateDao op-log replay', async () => {
+    // Path: DaoDatabase on a tmp dir; DaoNode with alice+bob+carol (distinct
+    // key pairs); execute the harm-adjusted v2 lifecycle via signed member ops:
+    // alice submits 'r-harm-h1' dims {'1': 1} schemaVersion 'v2' (two-verifier
+    // C_1), bob verifies accepted WITH harm 'reduced' (payload harm field),
+    // carol completes the all-parties quorum carrying priorHarm 'reduced'
+    // (strongest-of wins keeps 'reduced' effective), alice settles attesting
+    // both verifiers. Harm rides entirely in payload bytes — no new registers
+    // — so the durable trace is the op log plus the adjusted balances: the
+    // fresh node's replay MUST keep the FACTOR in its values (halved bounty
+    // 6 and halved dim delta 0.5), not just the accept status.
+    const aliceKey = await KeyPair.generate();
+    const bobKey = await KeyPair.generate();
+    const carolKey = await KeyPair.generate();
+
+    const firstDao = new DaoNode();
+    await firstDao.init();
+    for (const [name, key] of [
+      ['alice', aliceKey], ['bob', bobKey], ['carol', carolKey],
+    ] as const) {
+      firstDao.registerMember(name, key.publicKeyHex());
+    }
+
+    let opCounter = 0;
+    async function buildMemberOp(dao: DaoNode, signerId: string, keyPair: KeyPair, type: string, payload: object): Promise<Uint8Array> {
+      const op = await Operation.create(type);
+      op.signerId = signerId;
+      op.nodeId = `browser-${++opCounter}`;
+      op.payload = new TextEncoder().encode(JSON.stringify(payload) + '\0');
+      setOperationSignerKeyVersion(op, dao.getUserKeyVersion(signerId));
+      dao.node.sign(op, keyPair);
+      return op.serialize();
+    }
+
+    const submitBytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'submit_contribution', {
+      contributionId: 'r-harm-h1',
+      dims: { '1': 1 },
+      summary: 'built the harm fixture',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v2',
+    });
+    const verifyBobBytes = await buildMemberOp(firstDao, 'bob', bobKey, 'verify_contribution', {
+      contributionId: 'r-harm-h1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'built and matches the claim — but harmed',
+      harm: 'reduced',
+      priorVerifiers: [],
+    });
+    const verifyCarolBytes = await buildMemberOp(firstDao, 'carol', carolKey, 'verify_contribution', {
+      contributionId: 'r-harm-h1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'completing the quorum, carrying the prior verdict',
+      priorHarm: 'reduced',
+      priorVerifiers: ['bob'],
+    });
+    const settleBytes = await buildMemberOp(firstDao, 'alice', aliceKey, 'settle_contribution', {
+      contributionId: 'r-harm-h1',
+      submitter: 'alice',
+      reason: 'accepting the harm-reduced two-verifier outcome',
+      verifiers: ['bob', 'carol'],
+    });
+
+    const opBytes = [submitBytes, verifyBobBytes, verifyCarolBytes, settleBytes];
+    for (const bytes of opBytes) {
+      firstDao.executeOperation(await firstDao.deserializeOperation(bytes));
+    }
+    expect(firstDao.getContributionStatus('r-harm-h1')).toBe('accepted');
+    // Live arithmetic: bounty fires at the final acceptance scaled by the
+    // verified harm — building 12 × 0.5 = 6; the dim delta is 1 × 0.5.
+    expect(firstDao.getResBalance('alice')).toBe(6);
+    expect(firstDao.getDimensionBalance('alice', 1)).toBe(0.5);
+
+    for (const [name, key] of [
+      ['alice', aliceKey], ['bob', bobKey], ['carol', carolKey],
+    ] as const) {
+      await db.putUser({
+        username: name,
+        publicKeyHex: key.publicKeyHex(),
+        registeredAt: Date.now(),
+        keyVersion: 3,
+      });
+    }
+    let opIndex = 0;
+    for (const bytes of opBytes) {
+      await db.putOperation(opIndex, { index: opIndex, bytes: bytesToBase64(bytes) });
+      opIndex += 1;
+    }
+
+    // Simulate restart: fresh DAO node hydrated from persisted data. Plain
+    // member ops under schema v2 — no custody out-of-band state, so replay
+    // is clean (no hydration skips to pin).
+    const second = new DaoNode();
+    await second.init();
+    await hydrateDao(db, second);
+
+    expect(second.getContributionStatus('r-harm-h1')).toBe('accepted');
+    // Settle handler sets the status register, not the step register, so the
+    // lifecycle position stays where the final verify left it (2).
+    expect(second.node.getRegister(CONTRIB_NAMES.step('r-harm-h1'))).toBe(2);
+    expect(second.getResBalance('alice')).toBe(6);   // buildingBounty 12 × 0.5 — factor survives replay
+    expect(second.getDimensionBalance('alice', 1)).toBe(0.5);
+    expect(second.getResBalance('bob')).toBe(RES_CONFIG.verificationCheckCredit); // per-check credit NOT harm-adjusted
+    expect(second.getVerifierStats('bob')).toEqual({ total: 1, upheld: 1 });
+    expect(second.getVerifierStats('carol')).toEqual({ total: 1, upheld: 1 });
+  });
 });

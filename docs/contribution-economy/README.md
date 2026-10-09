@@ -431,10 +431,17 @@ outcome rules instead of timed accrual:
   (`check:{u}:total`/`upheld`, fed by settle's client-attested verifier
   list); wizard surface shows (d/n) progress, appeal button, and accuracy
   stats. Deferred: Tier 1 random audits, rotating appeal panel,
-  accuracy-vs-chance capture detection, harm adjustments, retrieval
-  economy.
+  accuracy-vs-chance capture detection, retrieval economy.
 - Fix (2026-10-08): client-wasm wire-drift — elections broke because the
   vendored client binary (wire v4) couldn't deserialize server ops (wire v5,
   sync_roles); `npm run copy-wasm` re-syncs and the cross-binary format guard
   (`server/test/crabs-wasm-format.test.ts`) fails fast when CRABS rebuilds
   drift the formats again.
+- Harm (2026-10-09): the delta formula's last term — verify verdicts carry
+  `harm: none|reduced|voided` (reduced = fixed pilot factor 0.5); the factor
+  applies to the submitter bounty and dimension deltas before payment (the
+  verifier's per-check credit is never adjusted; voided = accepted with zero
+  outcome); two-verifier flows use strongest-wins via the prior-check verdict
+  (payload field `priorHarm`); `complete_round` mirrors the factor so
+  published RCT matches adjusted tallies. Retroactive harm is inexpressible
+  (balances never go negative) — the page's pre-payment rule stands.

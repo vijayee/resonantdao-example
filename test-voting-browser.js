@@ -67,13 +67,16 @@ async function voteOption(page, proposalId, optionLabel) {
   await page.waitForTimeout(1500);
 }
 
-// Answers for the wizard's confirm()/prompt() dialogs. All browser contexts
+// Answers for the flows' confirm()/prompt() dialogs. All browser contexts
 // share them because the flows run strictly sequentially; a single handler
 // per page (registered once) avoids double-answering the same dialog.
-// `dialogAnswer` feeds prompts (verify/settle/appeal reasons); `confirmAccept`
-// answers the NEXT confirm() — clearing it dismisses the accept/reject
-// dialog, which the UI records as a REJECTION (the reason prompt still fires,
-// so the handler restores the flag after the first dismiss).
+// The verify flow opens the HARM-CHOICE prompt first ('Accept this
+// contribution? Type: yes / yes-harm (reduced) / voided / no.' — its answer
+// records the verdict, and 'no' records a REJECTION), then the reason prompt;
+// `dialogChoice` feeds the choice prompt (routed by message text) and
+// `dialogAnswer` feeds the reason/settle/appeal prompts; `confirmAccept`
+// answers the round-audit FAIR confirm().
+let dialogChoice = 'yes';
 let dialogAnswer = '';
 let confirmAccept = true;
 const armDialogs = (page) => page.on('dialog', async (dialog) => {
@@ -84,6 +87,10 @@ const armDialogs = (page) => page.on('dialog', async (dialog) => {
       confirmAccept = true;
       await dialog.dismiss();
     }
+    return;
+  }
+  if (dialog.message().startsWith('Accept this contribution?')) {
+    await dialog.accept(dialogChoice);
     return;
   }
   await dialog.accept(dialogAnswer);
@@ -130,9 +137,11 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
     .locator(`.contribution-card:has-text("${summary}") .settle-contribution`)
     .first();
 
-  // The verify button opens confirm() then prompt() — dialogs must be armed
-  // before the click or Playwright auto-dismisses them (which would record a
-  // rejection), so retry until the settle step becomes actionable.
+  // The verify flow opens the harm-choice prompt then the reason prompt —
+  // dialogs must be armed before the click or Playwright auto-dismisses them
+  // (a cancelled choice records nothing), so retry until the settle step
+  // becomes actionable.
+  dialogChoice = 'yes';
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
     dialogAnswer = verifyReason;
@@ -173,11 +182,18 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
 // 2): submit, verify from v1 (the stepper chip must show (1/2)), verify from
 // v2 (whose button reads 'Verify (2nd)'), settle. The settle step only
 // becomes actionable once BOTH verifications have applied.
-async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyReason, settleNote) {
+//
+// v1's verify can be armed with a harm answer (`harmChoice`, 'yes' by
+// default): 'yes-harm' records a 'reduced' verdict on the FIRST check, and
+// the completing check automatically carries that verdict forward as the
+// payload's priorHarm (the UI reads it out of its mirror), so strongest-wins
+// keeps 'reduced' effective at settle — asserted via the card's harm receipt.
+async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyReason, settleNote, harmChoice = 'yes') {
   const card = await submitContribution(submitter, dimValue, summary);
 
   let halfDone = false;
   for (let attempt = 0; !halfDone && attempt < 15; attempt++) {
+    dialogChoice = harmChoice;
     dialogAnswer = verifyReason;
     await clickInCard(v1.page, summary, '.verify-contribution');
     halfDone = await v1.page
@@ -212,6 +228,7 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
     .first();
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
+    dialogChoice = 'yes'; // the completing check carries the prior verdict — no fresh harm
     dialogAnswer = verifyReason;
     await clickInCard(v2.page, summary, '.verify-contribution');
     settleReady = await settleBtn
@@ -237,10 +254,23 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
     throw new Error(`Status pill never flipped to accepted. Status bar: ${statusBar || '(empty)'}`);
   }
   console.log('CONTRIBUTION STATUS PILL: accepted (two verifiers)');
+
+  // A harm verdict rides the replicate verify ops, so the submitter's settled
+  // card must render the adjusted receipt once it is accepted ('reduced' →
+  // 'accepted — bounty 12 → 6 (harm reduced)' for a C_1 dims '1': 1).
+  if (harmChoice !== 'yes') {
+    const receipt = card.locator('.contribution-card__harm');
+    await receipt.waitFor({ state: 'visible', timeout: 10000 });
+    const receiptText = (await receipt.textContent()).trim();
+    console.log('HARM RECEIPT:', receiptText);
+    if (!receiptText.includes('(harm reduced)')) {
+      throw new Error(`Expected the settled card's harm receipt, got '${receiptText}'`);
+    }
+  }
 }
 
-// Phase-3 appeal flow: submit → a REJECTING verification (the confirm()
-// dialog must be DISMISSED) → the submitter appeals (status pill 'appealed')
+// Phase-3 appeal flow: submit → a REJECTING verification (the harm-choice
+// prompt answered 'no') → the submitter appeals (status pill 'appealed')
 // → a fresh member re-verifies accepted → settle. The appealed pill must be
 // visible between the appeal and the settle.
 async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary, rejectReason, appealReason, reVerifyReason, settleNote) {
@@ -248,7 +278,7 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
 
   let rejected = false;
   for (let attempt = 0; !rejected && attempt < 15; attempt++) {
-    confirmAccept = false;        // dismiss confirm() == reject
+    dialogChoice = 'no';          // the choice prompt's 'no' records the rejection
     dialogAnswer = rejectReason;  // prompt: the recorded rejection reason
     await clickInCard(rejecter.page, summary, '.verify-contribution');
     rejected = await submitter.page
@@ -294,6 +324,7 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
     .first();
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
+    dialogChoice = 'yes';
     dialogAnswer = reVerifyReason;
     await clickInCard(reVerifier.page, summary, '.verify-contribution');
     settleReady = await settleBtn
@@ -393,12 +424,17 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   armDialogs(carol.page);
   armDialogs(dave.page);
 
-  // Cycle 1 (phase-3 two-verifier C_1): alice submits a Building claim; bob
-  // checks it (quorum 1/2); carol's second check completes the all-parties
-  // quorum (2/2); alice settles, attesting both verifiers. Pays alice the
-  // C_1 bounty (12 $RES) and each verifier a check credit (2 $RES); alice's
-  // C_1 tally is 1 (it feeds the salient proposal below).
-  await runTwoVerifierCycle(alice, bob, carol, '1', 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000), 'built and matches the claim', 'accepting the two-verifier outcome');
+  // Cycle 1 (phase-3 two-verifier C_1, HARM path): alice submits a Building
+  // claim; bob checks it (quorum 1/2) answering 'yes-harm' — the reduced
+  // verdict; carol's second check completes the all-parties quorum (2/2) and
+  // carries the prior verdict forward automatically (priorHarm from the
+  // mirror); alice settles, attesting both verifiers. The verified harm
+  // halves the outcome BEFORE payment: alice's bounty is 6 $RES (12 × 0.5,
+  // surfaced by the card's harm receipt asserted in the flow), while each
+  // verifier still earns a check credit (2 $RES); alice's C_1 tally is
+  // the halved delta 0.5 (it feeds the salient proposal below and the
+  // published RCT).
+  await runTwoVerifierCycle(alice, bob, carol, '1', 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000), 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm');
 
   // Cycle 2: bob submits a Recording claim; dave verifies (alice is barred —
   // her pair with bob was consumed when bob checked her C_1); bob settles.
@@ -420,9 +456,10 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // alice (any member — spine policies are 'role:member OR role:custodian')
   // audits the round fair against the registered v1 calibration, reckons,
   // then completes: complete_round aggregates the THREE accepted
-  // contributions (alice C_1 1, bob C_2 1, carol's appealed-and-re-verified
-  // C_2 1) into cumulative RCT (alpha defaults to 1, so alice publishes
-  // 1 RCT) and advances to Round 2.
+  // contributions, mirroring each entry's harm onto the totals —
+  // alice's harm-reduced C_1 contributes 0.5 (0.5 factor), bob's C_2 1 and
+  // carol's appealed-and-re-verified C_2 1 (alpha defaults to 1) — so alice
+  // publishes 0.5 cumulative RCT and advances to Round 2.
   console.log('Closing round 1 through the spine (audit → reckon → complete)');
   await runRoundSpineStep(alice, 'audit-round-btn', 'reckon-round-btn', 'phase-2 e2e audit note: fair against v1');
   console.log('ROUND STAGE: audited');
@@ -570,9 +607,10 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
 
   // --- Phase-2 round extension: salient quadratic on the published round ---
   // Round 2 is open after the spine. alice publishes her C_1 contribution's
-  // tally (1; alpha defaults to 1) into the proposal's salient mask, so her
-  // vote balance is base 3 + 1x1 = 4: the first vote (cumulative 1) counts
-  // and the second (cumulative 1+4=5 > 4) is rejected.
+  // harm-adjusted tally (0.5: match 1 × reduced factor 0.5; alpha defaults
+  // to 1) into the proposal's salient mask, so her vote balance is
+  // base 3 + 0.5x1 = 3.5: the first vote (cumulative 1) counts and the
+  // second (cumulative 1+4=5 > 3.5) is rejected.
   //
   // This creation is the post-election acceptance proof (issue #37): under
   // the wasm wire-drift it died key_stale — sync_roles never applied, so
@@ -608,7 +646,9 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
     }
   }
 
-  // Round panel advanced with the spine and the published RCT badge shows.
+  // Round panel advanced with the spine and the published RCT badge shows —
+  // carrying the harm-adjusted aggregate: alice's lone published entry is the
+  // reduced C_1, so the mirrored factor lands in the badge (0.5, not 1).
   const roundLabel = await alice.page.locator('.round-label').textContent();
   console.log('ROUND PANEL:', roundLabel);
   if (!roundLabel.startsWith('Round 2')) {
@@ -616,8 +656,8 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   }
   const rctBadge = await alice.page.locator(`[data-member-rct="${aliceName}"]`).textContent();
   console.log('ALICE RCT BADGE:', rctBadge);
-  if (rctBadge.trim() !== '1 RCT') {
-    throw new Error(`Expected alice's RCT badge to read '1 RCT', got '${rctBadge.trim()}'`);
+  if (rctBadge.trim() !== '0.5 RCT') {
+    throw new Error(`Expected alice's harm-adjusted RCT badge to read '0.5 RCT', got '${rctBadge.trim()}'`);
   }
 
   // --- Second election cycle (compact repeat, issue #37) ---
