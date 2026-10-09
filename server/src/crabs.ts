@@ -24,6 +24,7 @@ import {
   makeVerifyContributionHandler,
   makeVoteHandler,
 } from '../../shared/src/handlers';
+import { fromRegisterUnits } from '../../shared/src/contribution';
 import { SyncRolesPayload } from '../../shared/src/types';
 
 const ADMIN_ID = 'admin';
@@ -153,8 +154,11 @@ export class DaoNode {
     return this.node.getUser(username)?.status === 'active' || false;
   }
 
+  // RES balances are stored in per-mille register units (toRegisterUnits);
+  // getters return the LOGICAL value. Scaled balance namespaces: res:, dim:,
+  // rct: — plus config:alpha:* (set_rct_alpha writes ×1000).
   getResBalance(username: string): number {
-    return this.node.getRegister(RES_NAMES.balance(username)) || 0;
+    return fromRegisterUnits(this.node.getRegister(RES_NAMES.balance(username)) || 0);
   }
 
   getCurrentRound(): number {
@@ -166,7 +170,7 @@ export class DaoNode {
   }
 
   getRctBalance(username: string): number {
-    return this.node.getRegister(RCT_NAMES.balance(username)) || 0;
+    return fromRegisterUnits(this.node.getRegister(RCT_NAMES.balance(username)) || 0);
   }
 
   getCalibrationVersion(): number {
@@ -183,7 +187,7 @@ export class DaoNode {
   // state.setRegister *does* throw resource_not_found on undeclared registers,
   // so handlers declare registers before writing them.
   getDimensionBalance(username: string, dimIndex: number): number {
-    return this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, dimIndex)) || 0;
+    return fromRegisterUnits(this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, dimIndex)) || 0);
   }
 
   isContributionPending(contributionId: string): boolean {

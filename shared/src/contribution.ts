@@ -273,6 +273,23 @@ export function isValidHarm(harm: unknown): harm is HarmVerdict | undefined {
   return harm === undefined || harm === 'none' || harm === 'reduced' || harm === 'voided';
 }
 
+// --- Per-mille register encoding ---
+// Real CRABS registers are integer-only (BigInt backing: setRegister(0.5)
+// throws RangeError); mocks accept floats. Fractional-bearing registers store
+// Math.round(value * 1000) and every reader divides by 1000, so the logical
+// values stay JS-float deterministic on every replica. Accumulations in
+// handlers must stay in register units (add the rounded delta ONCE) — never
+// read-scale-adjust-write cycles, which would accumulate rounding drift.
+export const REG_SCALE = 1000 as const;
+
+export function toRegisterUnits(value: number): number {
+  return Math.round(value * REG_SCALE);
+}
+
+export function fromRegisterUnits(units: number): number {
+  return units / REG_SCALE;
+}
+
 export function harmFactorFor(harm: HarmVerdict | undefined): number {
   if (!isValidHarm(harm)) throw new Error(`invalid harm verdict: ${harm as string}`);
   if (harm === 'reduced') return HARM_REDUCE_FACTOR;

@@ -5,6 +5,7 @@ import {
 } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import { derivedVoteBalance } from '@shared/round';
+import { fromRegisterUnits } from '@shared/contribution';
 import {
   AuditRoundPayload,
   CastBallotPayload,
@@ -466,12 +467,14 @@ export class BrowserDao {
     return this.node.setContains(STATE_NAMES.executedProposals, id);
   }
 
+  // Scaled balance namespaces (res:, dim:, rct:, config:alpha:*) store
+  // per-mille register units; getters return LOGICAL values.
   getResBalance(username: string): number {
-    return this.node.getRegister(RES_NAMES.balance(username)) || 0;
+    return fromRegisterUnits(this.node.getRegister(RES_NAMES.balance(username)) || 0);
   }
 
   getDimensionBalance(username: string, dimIndex: number): number {
-    return this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, dimIndex)) || 0;
+    return fromRegisterUnits(this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, dimIndex)) || 0);
   }
 
   getContributionStatus(contributionId: string): 'pending' | 'accepted' | 'rejected' | 'unknown' {
@@ -508,7 +511,7 @@ export class BrowserDao {
   }
 
   getRctBalance(username: string): number {
-    return this.node.getRegister(RCT_NAMES.balance(username)) || 0;
+    return fromRegisterUnits(this.node.getRegister(RCT_NAMES.balance(username)) || 0);
   }
 
   getContributionRound(contributionId: string): number {
@@ -520,8 +523,10 @@ export class BrowserDao {
     const mask = this.node.getRegister(TOKEN_NAMES.proposalSalient(proposalId)) || 0;
     return derivedVoteBalance(
       mask,
-      (i) => this.node.getRegister(CALIBRATIONS.alpha(i)) || 1,
-      (i) => this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, i)) || 0,
+      // Alpha weights and dimension tallies are stored in per-mille register
+      // units — divide before the balance math (mirrors the vote handler).
+      (i) => fromRegisterUnits(this.node.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1,
+      (i) => fromRegisterUnits(this.node.getRegister(CONTRIB_NAMES.dimensionBalance(username, i)) || 0),
       this.node.getRegister(CALIBRATIONS.voteBase()) || 3,
       this.node.getRegister(CALIBRATIONS.voteCap()) || 50
     );

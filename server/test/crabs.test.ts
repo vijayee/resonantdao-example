@@ -1,5 +1,6 @@
 import { KeyPair, Operation } from 'crabs-wasm';
 import { setOperationSignerKeyVersion } from '../../shared/src/crabs-helpers';
+import { HARM_REDUCE_FACTOR, harmFactorFor } from '../../shared/src/contribution';
 import { CONTRIB_NAMES, RES_CONFIG } from '../../shared/src/policies';
 import { DaoNode } from '../src/crabs';
 
@@ -433,6 +434,78 @@ describe('DaoNode', () => {
     }));
     expect(dao.node.getRegister(CONTRIB_NAMES.status('r-appeal-1'))).toBe(1); // accepted
     expect(dao.getVerifierStats('bob')).toEqual({ total: 1, upheld: 0 });
+    expect(dao.getVerifierStats('carol')).toEqual({ total: 1, upheld: 1 });
+  });
+
+  it('harm-adjusted lifecycle through the real wasm node', async () => {
+    const dao = new DaoNode();
+    await dao.init();
+    const kpAlice = await KeyPair.generate();
+    const kpBob = await KeyPair.generate();
+    const kpCarol = await KeyPair.generate();
+    dao.registerMember('alice', kpAlice.publicKeyHex());
+    dao.registerMember('bob', kpBob.publicKeyHex());
+    dao.registerMember('carol', kpCarol.publicKeyHex());
+
+    // Alice submits a C_1 (building) contribution under the v2 schema — the
+    // two-verifier verify step. This test pins the harm path end to end
+    // through the real CRABS node: the verified harm scales the submitter
+    // bounty and the dimension tally, but never the per-check verifier credit.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'submit_contribution', {
+      contributionId: 'r-harm-w1',
+      dims: { '1': 1 },
+      summary: 'built a thing',
+      evidenceRef: { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 },
+      schemaVersion: 'v2',
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-harm-w1'))).toBe(1); // verify step
+
+    // Bob verifies accepted and attests the harm verdict 'reduced' — the
+    // first of the two required checks, so the step does not advance yet.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'bob', kpBob, 'verify_contribution', {
+      contributionId: 'r-harm-w1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'built and matches the claim',
+      harm: 'reduced',
+      priorVerifiers: [],
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-harm-w1'))).toBe(1); // quorum 1/2
+    expect(dao.getResBalance('bob')).toBe(RES_CONFIG.verificationCheckCredit); // 1 completed check x 2
+
+    // Carol completes the all-parties quorum, carrying bob's verdict forward
+    // in priorVerifiers/priorHarm. Strongest-of-wins across the step's checks
+    // keeps 'reduced' effective, so the bounty fires at 12 x 0.5.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'carol', kpCarol, 'verify_contribution', {
+      contributionId: 'r-harm-w1',
+      submitter: 'alice',
+      stepId: 'verify',
+      dims: { '1': 1 },
+      pass: true,
+      reason: 'built and matches the claim',
+      priorHarm: 'reduced',
+      priorVerifiers: ['bob'],
+    }));
+    expect(dao.node.getRegister(CONTRIB_NAMES.step('r-harm-w1'))).toBe(2);
+    // Submitter bounty fired once at final acceptance, scaled by the verified
+    // harm: building 12 x HARM_REDUCE_FACTOR 0.5 = 6.
+    expect(dao.getResBalance('alice')).toBe(RES_CONFIG.buildingBounty * harmFactorFor('reduced'));
+    // Verifier credits are NOT harm-adjusted — the check was still completed.
+    expect(dao.getResBalance('carol')).toBe(RES_CONFIG.verificationCheckCredit); // 1 x 2
+    expect(dao.getDimensionBalance('alice', 1)).toBe(1 * HARM_REDUCE_FACTOR); // match 1 x 0.5
+
+    // Alice settles, attesting both verifiers.
+    dao.executeOperation(await buildSignedMemberOp(dao, 'alice', kpAlice, 'settle_contribution', {
+      contributionId: 'r-harm-w1',
+      submitter: 'alice',
+      reason: 'accepting the two-verifier outcome',
+      verifiers: ['bob', 'carol'],
+    }));
+    // 'reduced' halves the outcome but the work was real: status accepted.
+    expect(dao.getContributionStatus('r-harm-w1')).toBe('accepted');
+    expect(dao.getVerifierStats('bob')).toEqual({ total: 1, upheld: 1 });
     expect(dao.getVerifierStats('carol')).toEqual({ total: 1, upheld: 1 });
   });
 });

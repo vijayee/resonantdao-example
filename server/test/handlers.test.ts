@@ -14,6 +14,7 @@ import {
   makeRemoveMemberHandler,
 } from '../../shared/src/handlers';
 import { ELECTION_NAMES, STATE_NAMES, VOTE_THRESHOLD, runoffId } from '../../shared/src/policies';
+import { REG_SCALE } from '../../shared/src/contribution';
 
 class MockNode {
   orSets = new Set<string>();
@@ -124,13 +125,15 @@ function initUser(state: MockState, username: string, balance: number = 20) {
   // $RES balance is credited only by verified contributions; unit tests
   // simulate that by writing the balance register directly. Only pins
   // remove_member zeroing — quadratic votes no longer read res:.
-  state.setRegister(`res:${username}`, balance);
+  // Per-mille register encoding: res: registers store value × 1000.
+  state.setRegister(`res:${username}`, balance * REG_SCALE);
 }
 
 // Settled contribution tally for one dimension of a submitter — the input
-// that salient-derived vote balances are computed from.
+// that salient-derived vote balances are computed from. Tallies are stored
+// in per-mille register units, so seeding a LOGICAL value scales it.
 function seedTally(state: MockState, username: string, dimIndex: number, value: number) {
-  state.setRegister(`dim:${username}:c${dimIndex}`, value);
+  state.setRegister(`dim:${username}:c${dimIndex}`, value * REG_SCALE);
 }
 
 describe('salient-derived vote balance', () => {

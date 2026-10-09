@@ -1,7 +1,16 @@
 import {
-  DIMENSIONS, DIMENSION_COUNT, HARM_REDUCE_FACTOR, isValidDims, paymentFor, CALIBRATION_VERSION,
+  DIMENSIONS, DIMENSION_COUNT, HARM_REDUCE_FACTOR, REG_SCALE, isValidDims, paymentFor, CALIBRATION_VERSION,
 } from '../../shared/src/contribution';
 import { RES_CONFIG } from '../../shared/src/policies';
+
+// Per-mille register encoding (see the design amendment): fractional-bearing
+// registers (res:/dim:/rct: balances/ tallies, config:alpha:* weights) store
+// Math.round(value × 1000) — mock-state reads divide by 1000 to compare in
+// LOGICAL units, preserving "unset" (undefined) so absence pins keep working.
+function logical(state: MockState, register: string): number | undefined {
+  const value = state.getRegister(register);
+  return value === undefined ? undefined : value / REG_SCALE;
+}
 
 describe('contribution registry', () => {
   it('defines exactly 22 dimensions indexed C_0..C_21', () => {
@@ -334,8 +343,8 @@ describe('verify_contribution handler (schema-driven)', () => {
     setupSubmitted(state, node);
     const verify = makeVerifyContributionHandler(node);
     expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ pass: false, reason: 'no record link' })))).toBe(0);
-    expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
-    expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(0);
+    expect(logical(state, RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
+    expect(logical(state, RES_NAMES.balance('alice'))).toBe(0);
     expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(2);
     expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-1', 'verify'))).toBe(1);
   });
@@ -350,20 +359,20 @@ describe('verify_contribution handler (schema-driven)', () => {
     // no submitter payout, lifecycle does not advance.
     expect(run(verify, state, makeOp('verify_contribution', 'bob',
       verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '9': 1 }, reason: 'real artifact' })))).toBe(0);
-    expect(state.getRegister(RES_NAMES.balance('alice')) ?? 0).toBe(0);
+    expect(logical(state, RES_NAMES.balance('alice')) ?? -999).toBe(0);
     expect(state.getRegister(CONTRIB_NAMES.step('c-multi'))).toBe(1);
     // Second completed check (carol): final requirement completes — payout,
     // tallies, and step advance fire exactly once, here.
     expect(run(verify, state, makeOp('verify_contribution', 'carol',
       verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '9': 1 }, reason: 'also real' })))).toBe(0);
     const expected = RES_CONFIG.buildingBounty * 1 + RES_CONFIG.recordingBaseCredit * 0.5;
-    expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(expected);
-    expect(state.getRegister('dim:alice:c1')).toBe(1);
-    expect(state.getRegister('dim:alice:c2')).toBe(0.5);
-    expect(state.getRegister('dim:alice:c9')).toBeUndefined(); // classification-only: never registered
+    expect(logical(state, RES_NAMES.balance('alice'))).toBe(expected);
+    expect(logical(state, 'dim:alice:c1')).toBe(1);
+    expect(logical(state, 'dim:alice:c2')).toBe(0.5);
+    expect(logical(state, 'dim:alice:c9')).toBeUndefined(); // classification-only: never registered
     expect(state.getRegister(CONTRIB_NAMES.step('c-multi'))).toBe(2); // advanced to settle
     expect(state.getRegister(CONTRIB_NAMES.status('c-multi'))).toBe(0);
-    expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
+    expect(logical(state, RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
   });
 
   it('default schema: pass at the terminal verify step finalizes as accepted', () => {
@@ -374,8 +383,8 @@ describe('verify_contribution handler (schema-driven)', () => {
     expect(run(verify, state, makeOp('verify_contribution', 'bob',
       verifyOp({ contributionId: 'c-term', dims: { '9': 1 } })))).toBe(0);
     expect(state.getRegister(CONTRIB_NAMES.status('c-term'))).toBe(1);
-    expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(0);
-    expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
+    expect(logical(state, RES_NAMES.balance('alice'))).toBe(0);
+    expect(logical(state, RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
   });
 
   it('rejects self-verification', () => {
@@ -393,10 +402,10 @@ describe('verify_contribution handler (schema-driven)', () => {
     setupSubmitted(state, node, 'alice', 'c-twice', { '9': 1 });
     const verify = makeVerifyContributionHandler(node);
     expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 } })))).toBe(0);
-    const bobBalance = state.getRegister(RES_NAMES.balance('bob'));
+    const bobBalance = logical(state, RES_NAMES.balance('bob'));
     expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 } })))).toBe(-1);
     expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 }, pass: false })))).toBe(-1);
-    expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(bobBalance);
+    expect(logical(state, RES_NAMES.balance('bob'))).toBe(bobBalance);
   });
 
   it('rejects wrong stepId, unknown contribution, unknown submitter, invalid dims', () => {
@@ -439,15 +448,15 @@ describe('verify_contribution handler (schema-driven)', () => {
       const verify = makeVerifyContributionHandler(node);
       // C_2 single verify: bob completes it once.
       expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-recip1' })))).toBe(0);
-      const bobBalanceAfterFirst = state.getRegister(RES_NAMES.balance('bob'));
+      const bobBalanceAfterFirst = logical(state, RES_NAMES.balance('bob'));
       expect(bobBalanceAfterFirst).toBe(RES_CONFIG.verificationCheckCredit);
       // A new contribution from alice: bob is blocked by the reciprocity set —
       // -1 fires BEFORE the per-check credit. (setupSubmitted resets the demo
       // balance registers, so compare against the fresh baseline.)
       setupSubmitted(state, node, 'alice', 'c-recip2', { '2': 1 });
-      const bobBalanceBeforeBlocked = state.getRegister(RES_NAMES.balance('bob'));
+      const bobBalanceBeforeBlocked = logical(state, RES_NAMES.balance('bob'));
       expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-recip2' })))).toBe(-1);
-      expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(bobBalanceBeforeBlocked); // unchanged: no credit
+      expect(logical(state, RES_NAMES.balance('bob'))).toBe(bobBalanceBeforeBlocked); // unchanged: no credit
       expect(state.getRegister(CHECK_NAMES.total('bob'))).toBe(1); // blocked check not counted
       expect(state.setContains(RECIP_NAMES.verifiedBy('alice'), 'bob')).toBe(true); // pin the guard set
     });
@@ -478,7 +487,7 @@ describe('verify_contribution handler (schema-driven)', () => {
       const verify = makeVerifyContributionHandler(node);
       // Client attests bob already verified this completion → refusal for bob.
       expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-pv1', priorVerifiers: ['bob'] })))).toBe(-1);
-      expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(0); // no credit on refusal
+      expect(logical(state, RES_NAMES.balance('bob'))).toBe(0); // no credit on refusal
       // carol is NOT listed → verification proceeds.
       expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-pv1', priorVerifiers: ['bob'] })))).toBe(0);
       expect(state.getRegister(CONTRIB_NAMES.step('c-pv1'))).toBe(2); // single C_2 verify completed
@@ -521,10 +530,10 @@ describe('verify_contribution handler (schema-driven)', () => {
       expect(run(verify, state, makeOp('verify_contribution', 'carol',
         verifyOp({ contributionId: 'c-harm1', dims: { '1': 1, '2': 0.5 }, priorHarm: 'reduced' })))).toBe(0);
       const expected = (RES_CONFIG.buildingBounty * 1 + RES_CONFIG.recordingBaseCredit * 0.5) * HARM_REDUCE_FACTOR;
-      expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(expected);
-      expect(state.getRegister('dim:alice:c1')).toBe(0.5);      // delta × 0.5
-      expect(state.getRegister('dim:alice:c2')).toBe(0.25);     // 0.5 × 0.5
-      expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit); // verifier credit NOT adjusted
+      expect(logical(state, RES_NAMES.balance('alice'))).toBe(expected);
+      expect(logical(state, 'dim:alice:c1')).toBe(0.5);      // delta × 0.5
+      expect(logical(state, 'dim:alice:c2')).toBe(0.25);     // 0.5 × 0.5
+      expect(logical(state, RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit); // verifier credit NOT adjusted
       const records = state.allSetElements(CONTRIB_NAMES.explanations('c-harm1'));
       const finalRecord = JSON.parse(records.find((e: string) => e.includes('"payments"') && !e.includes('"payments":{}')) ?? '{}');
       expect(finalRecord.harm).toBe('reduced');
@@ -537,15 +546,15 @@ describe('verify_contribution handler (schema-driven)', () => {
       const verify = makeVerifyContributionHandler(node);
       expect(run(verify, state, makeOp('verify_contribution', 'bob',
         verifyOp({ contributionId: 'c-harm2', harm: 'voided' })))).toBe(0);
-      expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(0);
-      expect(state.getRegister('dim:alice:c2')).toBeUndefined(); // no tally register created for a voided delta
+      expect(logical(state, RES_NAMES.balance('alice'))).toBe(0);
+      expect(logical(state, 'dim:alice:c2')).toBeUndefined(); // no tally register created for a voided delta
       // C_2's verify step is not terminal (v2: submit→verify→settle) — the
       // lifecycle advances to settle; settlement then finalizes as accepted.
       expect(state.getRegister(CONTRIB_NAMES.step('c-harm2'))).toBe(2);
       expect(run(makeSettleContributionHandler(node), state, makeOp('settle_contribution', 'alice',
         settleOp({ contributionId: 'c-harm2' })))).toBe(0);
       expect(state.getRegister(CONTRIB_NAMES.status('c-harm2'))).toBe(1);
-      expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
+      expect(logical(state, RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
     });
 
     it('invalid harm strings are rejected outright', () => {
@@ -568,8 +577,8 @@ describe('verify_contribution handler (schema-driven)', () => {
         verifyOp({ contributionId: 'c-harm4', dims: { '1': 1 }, harm: 'reduced' })))).toBe(0);
       expect(run(verify, state, makeOp('verify_contribution', 'carol',
         verifyOp({ contributionId: 'c-harm4', dims: { '1': 1 }, harm: 'reduced', priorHarm: 'voided' })))).toBe(0);
-      expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(0);
-      expect(state.getRegister('dim:alice:c1')).toBeUndefined();
+      expect(logical(state, RES_NAMES.balance('alice'))).toBe(0);
+      expect(logical(state, 'dim:alice:c1')).toBeUndefined();
       expect(state.getRegister(CONTRIB_NAMES.step('c-harm4'))).toBe(2); // still accepted lifecycle
       // Voided ⇒ empty payments map, so locate the completing verifier's record directly.
       const records = state.allSetElements(CONTRIB_NAMES.explanations('c-harm4'));
@@ -691,8 +700,9 @@ describe('calibration ops', () => {
     expect(run(handler, state, makeOp('set_rct_alpha', 'cust1', {
       weights: { '1': 2, '2': 0.5 }, version: 'alpha-2',
     } as SetRctAlphaPayload))).toBe(0);
-    expect(state.getRegister(CALIBRATIONS.alpha(1))).toBe(2);
-    expect(state.getRegister(CALIBRATIONS.alpha(2))).toBe(0.5);
+    // Alpha weights store per-mille register units — compare in logical units.
+    expect(logical(state, CALIBRATIONS.alpha(1))).toBe(2);
+    expect(logical(state, CALIBRATIONS.alpha(2))).toBe(0.5);
     expect(state.getRegister(CALIBRATIONS.alphaVersion())).toBe(1); // first write bumps 0 -> 1
   });
 
@@ -850,7 +860,9 @@ describe('complete_round', () => {
   it('publishes cumulative RCT totals and advances the round', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    try { node.addRegister(CALIBRATIONS.alpha(1), 2); } catch { /* wiring */ }
+    // Alpha weights store per-mille register units — seed the SCALED value
+    // (logical alpha 2 = 2000 register units), which the handler reads /1000.
+    try { node.addRegister(CALIBRATIONS.alpha(1), 2 * REG_SCALE); } catch { /* wiring */ }
     setupSpineReady(node, state);
 
     const complete = makeCompleteRoundHandler(node);
@@ -859,7 +871,7 @@ describe('complete_round', () => {
     } as CompleteRoundPayload))).toBe(0);
     expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(3);
     expect(state.getRegister(ROUND_NAMES.current())).toBe(2);
-    expect(state.getRegister(RCT_NAMES.balance('alice'))).toBe(2 * 1); // alpha(1)=2 × match 1
+    expect(logical(state, RCT_NAMES.balance('alice'))).toBe(2 * 1); // alpha(1)=2 × match 1
     const records = state.allSetElements(ROUND_NAMES.explanations(1));
     const publishRecord = JSON.parse(records.find((e) => e.includes('"stepId":"complete"')) ?? '{}');
     expect(publishRecord.stepId).toBe('complete');
@@ -935,7 +947,7 @@ describe('complete_round harm mirror', () => {
       entries: [{ contributionId: 'r-harm1', submitter: 'alice', dims: { '1': 1 }, harm: 'reduced' }],
     } as CompleteRoundPayload))).toBe(0);
     // alpha default 1 × match 1 × 0.5
-    expect(state.getRegister(RCT_NAMES.balance('alice'))).toBe(0.5);
+    expect(logical(state, RCT_NAMES.balance('alice'))).toBe(0.5);
   });
 
   it('voided entries contribute 0 and are still valid entries', () => {
@@ -946,7 +958,7 @@ describe('complete_round harm mirror', () => {
     expect(run(complete, state, makeOp('complete_round', 'closer2', {
       entries: [{ contributionId: 'r-harm2', submitter: 'alice', dims: { '1': 1 }, harm: 'voided' }],
     } as CompleteRoundPayload))).toBe(0);
-    expect(state.getRegister(RCT_NAMES.balance('alice'))).toBe(0);
+    expect(logical(state, RCT_NAMES.balance('alice'))).toBe(0);
   });
 });
 

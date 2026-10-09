@@ -10,8 +10,8 @@ import {
 } from './round';
 import {
   CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, KNOWN_SCHEMA_VERSIONS, dimensionDeltaFor,
-  harmFactorFor, isValidDims, isValidHarm, paymentFor, schemaForRecord, strongestHarm,
-  validateEvidenceRef,
+  fromRegisterUnits, harmFactorFor, isValidDims, isValidHarm, paymentFor, schemaForRecord,
+  strongestHarm, toRegisterUnits, validateEvidenceRef,
   STATUS_APPEALED, STATUS_PENDING, STATUS_REJECTED,
 } from './contribution';
 
@@ -171,10 +171,11 @@ export function makeVerifyContributionHandler(
     }
 
     // Per-check credit for the ACTOR on every completed verification,
-    // pass or reject (C_18 Moon).
+    // pass or reject (C_18 Moon). RES balances are stored in per-mille
+    // register units (toRegisterUnits); reads divide by REG_SCALE.
     const actorBalance = RES_NAMES.balance(op.signerId);
     try { node.addRegister(actorBalance, 0); } catch (err) { /* ignore duplicate */ }
-    state.setRegister(actorBalance, (state.getRegister(actorBalance) || 0) + RES_CONFIG.verificationCheckCredit, op.signerId);
+    state.setRegister(actorBalance, (state.getRegister(actorBalance) || 0) + toRegisterUnits(RES_CONFIG.verificationCheckCredit), op.signerId);
 
     // Verifier-accuracy total: one increment per completed check (pass or
     // reject), and the reciprocity record that this verifier checked this
@@ -243,7 +244,9 @@ export function makeVerifyContributionHandler(
       if (submitterAmount > 0 && payload.submitter !== op.signerId) {
         const submitterBalance = RES_NAMES.balance(payload.submitter);
         try { node.addRegister(submitterBalance, 0); } catch (err) { /* ignore duplicate */ }
-        state.setRegister(submitterBalance, (state.getRegister(submitterBalance) || 0) + submitterAmount, op.signerId);
+        // The bounty amount and the > 0 guard live in LOGICAL units; the
+        // register keeps per-mille units (delta rounded once per write).
+        state.setRegister(submitterBalance, (state.getRegister(submitterBalance) || 0) + toRegisterUnits(submitterAmount), op.signerId);
         payments[payload.submitter] = submitterAmount;
       }
 
@@ -263,7 +266,10 @@ export function makeVerifyContributionHandler(
         }
         const tallyReg = CONTRIB_NAMES.dimensionBalance(payload.submitter, dimIndex);
         try { node.addRegister(tallyReg, 0); } catch (err) { /* ignore duplicate */ }
-        state.setRegister(tallyReg, (state.getRegister(tallyReg) || 0) + delta, op.signerId);
+        // Tallies accumulate in per-mille register units: the logical delta is
+        // rounded once and added to the scaled total (no read-scale-write
+        // cycle, so no rounding drift across rounds).
+        state.setRegister(tallyReg, (state.getRegister(tallyReg) || 0) + toRegisterUnits(delta), op.signerId);
       }
 
       // Step advance: at a terminal step the contribution is accepted.
@@ -537,8 +543,11 @@ export function makeVoteHandler(
     if (proposalType === 2) {
       const balance = derivedVoteBalance(
         state.getRegister(TOKEN_NAMES.proposalSalient(payload.proposalId)) || 0,
-        (i) => state.getRegister(CALIBRATIONS.alpha(i)) || 1,
-        (i) => state.getRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, i)) || 0,
+        // Alpha weights and dimension tallies are stored in per-mille register
+        // units — divide before the JS-float balance math. Alpha is sparse and
+        // fractional (0, 10]; an unset/zero register keeps the default 1.
+        (i) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1,
+        (i) => fromRegisterUnits(state.getRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, i)) || 0),
         state.getRegister(CALIBRATIONS.voteBase()) || 3,
         state.getRegister(CALIBRATIONS.voteCap()) || 50
       );
@@ -944,8 +953,11 @@ export function makeSetRctAlphaHandler(
     }
     const newAlphaVersion = (state.getRegister(CALIBRATIONS.alphaVersion()) || 0) + 1;
     state.setRegister(CALIBRATIONS.alphaVersion(), newAlphaVersion, op.signerId);
+    // Alphas are stored as per-mille register units (a real CRABS register
+    // cannot hold 0.5); readers divide by REG_SCALE. The explanation record
+    // keeps the payload's LOGICAL weights so receipts stay human-readable.
     for (const [key, value] of entries) {
-      state.setRegister(CALIBRATIONS.alpha(Number(key)), value as number, op.signerId);
+      state.setRegister(CALIBRATIONS.alpha(Number(key)), toRegisterUnits(value as number), op.signerId);
     }
 
     // Explanation record (invariant: every decision emits an explanation
@@ -1128,7 +1140,9 @@ export function makeCompleteRoundHandler(
       }
     }
 
-    const alphaFor = (i: number) => state.getRegister(CALIBRATIONS.alpha(i)) || 1;
+    // Alpha weights are stored in per-mille register units — divide before
+    // the aggregation math. Unset/zero register keeps the default weight 1.
+    const alphaFor = (i: number) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1;
     // Harm mirror: each entry's verified verdict scales its dims BEFORE
     // aggregation (reduced = 0.5, voided = 0 — a voided entry contributes
     // nothing per-submitter but still counts toward the record's entryCount),
@@ -1146,9 +1160,13 @@ export function makeCompleteRoundHandler(
     for (const [target, amount] of totals) {
       try { node.addRegister(RCT_NAMES.balance(target), 0); } catch (err) { /* exists */ }
       // Published RCT is CUMULATIVE through this round (tallies are cumulative;
-      // alpha changes are forward-looking — see design doc).
+      // alpha changes are forward-looking — see design doc). RCT totals are
+      // stored in per-mille register units: the logical total is rounded once
+      // and added to the scaled total (no read-scale-write cycle, so no
+      // rounding drift across rounds). The publish record keeps the logical
+      // totals for human-readable receipts.
       const prev = state.getRegister(RCT_NAMES.balance(target)) || 0;
-      state.setRegister(RCT_NAMES.balance(target), prev + amount, op.signerId);
+      state.setRegister(RCT_NAMES.balance(target), prev + toRegisterUnits(amount), op.signerId);
     }
 
     try { node.addORSet(ROUND_NAMES.explanations(round)); } catch (err) { /* wired at init; lazy here */ }
