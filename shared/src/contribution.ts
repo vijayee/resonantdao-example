@@ -261,3 +261,31 @@ export function stepPaymentsFor(
   }
   return out;
 }
+
+// Harm verdicts ride in the verify payload (page: "verified harm reduces/voids
+// the outcome beforehand"). 'reduced' halves the outcome; 'voided' zeroes it —
+// status still accepted (the work was real), zero payment/zero tally.
+export type HarmVerdict = 'none' | 'reduced' | 'voided';
+
+export const HARM_REDUCE_FACTOR = 0.5 as const;
+
+export function isValidHarm(harm: unknown): harm is HarmVerdict | undefined {
+  return harm === undefined || harm === 'none' || harm === 'reduced' || harm === 'voided';
+}
+
+export function harmFactorFor(harm: HarmVerdict | undefined): number {
+  if (!isValidHarm(harm)) throw new Error(`invalid harm verdict: ${harm as string}`);
+  if (harm === 'reduced') return HARM_REDUCE_FACTOR;
+  if (harm === 'voided') return 0;
+  return 1; // 'none' or undefined (absent = none)
+}
+
+// Conservative two-verifier rule: a harm verdict survives only as the
+// strongest of the step's verdicts (voided > reduced > none).
+export function strongestHarm(a: HarmVerdict | undefined, b: HarmVerdict | undefined): HarmVerdict {
+  if (!isValidHarm(a) || !isValidHarm(b)) throw new Error('invalid harm verdict');
+  const rank = { voided: 2, reduced: 1, none: 0 } as const;
+  const first = a ?? 'none';
+  const second = b ?? 'none';
+  return rank[first] >= rank[second] ? first : second;
+}

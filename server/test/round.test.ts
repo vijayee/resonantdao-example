@@ -5,6 +5,7 @@ import {
   CALIBRATION_VERSIONS, CALIBRATION_VERSION_NUMBERS,
   isValidRoundEntry, AGGREGATE_ENTRY_LIMIT,
 } from '../../shared/src/round';
+import { HARM_REDUCE_FACTOR, harmFactorFor, strongestHarm, type HarmVerdict } from '../../shared/src/contribution';
 
 describe('round registry', () => {
   it('stage constants are 0..3', () => {
@@ -75,5 +76,35 @@ describe('round registry', () => {
       expect(isValidRoundEntry(null)).toBe(false);
       expect(AGGREGATE_ENTRY_LIMIT).toBe(200);
     });
+  });
+});
+
+describe('harm adjustments (constants + helpers)', () => {
+  it('reduced factor is the 0.5 pilot constant', () => {
+    expect(HARM_REDUCE_FACTOR).toBe(0.5);
+    expect(harmFactorFor(undefined)).toBe(1);
+    expect(harmFactorFor('none')).toBe(1);
+    expect(harmFactorFor('reduced')).toBe(0.5);
+    expect(harmFactorFor('voided')).toBe(0);
+    expect(() => harmFactorFor('kind-of' as unknown as HarmVerdict)).toThrow(); // invalid verdicts rejected at validation, never defaulted
+  });
+
+  it('strongest-wins: voided > reduced > none', () => {
+    expect(strongestHarm(undefined, undefined)).toBe('none');
+    expect(strongestHarm('reduced', undefined)).toBe('reduced');
+    expect(strongestHarm(undefined, 'reduced')).toBe('reduced');
+    expect(strongestHarm('reduced', 'voided')).toBe('voided');
+    expect(strongestHarm('voided', 'reduced')).toBe('voided');
+    expect(strongestHarm('none', 'none')).toBe('none');
+  });
+});
+
+describe('RoundEntry harm validation', () => {
+  it('accepts entries with valid harm; rejects invalid or wrong-typed harm', () => {
+    expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: { '1': 1 }, harm: 'reduced' })).toBe(true);
+    expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: { '1': 1 }, harm: 'none' })).toBe(true);
+    expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: { '1': 1 }, harm: 'voided' })).toBe(true);
+    expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: { '1': 1 }, harm: 'kind-of' })).toBe(false);
+    expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: { '1': 1 }, harm: 2 })).toBe(false);
   });
 });

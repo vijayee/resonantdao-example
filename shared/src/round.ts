@@ -1,4 +1,4 @@
-import { DIMENSION_COUNT, isValidDims } from './contribution';
+import { DIMENSION_COUNT, isValidDims, isValidHarm, type HarmVerdict } from './contribution';
 
 // Round spine stages (C_10 audit → C_20 reckon → C_21 complete/publish).
 export const STAGE_OPEN = 0 as const;
@@ -20,6 +20,7 @@ export interface RoundEntry {
   contributionId: string;
   submitter: string;
   dims: Record<string, number>;
+  harm?: HarmVerdict;
 }
 
 export function isNonEmptyString(value: unknown): value is string {
@@ -29,7 +30,7 @@ export function isNonEmptyString(value: unknown): value is string {
 export function isValidRoundEntry(entry: unknown): entry is RoundEntry {
   if (!entry || typeof entry !== 'object') return false;
   const e = entry as Partial<RoundEntry>;
-  return isNonEmptyString(e.contributionId) && isNonEmptyString(e.submitter) && isValidDims(e.dims);
+  return isNonEmptyString(e.contributionId) && isNonEmptyString(e.submitter) && isValidDims(e.dims) && isValidHarm(e.harm);
 }
 
 export function encodeSalientMask(dims: number[]): number {
