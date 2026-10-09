@@ -1129,7 +1129,20 @@ export function makeCompleteRoundHandler(
     }
 
     const alphaFor = (i: number) => state.getRegister(CALIBRATIONS.alpha(i)) || 1;
-    const totals = roundRctTotals(payload.entries, alphaFor);
+    // Harm mirror: each entry's verified verdict scales its dims BEFORE
+    // aggregation (reduced = 0.5, voided = 0 — a voided entry contributes
+    // nothing per-submitter but still counts toward the record's entryCount),
+    // so the published RCT matches the adjusted tallies the verify handler
+    // wrote. roundRctTotals sums per submitter, so the factor must be applied
+    // per ENTRY here — not after the sum. Entry harm was already gated by
+    // isValidRoundEntry above.
+    const harmAdjusted = payload.entries.map((entry) => {
+      const factor = harmFactorFor(entry.harm ?? 'none');
+      const dims: Record<string, number> = {};
+      for (const [k, v] of Object.entries(entry.dims)) dims[k] = v * factor;
+      return { contributionId: entry.contributionId, submitter: entry.submitter, dims };
+    });
+    const totals = roundRctTotals(harmAdjusted, alphaFor);
     for (const [target, amount] of totals) {
       try { node.addRegister(RCT_NAMES.balance(target), 0); } catch (err) { /* exists */ }
       // Published RCT is CUMULATIVE through this round (tallies are cumulative;

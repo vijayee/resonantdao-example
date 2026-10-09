@@ -823,21 +823,21 @@ import { makeCompleteRoundHandler } from '../../shared/src/handlers';
 import { CompleteRoundPayload } from '../../shared/src/types';
 import { RCT_NAMES } from '../../shared/src/policies';
 
-// Drives the full spine: r1-a submitted by alice, verified by bob AND carol
-// (v2 two-verifier C_1 review), settled, then audit -> reckon leaves round 1
-// at STAGE_RECKONED ready for publish.
-function setupSpineReady(node: MockNode, state: MockState) {
+// Drives the full spine: the contribution (default 'r1-a') submitted by alice,
+// verified by bob AND carol (v2 two-verifier C_1 review), settled, then
+// audit -> reckon leaves round 1 at STAGE_RECKONED ready for publish.
+function setupSpineReady(node: MockNode, state: MockState, id = 'r1-a') {
   setupMembers(state, 'alice', 'bob', 'carol', 'closer', 'closer2');
-  setupSubmitted(state, node, 'alice', 'r1-a', { '1': 1 });
+  setupSubmitted(state, node, 'alice', id, { '1': 1 });
   const verify = makeVerifyContributionHandler(node);
   expect(run(verify, state, makeOp('verify_contribution', 'bob',
-    verifyOp({ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 }, pass: true, reason: 'ok' })))).toBe(0);
+    verifyOp({ contributionId: id, submitter: 'alice', dims: { '1': 1 }, pass: true, reason: 'ok' })))).toBe(0);
   expect(run(verify, state, makeOp('verify_contribution', 'carol',
-    verifyOp({ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 }, pass: true, reason: 'ok too' })))).toBe(0);
+    verifyOp({ contributionId: id, submitter: 'alice', dims: { '1': 1 }, pass: true, reason: 'ok too' })))).toBe(0);
   // settle alice's contribution to exit the 3-step schema cleanly
   const settle = makeSettleContributionHandler(node);
   expect(run(settle, state, makeOp('settle_contribution', 'alice',
-    { contributionId: 'r1-a', submitter: 'alice', reason: 'done' } as SettleContributionPayload))).toBe(0);
+    { contributionId: id, submitter: 'alice', reason: 'done' } as SettleContributionPayload))).toBe(0);
 
   try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring */ }
   const audit = makeAuditRoundHandler(node, { getTimeMs: () => 0 });
@@ -919,6 +919,34 @@ describe('complete_round', () => {
     expect(run(complete, state, makeOp('complete_round', 'closer2', {
       entries: [],
     } as CompleteRoundPayload))).toBe(-1);
+  });
+});
+
+// complete_round mirrors the verified harm: entries scale their dims by the
+// harm factor BEFORE aggregation, so the published RCT matches the adjusted
+// balances/tallies the verify handler wrote.
+describe('complete_round harm mirror', () => {
+  it('reduced entries scale the RCT total by the factor', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSpineReady(node, state, 'r-harm1');
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r-harm1', submitter: 'alice', dims: { '1': 1 }, harm: 'reduced' }],
+    } as CompleteRoundPayload))).toBe(0);
+    // alpha default 1 × match 1 × 0.5
+    expect(state.getRegister(RCT_NAMES.balance('alice'))).toBe(0.5);
+  });
+
+  it('voided entries contribute 0 and are still valid entries', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSpineReady(node, state, 'r-harm2');
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r-harm2', submitter: 'alice', dims: { '1': 1 }, harm: 'voided' }],
+    } as CompleteRoundPayload))).toBe(0);
+    expect(state.getRegister(RCT_NAMES.balance('alice'))).toBe(0);
   });
 });
 
