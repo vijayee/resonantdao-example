@@ -444,4 +444,6 @@ outcome rules instead of timed accrual:
   outcome); two-verifier flows use strongest-wins via the prior-check verdict
   (payload field `priorHarm`); `complete_round` mirrors the factor so
   published RCT matches adjusted tallies. Retroactive harm is inexpressible
+  Prior-check verdicts (`priorHarm`) carry through post-appeal
+  re-verifications conservatively (a stale harm persists — harm-preserving by design).
   (balances never go negative) — the page's pre-payment rule stands.

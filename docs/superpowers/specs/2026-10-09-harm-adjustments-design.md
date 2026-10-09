@@ -62,6 +62,8 @@ Implement the delta formula's last missing term: verified harm shrinks or voids 
 
 Real CRABS registers are integer-only (BigInt backing: `setRegister(0.5)` throws `RangeError`); mocks accept floats — the fractional tally/RCT/RES writes this design produces were never real-wasm-exercised until the harm pin test. The page's spec REQUIRES fractional match weights (worked example: Priestess 0.20, Empress 0.50, Hierophant 0.30), so fractions are not negotiable. **Resolution: per-mille integer encoding — all fractional-bearing registers (RES balances, dimension tallies, published RCT, and — execution finding — `config:alpha:*`, whose validated range includes 0.5) store `Math.round(value × 1000)`; getters, handler-side reads (vote gating's tally and alpha input, aggregation accumulation), and test assertions divide by 1000. Vote base/cap, versions, counters, and status/step/state registers stay unscaled. Deterministic (Math.round on register-derived floats; identical on every replica; accumulations stay in register units to avoid rounding-drift cycles). Vote gating never writes registers — only reads — so comparisons stay JS-float.
 
+## Scope / deferred
+
 - Retroactive-harm adjustment (flag_harm post-acceptance): inexpressible (no negative balances) — the page's pre-payment rule stands.
 - Custodian-tunable harm factor: deferred (fixed 0.5 pilot).
 - Harm-based penalties on the harmer (C_15 Devil's penalty rails), harm-appeal dispute flow (C_8/C_20), accuracy-vs-chance (C_18 rotation): all deferred.
