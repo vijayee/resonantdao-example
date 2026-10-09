@@ -1,4 +1,4 @@
-import { EvidenceRef } from './contribution';
+import { EvidenceRef, HarmVerdict } from './contribution';
 import { RoundEntry } from './round';
 
 export const DAO_NAME = 'resonant-dao-example';
@@ -103,6 +103,12 @@ export interface VerifyContributionPayload {
   // signer when they appear in this list — the deterministic all-parties
   // distinct-actor rule CRABS cannot express handler-side on its own.
   priorVerifiers?: string[];
+  // Harm verdicts ride in payload bytes (same PoC trust class as
+  // dims/submitter; design: docs/superpowers/specs/2026-10-09-harm-adjustments-design.md).
+  // 'reduced' halves the submitter outcome; 'voided' zeroes it; verifiers'
+  // per-check credit is never adjusted.
+  harm?: HarmVerdict;      // this check's harm verdict (absent = none)
+  priorHarm?: HarmVerdict; // client-attested verdict of the earlier check in this step (all-parties flows)
 }
 
 export interface SettleContributionPayload {

@@ -1,5 +1,5 @@
 import {
-  DIMENSIONS, DIMENSION_COUNT, isValidDims, paymentFor, CALIBRATION_VERSION,
+  DIMENSIONS, DIMENSION_COUNT, HARM_REDUCE_FACTOR, isValidDims, paymentFor, CALIBRATION_VERSION,
 } from '../../shared/src/contribution';
 import { RES_CONFIG } from '../../shared/src/policies';
 
@@ -506,6 +506,76 @@ describe('verify_contribution handler (schema-driven)', () => {
       expect(run(verify, state, makeOp('verify_contribution', 'bob',
         verifyOp({ contributionId: 'c-acc-rej', pass: false, reason: 'no record link' })))).toBe(0);
       expect(state.getRegister(CHECK_NAMES.total('bob'))).toBe(1);
+    });
+  });
+
+  describe('verify harm adjustments', () => {
+    it('reduced halves the bounty and the tally deltas', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-harm1', { '1': 1, '2': 0.5 });
+      setupMembers(state, 'carol'); // v2: C_1 needs a second distinct verifier
+      const verify = makeVerifyContributionHandler(node);
+      expect(run(verify, state, makeOp('verify_contribution', 'bob',
+        verifyOp({ contributionId: 'c-harm1', dims: { '1': 1, '2': 0.5 }, harm: 'reduced' })))).toBe(0);
+      expect(run(verify, state, makeOp('verify_contribution', 'carol',
+        verifyOp({ contributionId: 'c-harm1', dims: { '1': 1, '2': 0.5 }, priorHarm: 'reduced' })))).toBe(0);
+      const expected = (RES_CONFIG.buildingBounty * 1 + RES_CONFIG.recordingBaseCredit * 0.5) * HARM_REDUCE_FACTOR;
+      expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(expected);
+      expect(state.getRegister('dim:alice:c1')).toBe(0.5);      // delta × 0.5
+      expect(state.getRegister('dim:alice:c2')).toBe(0.25);     // 0.5 × 0.5
+      expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit); // verifier credit NOT adjusted
+      const records = state.allSetElements(CONTRIB_NAMES.explanations('c-harm1'));
+      const finalRecord = JSON.parse(records.find((e: string) => e.includes('"payments"') && !e.includes('"payments":{}')) ?? '{}');
+      expect(finalRecord.harm).toBe('reduced');
+    });
+
+    it('voided zeroes payment and tally; status still accepted', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-harm2', { '2': 1 });
+      const verify = makeVerifyContributionHandler(node);
+      expect(run(verify, state, makeOp('verify_contribution', 'bob',
+        verifyOp({ contributionId: 'c-harm2', harm: 'voided' })))).toBe(0);
+      expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(0);
+      expect(state.getRegister('dim:alice:c2')).toBeUndefined(); // no tally register created for a voided delta
+      // C_2's verify step is not terminal (v2: submit→verify→settle) — the
+      // lifecycle advances to settle; settlement then finalizes as accepted.
+      expect(state.getRegister(CONTRIB_NAMES.step('c-harm2'))).toBe(2);
+      expect(run(makeSettleContributionHandler(node), state, makeOp('settle_contribution', 'alice',
+        settleOp({ contributionId: 'c-harm2' })))).toBe(0);
+      expect(state.getRegister(CONTRIB_NAMES.status('c-harm2'))).toBe(1);
+      expect(state.getRegister(RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
+    });
+
+    it('invalid harm strings are rejected outright', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-harm3', { '2': 1 });
+      const verify = makeVerifyContributionHandler(node);
+      expect(run(verify, state, makeOp('verify_contribution', 'bob',
+        verifyOp({ contributionId: 'c-harm3', harm: 'kind-of' as never })))).toBe(-1);
+      expect(state.getRegister(CONTRIB_NAMES.status('c-harm3'))).toBe(0); // untouched
+    });
+
+    it('strongest-wins across checks: priorHarm voided beats the current reduced', () => {
+      const node = new MockNode();
+      const state = new MockState(node);
+      setupSubmitted(state, node, 'alice', 'c-harm4', { '1': 1 });
+      setupMembers(state, 'carol');
+      const verify = makeVerifyContributionHandler(node);
+      expect(run(verify, state, makeOp('verify_contribution', 'bob',
+        verifyOp({ contributionId: 'c-harm4', dims: { '1': 1 }, harm: 'reduced' })))).toBe(0);
+      expect(run(verify, state, makeOp('verify_contribution', 'carol',
+        verifyOp({ contributionId: 'c-harm4', dims: { '1': 1 }, harm: 'reduced', priorHarm: 'voided' })))).toBe(0);
+      expect(state.getRegister(RES_NAMES.balance('alice'))).toBe(0);
+      expect(state.getRegister('dim:alice:c1')).toBeUndefined();
+      expect(state.getRegister(CONTRIB_NAMES.step('c-harm4'))).toBe(2); // still accepted lifecycle
+      // Voided ⇒ empty payments map, so locate the completing verifier's record directly.
+      const records = state.allSetElements(CONTRIB_NAMES.explanations('c-harm4'));
+      const finalRecord = records.map((e: string) => JSON.parse(e))
+        .find((r: { verification?: { verifier?: string } }) => r.verification?.verifier === 'carol');
+      expect(finalRecord.harm).toBe('voided');
     });
   });
 });

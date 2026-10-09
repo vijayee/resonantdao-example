@@ -10,7 +10,8 @@ import {
 } from './round';
 import {
   CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, KNOWN_SCHEMA_VERSIONS, dimensionDeltaFor,
-  isValidDims, paymentFor, schemaForRecord, validateEvidenceRef,
+  harmFactorFor, isValidDims, isValidHarm, paymentFor, schemaForRecord, strongestHarm,
+  validateEvidenceRef,
   STATUS_APPEALED, STATUS_PENDING, STATUS_REJECTED,
 } from './contribution';
 
@@ -122,6 +123,10 @@ export function makeVerifyContributionHandler(
       // Optional record version: when present it must be known (legacy 'v1'
       // or current 'v2'); omitted defaults to SCHEMA_VERSION below.
       (payload.schemaVersion !== undefined && !KNOWN_SCHEMA_VERSIONS(payload.schemaVersion)) ||
+      // Harm verdicts must be valid if present — invalid strings are rejected
+      // outright, never defaulted silently.
+      !isValidHarm(payload.harm) ||
+      !isValidHarm(payload.priorHarm) ||
       payload.submitter === op.signerId
     ) {
       return -1;
@@ -193,9 +198,16 @@ export function makeVerifyContributionHandler(
     const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
     const verification = { verifier: op.signerId, pass: payload.pass, reason: payload.reason, at: nowMs };
 
+    // Effective harm verdict: strongest-wins across the step's checks
+    // (voided > reduced > none). Computed BEFORE any write so a voided or
+    // reduced outcome never pays partially on a mid-flight error.
+    const effectiveHarm = strongestHarm(payload.priorHarm, payload.harm);
+    const harmFactor = harmFactorFor(effectiveHarm);
+
     if (!payload.pass) {
       // Rejection terminates the lifecycle immediately; dimension tallies are
-      // NOT touched (outcome voided).
+      // NOT touched (outcome voided). No payments apply on this path — the
+      // record carries this check's verdict, not an effective outcome.
       try { node.addRegister(statusReg, 0); } catch (err) { /* ignore duplicate */ }
       state.setRegister(statusReg, 2, op.signerId);
       const record = {
@@ -203,6 +215,7 @@ export function makeVerifyContributionHandler(
         stepId: step.stepId,
         verification,
         payments: {} as Record<string, number>,
+        harm: payload.harm ?? 'none',
         calibrationVersion: CALIBRATION_VERSION,
         schemaVersion: schema.schemaVersion,
       };
@@ -214,7 +227,8 @@ export function makeVerifyContributionHandler(
     if (isFinal) {
       // Submitter outcome bounties: every non-per-check rule fires once at the
       // step's final requirement completion. The actor entry (per-check) was
-      // already paid above.
+      // already paid above. The verified harm scales the outcome (never the
+      // verifier's per-check credit paid above).
       let submitterAmount = 0;
       for (const pay of step.pays ?? []) {
         if (pay.rule === 'per-dims') {
@@ -225,6 +239,7 @@ export function makeVerifyContributionHandler(
           submitterAmount += pay.amount ?? 0;
         }
       }
+      submitterAmount *= harmFactor;
       if (submitterAmount > 0 && payload.submitter !== op.signerId) {
         const submitterBalance = RES_NAMES.balance(payload.submitter);
         try { node.addRegister(submitterBalance, 0); } catch (err) { /* ignore duplicate */ }
@@ -232,17 +247,23 @@ export function makeVerifyContributionHandler(
         payments[payload.submitter] = submitterAmount;
       }
 
-      // Dimension tallies grow by the accept delta — but only for dimensions
-      // with an implemented payment rule; classification-only dims (payment 0)
-      // cannot be distinguished from never-set on the register and are skipped.
+      // Dimension tallies grow by the accept delta scaled by the harm factor —
+      // but only for dimensions with an implemented payment rule;
+      // classification-only dims (payment 0) cannot be distinguished from
+      // never-set on the register and are skipped FIRST, then a voided verdict
+      // (factor 0) is skipped too so the tally register is never created.
       for (const [dimKey, match] of Object.entries(payload.dims)) {
         const dimIndex = Number(dimKey);
         if (paymentFor(dimIndex, match) <= 0) {
           continue;
         }
+        const delta = dimensionDeltaFor(dimIndex, match) * harmFactor;
+        if (delta <= 0) {
+          continue;
+        }
         const tallyReg = CONTRIB_NAMES.dimensionBalance(payload.submitter, dimIndex);
         try { node.addRegister(tallyReg, 0); } catch (err) { /* ignore duplicate */ }
-        state.setRegister(tallyReg, (state.getRegister(tallyReg) || 0) + dimensionDeltaFor(dimIndex, match), op.signerId);
+        state.setRegister(tallyReg, (state.getRegister(tallyReg) || 0) + delta, op.signerId);
       }
 
       // Step advance: at a terminal step the contribution is accepted.
@@ -260,6 +281,7 @@ export function makeVerifyContributionHandler(
       stepId: step.stepId,
       verification,
       payments,
+      harm: effectiveHarm,
       calibrationVersion: CALIBRATION_VERSION,
       schemaVersion: schema.schemaVersion,
     };
