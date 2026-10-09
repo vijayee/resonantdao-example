@@ -58,7 +58,9 @@ Implement the delta formula's last missing term: verified harm shrinks or voids 
 - Hydration: harm-bearing explanation records + adjusted balances survive replay.
 - UI manual (three-choice dialog + receipts) + e2e harm path extension.
 
-## Scope / deferred
+## Execution amendment (2026-10-09): per-mille register encoding
+
+Real CRABS registers are integer-only (BigInt backing: `setRegister(0.5)` throws `RangeError`); mocks accept floats — the fractional tally/RCT/RES writes this design produces were never real-wasm-exercised until the harm pin test. The page's spec REQUIRES fractional match weights (worked example: Priestess 0.20, Empress 0.50, Hierophant 0.30), so fractions are not negotiable. **Resolution: per-mille integer encoding — all fractional-bearing registers (RES balances, dimension tallies, published RCT) store `Math.round(value × 1000)`; getters, handler-side reads (vote gating's tally input, aggregation accumulation), and test assertions divide by 1000. Config registers (alpha, base, cap, versions) stay unscaled. Deterministic (Math.round on register-derived floats; identical on every replica). Vote gating never writes registers — only reads — so comparisons stay JS-float and are untouched beyond the read-side division.
 
 - Retroactive-harm adjustment (flag_harm post-acceptance): inexpressible (no negative balances) — the page's pre-payment rule stands.
 - Custodian-tunable harm factor: deferred (fixed 0.5 pilot).
