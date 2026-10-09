@@ -695,6 +695,11 @@ body {
   font-size: 0.8125rem;
 }
 
+.contribution-card__harm {
+  color: #f59e0b; /* amber — harm receipts (no warn token in this palette) */
+  font-size: 0.8125rem;
+}
+
 .contribution-card__actions {
   display: flex;
   gap: var(--space-2);

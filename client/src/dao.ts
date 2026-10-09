@@ -5,7 +5,7 @@ import {
 } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import { derivedVoteBalance } from '@shared/round';
-import { fromRegisterUnits } from '@shared/contribution';
+import { fromRegisterUnits, strongestHarm, HarmVerdict } from '@shared/contribution';
 import {
   AuditRoundPayload,
   CastBallotPayload,
@@ -57,6 +57,9 @@ export interface ContributionMirrorEntry {
   verdictReason?: string;
   settledBy?: string;
   appealedBy?: string;
+  // This contribution's harm verdict as last verified ('none' when untouched —
+  // legacy verify ops carry no harm field).
+  harm?: HarmVerdict;
 }
 
 export class BrowserDao {
@@ -367,6 +370,11 @@ export class BrowserDao {
         entry.verifiers = [...(entry.verifiers ?? []), op.signerId];
         entry.verdict = payload.pass;
         entry.verdictReason = payload.reason;
+        // Mirror the server's resolved step verdict (strongest-wins, voided >
+        // reduced > none): a completing check with a plain 'yes' still carries
+        // the prior check's harm in payload.priorHarm, so the effective
+        // verdict must survive the overwrite.
+        entry.harm = strongestHarm(payload.priorHarm, payload.harm);
       } else {
         entry.settledBy = op.signerId;
       }

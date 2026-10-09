@@ -12,7 +12,10 @@ import {
   CONTENT_LIMITS,
   DIMENSIONS,
   EvidenceRef,
+  HarmVerdict,
   SCHEMA_VERSION,
+  harmFactorFor,
+  paymentFor,
   schemaForDims,
 } from '@shared/contribution';
 import { RECIP_NAMES, RES_CONFIG } from '@shared/policies';
@@ -929,7 +932,19 @@ export class AppUI {
       this.setStatus('You already verified this submitter’s earlier work — reciprocity bars re-verification.', 'error');
       return;
     }
-    const pass = confirm('Accept this contribution? OK = accept, Cancel = reject.');
+    const choice = prompt('Accept this contribution? Type: yes / yes-harm (reduced) / voided / no. (Cancel = nothing)');
+    if (choice === null) return;
+    const normalized = choice.trim().toLowerCase();
+    let pass = false;
+    let harm: HarmVerdict = 'none';
+    if (normalized === 'yes' || normalized === 'y') { pass = true; }
+    else if (normalized === 'yes-harm' || normalized === 'reduced') { pass = true; harm = 'reduced'; }
+    else if (normalized === 'voided') { pass = true; harm = 'voided'; }
+    else if (normalized === 'no' || normalized === 'n') { pass = false; }
+    else {
+      this.setStatus('Answer with yes / yes-harm / voided / no.', 'error');
+      return;
+    }
     const reason = prompt('Written reason for your verification (recorded permanently):') ?? '';
     if (!reason.trim()) {
       this.setStatus('A written reason is required for every verification.', 'error');
@@ -942,7 +957,9 @@ export class AppUI {
       stepId: 'verify',
       pass,
       reason,
+      harm,
       priorVerifiers: prior,
+      ...(entry.verifiedBy ? { priorHarm: entry.harm ?? ('none' as HarmVerdict) } : {}),
     };
     this.setSubmitting(true);
     try {
@@ -1133,6 +1150,25 @@ export class AppUI {
       card.appendChild(appealBtn);
     }
 
+    // Harm receipt: a reduced/voided verdict adjusts the submitter outcome
+    // before payment — surface the adjusted figure (logical units; both
+    // paymentFor and harmFactorFor are logical, no register scaling here).
+    if (status === 'accepted' && entry.harm && entry.harm !== 'none') {
+      const receipt = document.createElement('div');
+      receipt.className = `contribution-card__harm contribution-card__harm--${entry.harm}`;
+      if (entry.harm === 'voided') {
+        receipt.textContent = 'accepted — outcome voided (harm)';
+      } else {
+        const base = Object.entries(entry.record.dims)
+          .reduce((sum, [dimKey, match]) => sum + paymentFor(Number(dimKey), match), 0);
+        const factor = harmFactorFor(entry.harm);
+        const label = Object.keys(entry.record.dims).includes('1') ? 'bounty' : 'credit';
+        const fmt = (n: number) => String(Number(n.toFixed(6)));
+        receipt.textContent = `accepted — ${label} ${fmt(base)} → ${fmt(base * factor)} (harm reduced)`;
+      }
+      card.appendChild(receipt);
+    }
+
     const currentStep = model.steps[model.currentStepIndex];
     if (currentStep) {
       const actions = document.createElement('div');
@@ -1295,7 +1331,7 @@ export class AppUI {
       const entries = this.dao.getContributions()
         .filter((entry) => this.dao!.getContributionStatus(entry.record.contributionId) === 'accepted'
           && this.dao!.getContributionRound(entry.record.contributionId) === currentRound)
-        .map((entry) => ({ contributionId: entry.record.contributionId, submitter: entry.submitter, dims: entry.record.dims }));
+        .map((entry) => ({ contributionId: entry.record.contributionId, submitter: entry.submitter, dims: entry.record.dims, harm: entry.harm ?? ('none' as const) }));
       if (entries.length === 0) {
         this.setStatus('Nothing settled to aggregate in this round.', 'error');
         return;
