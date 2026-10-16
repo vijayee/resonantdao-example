@@ -18,7 +18,12 @@ let _modulePromise = null;
 
 export function getModule() {
   if (!_modulePromise) {
-    if (typeof window !== 'undefined' && typeof window.createCRABSModule === 'function') {
+    if (typeof window !== 'undefined' && window.createCRABSModuleDev) {
+      // Dev build (injected by main.ts only outside production): the devtools
+      // panel attaches to nodes backed by this module; attaching to a prod
+      // module throws 'not compiled with devtools support'.
+      _modulePromise = window.createCRABSModuleDev();
+    } else if (typeof window !== 'undefined' && window.createCRABSModule) {
       _modulePromise = window.createCRABSModule();
     } else {
       throw new Error('CRABS WASM module not loaded. Ensure /wasm/crabs/crabs.js is included before the app bundle.');

@@ -112,6 +112,16 @@ export const useDaoStore = defineStore('dao', () => {
     dao.value = target;
     username.value = user;
     startClock();
+    // Devtools panel (dev only): the inspector exposes plaintext CRDT state,
+    // so attaching to a production build is forbidden — the prod wasm isn't
+    // compiled with devtools support and the dev scripts are never shipped.
+    if (import.meta.env.DEV && window.CRABSDevtools) {
+      try {
+        window.CRABSDevtools.attach(target.node, { nodeId: target.nodeId });
+      } catch (err) {
+        console.warn('CRABS devtools attach failed (non-fatal):', err);
+      }
+    }
   }
 
   function teardown() {
