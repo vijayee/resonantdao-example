@@ -68,6 +68,20 @@ class MockState implements HandlerState {
   setRegister(name: string, value: number, _nodeId?: string): void {
     this.registers.set(name, value);
   }
+  setRegisterBytes(): void { throw new Error('not implemented'); }
+  getResource(): number { throw new Error('not implemented'); }
+  adjustResource(): void { throw new Error('not implemented'); }
+  getRegisterBytes(): Uint8Array { throw new Error('not implemented'); }
+  getSetSize(name: string): number {
+    return this.sets.has(name) ? this.sets.get(name)!.size : 0;
+  }
+  getSetElements(name: string): string[] {
+    return Array.from(this.sets.get(name) ?? []).sort();
+  }
+  getSetTags(name: string, element: string): string[] {
+    const tag = this.setTags.get(name)?.get(element);
+    return this.setContains(name, element) && tag ? [tag] : [];
+  }
   setAdd(name: string, element: string, tag = element): void {
     this.ensureSet(name);
     this.sets.get(name)!.add(element);
@@ -97,6 +111,7 @@ function makeOp(type: string, signerId: string, payload: object): HandlerOperati
     signerId,
     nodeId: 'browser',
     payload: JSON.stringify(payload),
+    resources: [],
   };
 }
 

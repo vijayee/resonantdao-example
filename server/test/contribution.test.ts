@@ -148,6 +148,7 @@ function makeOp(type: string, signerId: string, payload: object): HandlerOperati
     signerId,
     nodeId: 'browser',
     payload: JSON.stringify(payload),
+    resources: [],
   };
 }
 
