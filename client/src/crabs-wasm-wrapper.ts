@@ -317,6 +317,11 @@ export class Node {
     wrapRc(rc, 'revokeUser');
   }
 
+  // Re-synced with the rebuilt wasm's readback surface (bindings-core.js
+  // getUser): the binary no longer exports the flat
+  // _crabs_wasm_user_temp_attr_name/_value pair — temp attributes walk by
+  // index (…_name_at/…_expires_at_at) — and the machine now surfaces the REAL
+  // key version, status, and public key instead of stubs.
   getUser(userId) {
     const M = this._M;
     const uidPtr = writeString(M, userId);
@@ -329,24 +334,40 @@ export class Node {
     for (let i = 0; i < n; i++) {
       attrs.push({
         value: readString(M, M._crabs_wasm_user_attr_value(userPtr, i)),
-        verifiedBy: '',
+        verifiedBy: readString(M, M._crabs_wasm_user_attr_verified_by(userPtr, i)),
         temporary: false,
       });
     }
-    const tempName = readString(M, M._crabs_wasm_user_temp_attr_name(userPtr));
-    if (tempName) {
+    // Full temp-list walk, mirroring the wasm bindings' map: each entry is
+    // the plain 'name:value' token the C evaluator matches, with 0 = no expiry.
+    const tempAttrCount = M._crabs_wasm_user_temp_attr_count(userPtr) | 0;
+    for (let tempIndex = 0; tempIndex < tempAttrCount; tempIndex++) {
       attrs.push({
-        value: tempName + ':' + readString(M, M._crabs_wasm_user_temp_attr_value(userPtr)),
+        value: readString(M, M._crabs_wasm_user_temp_attr_name_at(userPtr, tempIndex)),
         verifiedBy: 'trigger',
         temporary: true,
+        expiresAt: Number(M._crabs_wasm_user_temp_attr_expires_at_at(userPtr, tempIndex)),
       });
     }
 
+    // The 33-byte legacy ECDSA public key is copied into a scratch buffer and
+    // hex-encoded with the same idiom as the KeyPair surfaces.
+    const pkPtr = M._malloc(33);
+    const pkLen = M._crabs_wasm_user_public_key(userPtr, pkPtr);
+    const publicKeyHex = pkLen === 33
+      ? hexEncode(M.HEAPU8.subarray(pkPtr, pkPtr + 33), 33)
+      : '';
+    M._free(pkPtr);
+
+    // user_status_e order: USER_ACTIVE/SUSPENDED/REVOKED = 0/1/2.
+    const statusNumber = M._crabs_wasm_user_status(userPtr);
+    const STATUS_NAMES = ['active', 'suspended', 'revoked'];
+
     return {
       userId: readString(M, M._crabs_wasm_user_id(userPtr)),
-      publicKeyHex: '',
-      keyVersion: 0,
-      status: 'active',
+      publicKeyHex,
+      keyVersion: Number(M._crabs_wasm_user_key_version(userPtr)),
+      status: STATUS_NAMES[statusNumber] || 'unknown',
       attributes: attrs,
     };
   }
