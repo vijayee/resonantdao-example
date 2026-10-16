@@ -2,6 +2,12 @@ const { chromium } = require('playwright');
 
 const PASSWORD = 'TestPassword123!';
 const BASE_URL = 'http://localhost:9000/';
+
+// SPA navigation between feature routes — never page.goto: a reload would
+// drop the in-memory wallet state the flows rely on. Auth redirects every
+// route back to the feed when unauthenticated, so this only ever runs on a
+// logged-in page.
+const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
 // Run against a freshly started dev server (`npm run dev:server` with an
 // empty database — e.g. WAVEDB_PATH=/tmp/dao-p3-e2e): members replay the full
 // op log at registration, and an earlier session's ops can leave a new
@@ -434,12 +440,19 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // verifier still earns a check credit (2 $RES); alice's C_1 tally is
   // the halved delta 0.5 (it feeds the salient proposal below and the
   // published RCT).
+  // The wizard lives on /contribute — every page that acts in a cycle navigates
+  // there ONCE before its first act (nav is a plain router-link click; repeat
+  // clicks inside retry loops are unnecessary and could race the demo clock).
+  await nav(alice.page, '/contribute');
+  await nav(bob.page, '/contribute');
+  await nav(carol.page, '/contribute');
   await runTwoVerifierCycle(alice, bob, carol, '1', 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000), 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm');
 
   // Cycle 2: bob submits a Recording claim; dave verifies (alice is barred —
   // her pair with bob was consumed when bob checked her C_1); bob settles.
   // Pays bob the C_2 base credit (3 $RES) and dave a check credit (2 $RES);
   // bob's settle gives him a C_2 tally of 1.
+  await nav(dave.page, '/contribute');
   await runWizardCycle(bob, dave, '2', 'Wizard-recorded e2e demo ' + Math.floor(Math.random() * 10000), 'the record is attributed and findable', 'accepting the verified outcome');
 
   // --- Phase-3 appeal flow: reject -> appeal -> re-verify -> settle ---
@@ -461,6 +474,8 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // carol's appealed-and-re-verified C_2 1 (alpha defaults to 1) — so alice
   // publishes 0.5 cumulative RCT and advances to Round 2.
   console.log('Closing round 1 through the spine (audit → reckon → complete)');
+  // The round panel (stepper, stage buttons, round label) lives on /round.
+  await nav(alice.page, '/round');
   await runRoundSpineStep(alice, 'audit-round-btn', 'reckon-round-btn', 'phase-2 e2e audit note: fair against v1');
   console.log('ROUND STAGE: audited');
   await runRoundSpineStep(alice, 'reckon-round-btn', 'complete-round-btn', 'phase-2 e2e reckon note: records settled');
@@ -489,6 +504,8 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // alice's first vote (cumulative cost 1) counts and her second (cumulative
   // 1+4=5 > 3) is rejected by the server — surfaced as 'Vote error' in the
   // status bar.
+  // Back on the proposals page for the quadratic voting block.
+  await nav(alice.page, '/proposals');
   const qId = await createProposal(alice.page, 'Multi-choice quadratic', 'quadratic', 'Red, Green, Blue');
   console.log('Created multi-choice quadratic proposal', qId);
 
@@ -533,7 +550,8 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // below must hold: the grant applies (custodians badge), the custodian
   // controls render, and the post-election ops are accepted.
 
-  // Start the election from alice's page.
+  // Start the election from alice's page — elections live on /elections.
+  await nav(alice.page, '/elections');
   await alice.page.click('#start-election');
   await alice.page.waitForTimeout(1500);
 
@@ -544,6 +562,8 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   await alice.page.click('#election-area button.button--primary');
   await alice.page.waitForTimeout(1500);
 
+  // bob's ballot: his page was still on /contribute — navigate once, first.
+  await nav(bob.page, '/elections');
   await bob.page.locator('.ballot-option').first().waitFor({ state: 'visible', timeout: 30000 });
   const bobCheckboxes = await bob.page.$$('.ballot-option');
   await bobCheckboxes[0].click();
@@ -561,6 +581,9 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // alice's seat badge appearing proves the grant APPLIED on her client,
   // which is also what catches her key version up (without it her next op
   // dies key_stale on the server).
+  // The custodians list (with the badges) lives on /custodians — navigate
+  // once BEFORE the retry loop so the clock re-renders can't race the nav.
+  await nav(alice.page, '/custodians');
   let syncRolesApplied = false;
   for (let attempt = 0; !syncRolesApplied && attempt < 15; attempt++) {
     syncRolesApplied = await alice.page
@@ -618,6 +641,8 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // on the server's op_accepted, so the rendered card plus the tallies below
   // prove the fix (apply + catch-up) end-to-end.
   let sId = null;
+  // Proposals live on /proposals — alice's page just came from /custodians.
+  await nav(alice.page, '/proposals');
   sId = await createProposal(alice.page, 'Salient quadratic round 2', 'quadratic', 'One, Two, Three', ['1']);
   console.log('Created C_1-salient quadratic proposal on round 2', sId);
 
@@ -649,11 +674,14 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // Round panel advanced with the spine and the published RCT badge shows —
   // carrying the harm-adjusted aggregate: alice's lone published entry is the
   // reduced C_1, so the mirrored factor lands in the badge (0.5, not 1).
+  // The round label is /round-only, the RCT badge is /custodians-only.
+  await nav(alice.page, '/round');
   const roundLabel = await alice.page.locator('.round-label').textContent();
   console.log('ROUND PANEL:', roundLabel);
   if (!roundLabel.startsWith('Round 2')) {
     throw new Error(`Expected round panel to show 'Round 2 ...', got '${roundLabel}'`);
   }
+  await nav(alice.page, '/custodians');
   const rctBadge = await alice.page.locator(`[data-member-rct="${aliceName}"]`).textContent();
   console.log('ALICE RCT BADGE:', rctBadge);
   if (rctBadge.trim() !== '0.5 RCT') {
@@ -705,9 +733,11 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
     }
   };
 
+  await nav(alice.page, '/elections');
   await alice.page.click('#start-election');
   await alice.page.waitForTimeout(1500);
   await castRepeatBallot(alice, 'alice');
+  await nav(secondVoter.user.page, '/elections');
   await castRepeatBallot(secondVoter.user, secondVoter.name);
 
   await alice.page.waitForTimeout(62000);
@@ -721,6 +751,8 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // The strongest repeat-cycle assert: alice's first client-signed op after
   // the SECOND key-version bump must be accepted by the server (submitOp
   // resolves only on op_accepted) and rendered back.
+  // Post-cycle proposal: alice's page just came from /elections.
+  await nav(alice.page, '/proposals');
   const c2Id = await createProposal(alice.page, 'Second-cycle direct', 'direct', 'Yes, No');
   console.log('Post-second-cycle op accepted:', c2Id);
   const c2Status = (await alice.page.locator('#status').textContent()) || '';
@@ -731,15 +763,18 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
 
   console.log('Smoke test passed');
   } catch (err) {
-    // Dump per-page diagnostics so failures stay legible: the status bar,
-    // and short snapshots of the proposals and contributions lists.
+    // Dump per-page diagnostics so failures stay legible: the status bar
+    // (rendered on every route) and short snapshots of the lists. These are
+    // route-scoped in the SPA, so each read gets a short timeout — a page
+    // sitting on a route without that node just reports its route instead of
+    // stalling the dump for 30s.
     for (const [name, u] of [['alice', alice], ['bob', bob], ['carol', carol], ['dave', dave]]) {
       if (!u?.page) continue;
       try {
-        console.log(`[${name} status]`, await u.page.locator('#status').textContent());
-        console.log(`[${name} round]`, await u.page.locator('.round-label').textContent());
-        console.log(`[${name} proposals]`, (await u.page.locator('#proposals').innerHTML()).slice(0, 400));
-        console.log(`[${name} contributions]`, (await u.page.locator('#contributions-list').innerHTML()).slice(0, 400));
+        console.log(`[${name} status]`, await u.page.locator('#status').textContent({ timeout: 2000 }));
+        console.log(`[${name} round]`, await u.page.locator('.round-label').textContent({ timeout: 2000 }).catch(() => '(not on /round)'));
+        console.log(`[${name} proposals]`, (await u.page.locator('#proposals').innerHTML({ timeout: 2000 }).catch(() => '(not on /proposals)')).slice(0, 400));
+        console.log(`[${name} contributions]`, (await u.page.locator('#contributions-list').innerHTML({ timeout: 2000 }).catch(() => '(not on /contribute)')).slice(0, 400));
       } catch (e) {
         console.log(`[${name} debug]`, e.message);
       }
