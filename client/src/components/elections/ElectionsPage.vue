@@ -30,7 +30,7 @@ import Panel from '../../design/components/Panel.vue';
 import ElectionCard from './ElectionCard.vue';
 
 const ds = useDaoStore();
-const custodianSeats = computed(() => ds.dao?.custodians ?? []);
+const custodianSeats = computed(() => { void ds.tick; return ds.dao?.custodians ?? []; });
 const elections = computed(() => {
   void ds.tick;
   return [...(ds.dao?.getElections() ?? [])].reverse();
@@ -42,3 +42,10 @@ function onStartElection() {
   void ds.startElection(candidates);
 }
 </script>
+
+<style scoped>
+.election-start { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.custodian-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.member-item__badge { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-1) var(--space-2); }
+.elections { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-6); }
+</style>

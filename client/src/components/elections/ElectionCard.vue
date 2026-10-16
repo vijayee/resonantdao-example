@@ -54,7 +54,8 @@ const ds = useDaoStore();
 
 const election = computed(() => {
   void ds.tick;
-  return ds.dao?.getElections().find((e) => e.electionId === props.electionId)!;
+  return ds.dao?.getElections().find((e) => e.electionId === props.electionId)
+    ?? { electionId: props.electionId, candidates: [], isRunoff: false, seats: 0 };
 });
 const state = computed(() => { void ds.tick; return ds.dao?.getElectionFinalized(props.electionId) ?? 0; });
 const votes = computed(() => { void ds.tick; return ds.dao?.getElectionVotes(props.electionId) ?? {}; });
@@ -73,3 +74,27 @@ function castBallot() {
   void ds.castBallot(props.electionId, selection);
 }
 </script>
+
+<style scoped>
+.proposal-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 26px 22px;
+  background: var(--card-bg);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  transition: border-color .3s;
+}
+.proposal-card:hover { border-color: var(--line-strong); }
+.proposal-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-3); }
+.proposal-card__title { font-size: 1.3rem; line-height: 1.3; }
+.proposal-card__type { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); }
+.proposal-card__tokens { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); margin-top: var(--space-2); }
+.ballot-form, .runoff-form, .tally { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); }
+.tally { flex-direction: row; gap: var(--space-6); }
+.wizard-choice { display: flex; align-items: center; gap: var(--space-2); font-size: .95rem; color: var(--ink-soft); }
+.ballot-option { accent-color: var(--jade); }
+.vote-stat { display: flex; flex-direction: column; gap: var(--space-1); }
+.vote-stat__label { font-size: .75rem; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.vote-stat__value { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 500; color: var(--ink); }
+.finalize-election { margin-top: var(--space-4); }
+</style>
