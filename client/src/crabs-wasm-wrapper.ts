@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Auto-generated browser wrapper for CRABS WASM
 //
 // index.js — WebAssembly bindings for CRABS.

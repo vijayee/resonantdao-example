@@ -36,6 +36,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
@@ -117,7 +118,7 @@ a { color: inherit; text-decoration: none; }
   width: 100%;
 }
 .form-input:hover { border-color: var(--line-strong); }
-.form-input:focus { outline: none; border-color: var(--jade); box-shadow: 0 0 0 2px rgba(95, 208, 160, .18); }
+.form-input:focus-visible { outline: 1px solid var(--jade); outline-offset: 0; border-color: var(--jade); }
 .form-input::placeholder { color: var(--faint); }
 select.form-input { border-radius: var(--radius); }
 
