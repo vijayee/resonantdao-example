@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { shallowRef, computed } from 'vue';
 import { defineStore } from 'pinia';
 import type { PublicUser } from '@shared/types';
 import { BrowserDao, bytesToHex } from '../dao';
@@ -13,7 +13,9 @@ import { useStatusStore } from './status';
 
 export const useAuthStore = defineStore('auth', () => {
   const status = useStatusStore();
-  const wallet = ref<WalletState | null>(null);
+  // Secret key material — keep it out of deep reactivity proxies; whole-object
+  // replacement is the only mutation this needs.
+  const wallet = shallowRef<WalletState | null>(null);
   const authed = computed(() => useDaoStore().authed);
 
   async function register(

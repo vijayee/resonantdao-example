@@ -14,8 +14,9 @@ import { useStatusStore } from './status';
 
 export const serverClient = new ServerClient();
 
-// Server-message wiring is registered once per module; teardown detaches so a
-// re-attach after HMR/teardown re-registers cleanly.
+// Server-message wiring lives in the module so it survives across store
+// instances in dev. teardown() detaches; ensureMessageWiring() (called from
+// the setup body and bootstrap()) re-attaches when unbound.
 let bound = false;
 let unsubscribeDaoMessages: (() => void) | null = null;
 
@@ -95,6 +96,10 @@ export const useDaoStore = defineStore('dao', () => {
   // Owns the BrowserDao lifecycle. The devtools attach point (Task 13) hooks
   // here, after Node.create, guarded by import.meta.env.DEV.
   async function bootstrap(target: BrowserDao, user: string) {
+    // teardown() detaches the server listener; re-run the setup-store body is
+    // not an option, so re-attach here. Idempotent — the guard no-ops when
+    // already bound.
+    ensureMessageWiring();
     dao.value = target;
     username.value = user;
     startClock();
@@ -135,10 +140,12 @@ export const useDaoStore = defineStore('dao', () => {
       status.set(`Error: ${msg.message}`, 'error');
     }
   }
-  if (!bound) {
+  function ensureMessageWiring() {
+    if (bound) return;
     bound = true;
     unsubscribeDaoMessages = serverClient.onMessage((msg) => void handleServerMessage(msg));
   }
+  ensureMessageWiring();
 
   // ---- proposal ops (ported verbatim from ui.ts) ----
 
