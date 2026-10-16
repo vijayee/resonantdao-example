@@ -2557,7 +2557,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
         v-for="action in actions"
         :key="action.label"
         type="button"
-        :class="['button', `button--${action.variant}`]"
+        :class="['button', `button--${action.variant}`, action.cls]"
         :title="action.title"
         :disabled="ds.submitting"
         @click="action.run()"
@@ -2620,11 +2620,14 @@ const harmReceipt = computed(() => {
   return `accepted — ${label} ${fmt(base)} → ${fmt(base * factor)} (harm reduced)`;
 });
 
-type CardAction = { label: string; variant: string; title?: string; run: () => void };
+type CardAction = { label: string; variant: string; title?: string; run: () => void; cls?: string };
 const actions = computed<CardAction[]>(() => {
   void ds.tick;
   const currentStep = model.value.steps[model.value.currentStepIndex];
-  if (!currentStep || appealed.value) return [];
+  // No appealed gate here (approved amendment): ui.ts leaves verify/settle
+  // actionable while the pill reads 'appealed' — the e2e appeal flow depends
+  // on it. Action buttons also carry their e2e classes (cls field).
+  if (!currentStep) return [];
   const out: CardAction[] = [];
   for (const actor of ['submitter', 'verifier', 'custodian', 'member'] as const) {
     const role = currentStep.roles[actor];
@@ -2633,13 +2636,14 @@ const actions = computed<CardAction[]>(() => {
       const stats = ds.dao?.getVerifierStats(ds.username) ?? { total: 0, upheld: 0 };
       out.push({
         label: props.entry.verifiedBy ? 'Verify (2nd)' : 'Verify…',
+        cls: 'verify-contribution',
         variant: 'secondary',
         title: `Your checks: ${stats.total} (${stats.upheld} upheld)`,
         run: () => void ds.verifyContribution(props.entry),
       });
     }
     if (role.op === 'settle_contribution' && actor === 'submitter') {
-      out.push({ label: 'Settle…', variant: 'primary', run: () => void ds.settleContribution(props.entry) });
+      out.push({ label: 'Settle…', variant: 'primary', cls: 'settle-contribution', run: () => void ds.settleContribution(props.entry) });
     }
   }
   return out;
