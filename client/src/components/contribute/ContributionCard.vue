@@ -75,8 +75,15 @@ const statusOf = computed(() => {
   void ds.tick;
   return ds.dao?.getContributionStatus(props.entry.record.contributionId) ?? 'unknown';
 });
-const appealed = computed(() =>
-  (ds.dao?.getContributionAppealed(props.entry.record.contributionId) ?? false) && statusOf.value === 'pending');
+// NOTE the unconditional tick read: the old form short-circuited before ever
+// reading statusOf (appealed is false while pending), leaving the computed
+// with no tick dep — the register flipped to the appealed state but the pill
+// never re-rendered. The legacy page re-rendered the whole list every second,
+// which is why this only surfaced on the Vue port.
+const appealed = computed(() => {
+  void ds.tick;
+  return (ds.dao?.getContributionAppealed(props.entry.record.contributionId) ?? false) && statusOf.value === 'pending';
+});
 const contributionAppealed = computed(() => {
   void ds.tick;
   return ds.dao?.getContributionAppealed(props.entry.record.contributionId) ?? false;
