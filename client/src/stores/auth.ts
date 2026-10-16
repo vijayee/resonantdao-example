@@ -71,7 +71,7 @@ export const useAuthStore = defineStore('auth', () => {
           d.registerMember(member.username, member.publicKeyHex, member.keyVersion);
         }
       }
-      daoStore.members = res.members.map((m) => m.username).filter((u) => u !== username);
+      daoStore.members = res.members.map((m) => m.username);
 
       await saveLoginBundle({
         username,
@@ -145,9 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
       d.setWalletUser(username.trim());
 
       wallet.value = state;
-      daoStore.members = loginRes.members
-        .map((m: PublicUser) => m.username)
-        .filter((u: string) => u !== username.trim());
+      daoStore.members = loginRes.members.map((m: PublicUser) => m.username);
 
       for (const member of loginRes.members) {
         if (member.username !== username.trim()) {
