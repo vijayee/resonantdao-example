@@ -15,7 +15,7 @@
         <legend>2 — Describe it and attach evidence</legend>
         <input id="contribution-summary" v-model="summary" class="form-input" placeholder="What did you make or record?" required />
         <input id="contribution-evidence-text" v-model="evidenceText" class="form-input" placeholder="Evidence pointer (URL, commit, record id)…" />
-        <input id="contribution-evidence-file" class="form-input" type="file" @change="onFileChange" />
+        <input id="contribution-evidence-file" ref="fileInput" class="form-input" type="file" @change="onFileChange" />
       </fieldset>
       <fieldset class="wizard-fieldset">
         <legend>3 — Review</legend>
@@ -38,8 +38,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { DIMENSIONS, CONTENT_LIMITS, SCHEMA_VERSION, EvidenceRef } from '@shared/contribution';
-import { useDaoStore, serverClient } from '../../stores/dao';
+import { DIMENSIONS } from '@shared/contribution';
+import { useDaoStore } from '../../stores/dao';
 import { useStatusStore } from '../../stores/status';
 import SectionHeading from '../../design/components/SectionHeading.vue';
 import Panel from '../../design/components/Panel.vue';
@@ -51,7 +51,8 @@ const status = useStatusStore();
 const dim = ref<number>(2);
 const summary = ref('');
 const evidenceText = ref('');
-let evidenceFile: File | null = null;
+const evidenceFile = ref<File | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
 
 const entries = computed(() => {
   void ds.tick;
@@ -60,11 +61,11 @@ const entries = computed(() => {
 
 const reviewLine = computed(() => {
   const dims = Object.keys({ [dim.value]: 1 }).map((k) => `C_${k} ${DIMENSIONS[Number(k)].name}`).join(', ');
-  return `${dims} — ${evidenceFile ? 'stored evidence (file)' : evidenceText.value ? `pointer: ${evidenceText.value}` : 'no evidence yet'}`;
+  return `${dims} — ${evidenceFile.value ? 'stored evidence (file)' : evidenceText.value ? `pointer: ${evidenceText.value}` : 'no evidence yet'}`;
 });
 
 function onFileChange(ev: Event) {
-  evidenceFile = (ev.target as HTMLInputElement).files?.[0] ?? null;
+  evidenceFile.value = (ev.target as HTMLInputElement).files?.[0] ?? null;
 }
 
 async function onSubmitContribution() {
@@ -73,42 +74,13 @@ async function onSubmitContribution() {
     status.set('A summary is required.', 'error');
     return;
   }
-  let evidenceRef: EvidenceRef;
-  if (evidenceFile) {
-    const bytes = new Uint8Array(await evidenceFile.arrayBuffer());
-    if (bytes.length > CONTENT_LIMITS.maxObjectBytes) {
-      status.set(`Evidence exceeds ${CONTENT_LIMITS.maxObjectBytes / (1024 * 1024)}MB — split it up.`, 'error');
-      return;
-    }
-    const mediaType = evidenceFile.type || 'application/octet-stream';
-    const hash = await serverClient.putContent(bytes, mediaType);
-    evidenceRef = { hash, uri: `content://${hash}`, mediaType, size: bytes.length };
-  } else if (evidenceText.value) {
-    const bytes = new TextEncoder().encode(evidenceText.value);
-    evidenceRef = { hash: await sha256Hex(bytes), uri: evidenceText.value, mediaType: 'text/uri-list', size: bytes.length };
-  } else {
-    status.set('Attach evidence or give a pointer — pay follows proven outcomes.', 'error');
-    return;
-  }
-
-  await ds.submitContribution({
-    contributionId: crypto.randomUUID(),
-    dims: { [dim.value]: 1 },
-    summary: summary.value,
-    evidenceRef,
-    schemaVersion: SCHEMA_VERSION,
-  });
-  if (status.kind === 'success') {
+  const ok = await ds.submitContribution(summary.value, dim.value, evidenceFile.value, evidenceText.value);
+  if (ok) {
     summary.value = '';
     evidenceText.value = '';
-    evidenceFile = null;
+    evidenceFile.value = null;
+    if (fileInput.value) fileInput.value.value = '';
   }
-}
-
-// Uniform sha-256 for both evidence paths: stored files and text pointers.
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as ArrayBuffer);
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 </script>
 

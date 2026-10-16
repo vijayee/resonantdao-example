@@ -77,7 +77,10 @@ const statusOf = computed(() => {
 });
 const appealed = computed(() =>
   (ds.dao?.getContributionAppealed(props.entry.record.contributionId) ?? false) && statusOf.value === 'pending');
-const contributionAppealed = computed(() => ds.dao?.getContributionAppealed(props.entry.record.contributionId) ?? false);
+const contributionAppealed = computed(() => {
+  void ds.tick;
+  return ds.dao?.getContributionAppealed(props.entry.record.contributionId) ?? false;
+});
 
 const model = computed(() => {
   void ds.tick;

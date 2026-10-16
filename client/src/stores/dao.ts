@@ -5,7 +5,7 @@ import {
   ServerMessage,
 } from '@shared/types';
 import {
-  EvidenceRef, HarmVerdict, SCHEMA_VERSION,
+  CONTENT_LIMITS, EvidenceRef, HarmVerdict, SCHEMA_VERSION,
 } from '@shared/contribution';
 import { RECIP_NAMES, RES_CONFIG } from '@shared/policies';
 import { BrowserDao, ContributionMirrorEntry, bytesToBase64, base64ToBytes } from '../dao';
@@ -13,6 +13,12 @@ import { ServerClient } from '../server-client';
 import { useStatusStore } from './status';
 
 export const serverClient = new ServerClient();
+
+// Uniform sha-256 for both evidence paths: stored files and text pointers.
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as ArrayBuffer);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 // Server-message wiring lives in the module so it survives across store
 // instances in dev. teardown() detaches; ensureMessageWiring() (called from
@@ -38,7 +44,10 @@ export const useDaoStore = defineStore('dao', () => {
   }
 
   const authed = computed(() => dao.value !== null);
-  const custodians = computed(() => dao.value?.custodians ?? []);
+  const custodians = computed(() => {
+    void tick.value;
+    return dao.value?.custodians ?? [];
+  });
   const isCustodian = computed(() => authed.value && custodians.value.includes(username.value));
 
   let clock: ReturnType<typeof setInterval> | null = null;
@@ -281,24 +290,47 @@ export const useDaoStore = defineStore('dao', () => {
 
   // ---- contribution ops ----
 
-  async function submitContribution(payload: {
-    contributionId: string;
-    dims: Record<string, number>;
-    summary: string;
-    evidenceRef: EvidenceRef;
-    schemaVersion: typeof SCHEMA_VERSION;
-  }) {
-    if (!dao.value || submitting.value) return;
+  async function submitContribution(summary: string, dim: number, evidenceFile: File | null, evidenceText: string): Promise<boolean> {
+    if (!dao.value || submitting.value) return false;
     submitting.value = true;
     try {
+      // Evidence priority: attached file → text pointer. Files go to the
+      // content-addressed store; pointers are hashed directly.
+      let evidenceRef: EvidenceRef;
+      if (evidenceFile) {
+        const bytes = new Uint8Array(await evidenceFile.arrayBuffer());
+        if (bytes.length > CONTENT_LIMITS.maxObjectBytes) {
+          status.set(`Evidence exceeds ${CONTENT_LIMITS.maxObjectBytes / (1024 * 1024)}MB — split it up.`, 'error');
+          return false;
+        }
+        const mediaType = evidenceFile.type || 'application/octet-stream';
+        const hash = await serverClient.putContent(bytes, mediaType);
+        evidenceRef = { hash, uri: `content://${hash}`, mediaType, size: bytes.length };
+      } else if (evidenceText) {
+        const bytes = new TextEncoder().encode(evidenceText);
+        evidenceRef = { hash: await sha256Hex(bytes), uri: evidenceText, mediaType: 'text/uri-list', size: bytes.length };
+      } else {
+        status.set('Attach evidence or give a pointer — pay follows proven outcomes.', 'error');
+        return false;
+      }
+
+      const payload = {
+        contributionId: crypto.randomUUID(),
+        dims: { [dim]: 1 },
+        summary,
+        evidenceRef,
+        schemaVersion: SCHEMA_VERSION,
+      };
       const bytes = await dao.value.submitContribution(username.value, payload);
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Contribution submitted — awaiting verification.', 'success');
       bump();
+      return true;
     } catch (err) {
       status.set(`Contribution error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
+      return false;
     } finally {
       submitting.value = false;
     }
