@@ -102,8 +102,8 @@ export const useDaoStore = defineStore('dao', () => {
     }
   }
 
-  // Owns the BrowserDao lifecycle. The devtools attach point (Task 13) hooks
-  // here, after Node.create, guarded by import.meta.env.DEV.
+  // Owns the BrowserDao lifecycle: message wiring, demo clock, and the
+  // devtools attach (dev only) all hang off bootstrap/teardown.
   async function bootstrap(target: BrowserDao, user: string) {
     // teardown() detaches the server listener; re-run the setup-store body is
     // not an option, so re-attach here. Idempotent — the guard no-ops when

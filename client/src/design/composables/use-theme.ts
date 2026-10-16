@@ -19,7 +19,9 @@ export function useTheme() {
     toggle() {
       theme.value = theme.value === 'dark' ? 'light' : 'dark';
       document.documentElement.dataset.theme = theme.value;
-      localStorage.setItem(KEY, theme.value);
+      try {
+        localStorage.setItem(KEY, theme.value);
+      } catch { /* storage may be blocked (privacy mode); theme still applies */ }
     },
   };
 }
