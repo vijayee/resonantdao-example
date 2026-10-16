@@ -1,0 +1,56 @@
+/* Design tokens ported from resonantos.com (2026-10-16).
+   Dark is the application default; [data-theme="light"] overrides. */
+:root {
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --bg-a: #0c1f15;
+  --bg-b: #0a1b12;
+  --bg-c: #0c1f15;
+  --ink: #e4efe4;
+  --ink-soft: #c9dcc9;
+  --muted: #8fae97;
+  --faint: #5d7f6c;
+  --jade: #5fd0a0;
+  --jade-2: #8fe0b8;
+  --amber: #e8a84c;
+  --danger: #e2807e;
+  --line: rgba(95, 208, 160, .16);
+  --line-strong: rgba(95, 208, 160, .45);
+  --panel: rgba(22, 46, 34, .72);
+  --panel-solid: #162e22;
+  --glass: rgba(10, 25, 17, .6);
+  --card-bg: linear-gradient(160deg, rgba(95, 208, 160, .07), rgba(232, 168, 76, .04));
+  --cta-ink: #0c1f15;
+  --grid-line: rgba(95, 208, 160, .05);
+
+  --radius: 12px;
+  --radius-lg: 18px;
+  --max-width: 1120px;
+  --space-1: .25rem; --space-2: .5rem; --space-3: .75rem; --space-4: 1rem;
+  --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem; --space-10: 2.5rem; --space-12: 3rem;
+  --transition: .25s;
+}
+
+[data-theme="light"] {
+  --bg-a: #f7f4ea;
+  --bg-b: #fbfaf3;
+  --bg-c: #f2eee0;
+  --ink: #1c3a2c;
+  --ink-soft: #3d5549;
+  --muted: #5c6f63;
+  --faint: #8a988e;
+  --jade: #0f7a56;
+  --jade-2: #129465;
+  --amber: #a8690f;
+  --danger: #b3403c;
+  --line: rgba(12, 100, 70, .22);
+  --line-strong: rgba(12, 100, 70, .5);
+  --panel: rgba(255, 255, 255, .72);
+  --panel-solid: #ffffff;
+  --glass: rgba(255, 255, 255, .78);
+  --card-bg: linear-gradient(160deg, rgba(15, 122, 86, .06), rgba(168, 105, 15, .05));
+  --cta-ink: #f7f4ea;
+  --grid-line: rgba(12, 100, 70, .06);
+}
