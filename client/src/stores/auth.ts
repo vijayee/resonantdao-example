@@ -27,12 +27,13 @@ export const useAuthStore = defineStore('auth', () => {
     // Strip every invisible character class that rides in on pastes/IMEs and
     // defeats trim(): Unicode format characters (Cf — zero-widths, joiners,
     // soft hyphen, BOM), variation selectors (+ supplement), Mongolian free
-    // variation selectors, and the Hangul fillers (invisible-width letters).
-    // CRABS ids are strict ASCII, so anything else that survives renders
-    // exactly as a silent failure — see the offender-naming error below.
+    // variation selectors, the Hangul fillers (invisible-width letters), and
+    // control characters (Cc — e.g. a literal DEL from a remote-desktop
+    // Backspace or a terminal clipboard, which renders invisibly and fails
+    // the CRABS id charset check).
     const username = usernameRaw
       .replace(
-        /[\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}\u{180B}-\u{180E}\u{115F}\u{1160}\u{034F}\u{2065}]/gu,
+        /[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}\u{180B}-\u{180E}\u{115F}\u{1160}\u{034F}\u{2065}]/gu,
         ''
       )
       .trim();
