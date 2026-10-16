@@ -1,8 +1,7 @@
-import { ref, computed } from 'vue';
+import { ref, shallowRef, computed } from 'vue';
 import { defineStore } from 'pinia';
 import {
-  ProposalPayload, VotePayload, ExecutePayload, StartElectionPayload, AppealVerdictPayload,
-  SettleContributionPayload, VerifyContributionPayload,
+  ProposalPayload, VotePayload, StartElectionPayload, VerifyContributionPayload,
   ServerMessage,
 } from '@shared/types';
 import {
@@ -15,20 +14,27 @@ import { useStatusStore } from './status';
 
 export const serverClient = new ServerClient();
 
-// Uniform sha-256 for both evidence paths: stored files and text pointers.
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as ArrayBuffer);
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+// Server-message wiring is registered once per module; teardown detaches so a
+// re-attach after HMR/teardown re-registers cleanly.
+let bound = false;
+let unsubscribeDaoMessages: (() => void) | null = null;
 
 export const useDaoStore = defineStore('dao', () => {
   const status = useStatusStore();
 
-  const dao = ref<BrowserDao | null>(null);
+  // The BrowserDao instance itself is never reactive (wasm-backed — deep proxies
+  // would wrap raw registers); `tick` is the single invalidation lever: bump it
+  // after every state-affecting change.
+  const dao = shallowRef<BrowserDao | null>(null);
   const username = ref('');
   const submitting = ref(false);
   const tick = ref(0);
   const members = ref<string[]>([]);
+  const votedProposals = ref<string[]>([]);
+
+  function bump() {
+    tick.value += 1;
+  }
 
   const authed = computed(() => dao.value !== null);
   const custodians = computed(() => dao.value?.custodians ?? []);
@@ -72,7 +78,7 @@ export const useDaoStore = defineStore('dao', () => {
     }
   }
 
-  async function replayLog(target: BrowserDao) {
+  async function replayLog(target?: BrowserDao) {
     const logMsg = await serverClient.getLog(0);
     if (logMsg.kind !== 'log') return;
     for (const stored of logMsg.operations) {
@@ -96,6 +102,9 @@ export const useDaoStore = defineStore('dao', () => {
 
   function teardown() {
     stopClock();
+    unsubscribeDaoMessages?.();
+    unsubscribeDaoMessages = null;
+    bound = false;
     dao.value?.destroy();
     dao.value = null;
     username.value = '';
@@ -108,6 +117,7 @@ export const useDaoStore = defineStore('dao', () => {
     if (msg.kind === 'broadcast') {
       try {
         await safeExecuteRemote(base64ToBytes(msg.operation.bytes));
+        bump();
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         status.set(`Failed to apply update: ${message}`, 'error');
@@ -125,7 +135,10 @@ export const useDaoStore = defineStore('dao', () => {
       status.set(`Error: ${msg.message}`, 'error');
     }
   }
-  serverClient.onMessage((msg) => void handleServerMessage(msg));
+  if (!bound) {
+    bound = true;
+    unsubscribeDaoMessages = serverClient.onMessage((msg) => void handleServerMessage(msg));
+  }
 
   // ---- proposal ops (ported verbatim from ui.ts) ----
 
@@ -137,6 +150,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Proposal created.', 'success');
+      bump();
     } catch (err) {
       status.set(`Create proposal error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -144,8 +158,6 @@ export const useDaoStore = defineStore('dao', () => {
       submitting.value = false;
     }
   }
-
-  const votedProposals = ref<string[]>([]);
 
   async function vote(proposalId: string, choice: number) {
     if (!dao.value || submitting.value) return;
@@ -159,6 +171,7 @@ export const useDaoStore = defineStore('dao', () => {
         if (!votedProposals.value.includes(proposalId)) votedProposals.value.push(proposalId);
       }
       status.set(`Voted.`, 'success');
+      bump();
     } catch (err) {
       status.set(`Vote error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -175,6 +188,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Execution submitted.', 'success');
+      bump();
     } catch (err) {
       status.set(`Execute error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -198,6 +212,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Election started.', 'success');
+      bump();
     } catch (err) {
       status.set(`Election error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -214,6 +229,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Ballot cast.', 'success');
+      bump();
     } catch (err) {
       status.set(`Ballot error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -230,6 +246,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Election finalized.', 'success');
+      bump();
     } catch (err) {
       status.set(`Finalize error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -246,6 +263,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set(`Runoff vote cast for ${candidate}.`, 'success');
+      bump();
     } catch (err) {
       status.set(`Runoff error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -270,6 +288,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Contribution submitted — awaiting verification.', 'success');
+      bump();
     } catch (err) {
       status.set(`Contribution error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -332,6 +351,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set(`Verification recorded (+${RES_CONFIG.verificationCheckCredit} $RES).`, 'success');
+      bump();
     } catch (err) {
       status.set(`Verify error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -359,6 +379,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Contribution settled.', 'success');
+      bump();
     } catch (err) {
       status.set(`Settle error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -385,6 +406,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Appeal recorded — awaiting re-verification.', 'success');
+      bump();
     } catch (err) {
       status.set(`Appeal error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -414,6 +436,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set(fair ? 'Round audited as fair.' : 'Round closed with a debt record; next round begins.', fair ? 'success' : 'error');
+      bump();
     } catch (err) {
       status.set(`Audit error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -436,6 +459,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Round reckoned — ready to complete.', 'success');
+      bump();
     } catch (err) {
       status.set(`Reckon error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -462,6 +486,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set(`Round published — ${entries.length} contribution(s) aggregated.`, 'success');
+      bump();
     } catch (err) {
       status.set(`Complete error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -475,10 +500,11 @@ export const useDaoStore = defineStore('dao', () => {
     if (!d || submitting.value) return;
     submitting.value = true;
     try {
-      const bytes = await d.setRctAlpha(username.value, { weights: raw, version });
+      const bytes = await d.setRctAlpha(username.value, { weights: raw, version: version.trim() });
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('RCT weights updated.', 'success');
+      bump();
     } catch (err) {
       status.set(`Weights error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -496,6 +522,7 @@ export const useDaoStore = defineStore('dao', () => {
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Calibration version set to v1.', 'success');
+      bump();
     } catch (err) {
       status.set(`Calibration error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -514,6 +541,7 @@ export const useDaoStore = defineStore('dao', () => {
       await safeExecuteRemote(bytes);
       members.value = members.value.filter((m) => m !== target);
       status.set(`${target} removed from the DAO.`, 'success');
+      bump();
     } catch (err) {
       status.set(`Remove error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
@@ -522,9 +550,9 @@ export const useDaoStore = defineStore('dao', () => {
     }
   }
 
-  function evidenceSummary(ref: EvidenceRef): string {
-    if (ref.uri.startsWith('content://')) return `stored evidence (${(ref.size / 1024).toFixed(1)} KB, ${ref.mediaType})`;
-    return `pointer: ${ref.uri}`;
+  function evidenceSummary(evidenceRef: EvidenceRef): string {
+    if (evidenceRef.uri.startsWith('content://')) return `stored evidence (${(evidenceRef.size / 1024).toFixed(1)} KB, ${evidenceRef.mediaType})`;
+    return `pointer: ${evidenceRef.uri}`;
   }
 
   return {
