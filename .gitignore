@@ -9,3 +9,4 @@ data/
 .claude/
 .idea/
 test-results/
+client/dev-wasm/
