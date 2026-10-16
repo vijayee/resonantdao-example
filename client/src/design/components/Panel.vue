@@ -25,6 +25,7 @@ withDefaults(defineProps<{ variant?: 'plain' | 'ok' | 'x'; number?: string; kick
 }
 .panel:hover { border-color: var(--line-strong); }
 .panel--x { border-color: rgba(226, 128, 126, .3); }
+.panel--ok { border-color: rgba(95, 208, 160, .3); }
 .panel__tag {
   font-family: var(--font-mono);
   font-size: .7rem;

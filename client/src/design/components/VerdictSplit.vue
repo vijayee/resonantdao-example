@@ -15,6 +15,7 @@
 
 <script setup lang="ts">
 import Panel from './Panel.vue';
+// xItems/okItems are rendered via v-html — static, page-local constants only (they carry <b> emphasis), never user input.
 defineProps<{ xTitle: string; okTitle: string; xItems: string[]; okItems: string[] }>();
 </script>
 
