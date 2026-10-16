@@ -10,3 +10,4 @@ data/
 .idea/
 test-results/
 client/dev-wasm/
+client/devtools-walk.png
