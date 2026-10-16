@@ -4,7 +4,7 @@
       from the question's salient dimensions × your verified tallies.</template>
   </SectionHeading>
 
-  <Panel number="NN" kicker="New proposal">
+  <Panel number="01" kicker="New proposal">
     <form id="proposal-form" class="proposal-form" @submit.prevent="onCreateProposal">
       <div class="form-group">
         <label class="form-label" for="proposal-title">Title</label>
@@ -37,7 +37,7 @@
     </form>
   </Panel>
 
-  <Panel number="NN" kicker="Open proposals">
+  <Panel number="02" kicker="Open proposals">
     <ul id="proposals" class="proposal-list">
       <li v-if="proposals.length === 0" class="empty-state">No proposals yet. Create the first one above.</li>
       <ProposalCard
