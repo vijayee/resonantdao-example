@@ -1,4 +1,5 @@
 // @ts-nocheck
+// vendored, auto-generated — edits here are untypechecked
 // Auto-generated browser wrapper for EAuth WASM
 //
 // index.js — WebAssembly bindings for EAuth.

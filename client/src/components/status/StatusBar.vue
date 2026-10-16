@@ -3,7 +3,6 @@
     id="status"
     :class="['status-bar', `status-bar--${kind}`]"
     :role="kind === 'error' ? 'alert' : 'status'"
-    aria-live="polite"
   >{{ text }}</div>
 </template>
 

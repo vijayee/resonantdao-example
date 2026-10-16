@@ -1,4 +1,5 @@
 // @ts-nocheck
+// vendored, auto-generated — edits here are untypechecked
 // Auto-generated browser wrapper for CRABS WASM
 //
 // index.js — WebAssembly bindings for CRABS.
