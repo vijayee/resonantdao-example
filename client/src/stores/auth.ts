@@ -24,12 +24,17 @@ export const useAuthStore = defineStore('auth', () => {
     confirmPassword: string
   ): Promise<boolean> {
     const daoStore = useDaoStore();
-    // Strip invisible characters (zero-width spaces/joiners, soft hyphen,
-    // variation selectors) that ride in on pastes and defeat trim(). Without
-    // this a username like "victor​" reads as "victor" to the user but
-    // fails the CRABS id charset check.
+    // Strip every invisible character class that rides in on pastes/IMEs and
+    // defeats trim(): Unicode format characters (Cf — zero-widths, joiners,
+    // soft hyphen, BOM), variation selectors (+ supplement), Mongolian free
+    // variation selectors, and the Hangul fillers (invisible-width letters).
+    // CRABS ids are strict ASCII, so anything else that survives renders
+    // exactly as a silent failure — see the offender-naming error below.
     const username = usernameRaw
-      .replace(/[\u{200B}-\u{200F}\u{2060}-\u{2064}\u{FEFF}\u{00AD}\u{180E}]/gu, '')
+      .replace(
+        /[\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}\u{180B}-\u{180E}\u{115F}\u{1160}\u{034F}\u{2065}]/gu,
+        ''
+      )
       .trim();
     if (!username || !password) {
       status.set('Username and password are required.', 'error');
@@ -37,10 +42,17 @@ export const useAuthStore = defineStore('auth', () => {
     }
     // CRABS user ids reject dots, spaces, and other punctuation.
     if (!/^[A-Za-z0-9_-]+$/.test(username)) {
-      // Quote the value with invisible characters exposed so the exact
-      // offender is visible (e.g. a stray non-breaking space from autofill).
+      // Name the exact offenders in U+ form: invisible characters render
+      // through JSON.stringify without an escape, so pointing at code points
+      // (not just quoting) is the only way the failure is self-diagnosing.
+      const offenders = [...username]
+        .filter((ch) => !/^[A-Za-z0-9_-]+$/.test(ch))
+        .map((ch) => `U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`);
       const shown = JSON.stringify(username);
-      status.set(`Username ${shown} (length ${username.length}) — letters, numbers, underscores, dashes only.`, 'error');
+      status.set(
+        `Username ${shown} (length ${username.length}; offending characters: ${offenders.join(' ')}) — letters, numbers, underscores, dashes only.`,
+        'error'
+      );
       return false;
     }
     if (password.length < 8) {
