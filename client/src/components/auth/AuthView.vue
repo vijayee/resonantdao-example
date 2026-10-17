@@ -83,12 +83,12 @@ const strength = computed(() => {
 
 async function onRegister() {
   const ok = await auth.register(username.value, password.value, confirmPassword.value);
-  if (ok) void router.push('/proposals');
+  if (ok) void router.push('/');
 }
 
 async function onLogin() {
   const ok = await auth.login(username.value, password.value);
-  if (ok) void router.push('/proposals');
+  if (ok) void router.push('/');
 }
 </script>
 

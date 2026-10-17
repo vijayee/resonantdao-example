@@ -41,6 +41,9 @@ async function runUser(username, headless = true) {
   await page.click('#register-form button[type="submit"]');
   await page.waitForSelector('#dashboard:not(.hidden)', { timeout: 30000 });
 
+  // The feed is the landing page now — route to the proposal page up front.
+  await nav(page, '/proposals');
+
   return { browser, page };
 }
 
