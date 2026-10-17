@@ -256,6 +256,66 @@ export class Operation {
 }
 
 // ============================================================
+// Change events
+// ============================================================
+
+// Module-wide change-event plumbing: one trampoline per WASM module,
+// dispatching to every Node's listeners (filtered by node id, which is the
+// bootstrap admin id stamped into op->node_id).
+const _changeListenerRegistry = new WeakMap();
+
+function _getChangeListeners(M) {
+  if (!_changeListenerRegistry.has(M)) {
+    _changeListenerRegistry.set(M, []);
+  }
+  const listeners = _changeListenerRegistry.get(M);
+  if (!listeners._pending) listeners._pending = [];
+  return listeners;
+}
+
+// Deliver one event to every matching listener. Listener failures are
+// contained so one bad listener cannot starve the others.
+function _dispatchChangeEvent(listeners, event) {
+  for (const entry of listeners.slice()) {
+    if (entry.node != null && event.node !== entry.node) continue;
+    try {
+      entry.listener(event);
+    } catch (listenerError) {
+      console.warn('crabs: change listener failed', listenerError);
+    }
+  }
+}
+
+function _ensureChangeTrampoline(M) {
+  const listeners = _getChangeListeners(M);
+  if (listeners._trampoline) return;
+  const trampoline = M.addFunction((jsonPointer) => {
+    const text = jsonPointer ? M.UTF8ToString(jsonPointer) : '';
+    let event;
+    try {
+      event = JSON.parse(text);
+    } catch (parseError) {
+      return;  // malformed event: drop, never throw into C
+    }
+    if (listeners._dispatching) {
+      listeners._pending.push(event);   // nested: defer until outer dispatch drains
+      return;
+    }
+    listeners._dispatching = true;
+    try {
+      _dispatchChangeEvent(listeners, event);
+      while (listeners._pending.length > 0) {
+        _dispatchChangeEvent(listeners, listeners._pending.shift());
+      }
+    } finally {
+      listeners._dispatching = false;
+    }
+  }, 'vi');
+  listeners._trampoline = trampoline;
+  M._crabs_wasm_set_change_trampoline(trampoline);
+}
+
+// ============================================================
 // Node
 // ============================================================
 
@@ -269,6 +329,30 @@ export class Node {
     // HLC fields, so we maintain a monotonic physical-time + counter here
     // and stamp it into the operation struct before signing.
     this._hlcCounter = 0n;
+  }
+
+  // on('change', listener) returns an unsubscribe function (upstream parity).
+  // Trust note: change events are observational — listeners must not mutate
+  // node state; nested mutations inside listeners are deferred upstream.
+  on(eventName, listener) {
+    if (eventName !== 'change' || typeof listener !== 'function') return;
+    _ensureChangeTrampoline(this._M);
+    const listeners = _getChangeListeners(this._M);
+    listeners.push({ node: this._adminId, listener });
+    const node = this;
+    return () => {
+      const entryIndex = listeners.findIndex(
+        (entry) => entry.listener === listener && entry.node === node._adminId);
+      if (entryIndex >= 0) listeners.splice(entryIndex, 1);
+    };
+  }
+
+  off(eventName, listener) {
+    if (eventName !== 'change') return;
+    const listeners = _getChangeListeners(this._M);
+    const entryIndex = listeners.findIndex(
+      (entry) => entry.listener === listener && entry.node === this._adminId);
+    if (entryIndex >= 0) listeners.splice(entryIndex, 1);
   }
 
   static async create(adminId, options = {}) {
