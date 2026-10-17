@@ -8,6 +8,7 @@ import {
   CONTENT_LIMITS, EvidenceRef, HarmVerdict, SCHEMA_VERSION,
 } from '@shared/contribution';
 import { RECIP_NAMES, RES_CONFIG } from '@shared/policies';
+import type { FeedEvent } from '@shared/feed';
 import { BrowserDao, ContributionMirrorEntry, bytesToBase64, base64ToBytes } from '../dao';
 import { ServerClient } from '../server-client';
 import { useStatusStore } from './status';
@@ -109,6 +110,9 @@ export const useDaoStore = defineStore('dao', () => {
     // not an option, so re-attach here. Idempotent — the guard no-ops when
     // already bound.
     ensureMessageWiring();
+    // Push reactivity: any CRABS mutation (this dao's own executes included)
+    // invalidates every tick-gated computed — updates become exact, not 1s.
+    target.onChange = () => bump();
     dao.value = target;
     username.value = user;
     startClock();
@@ -604,6 +608,15 @@ export const useDaoStore = defineStore('dao', () => {
     return `pointer: ${evidenceRef.uri}`;
   }
 
+  // ---- feed accessors ----
+
+  // Tick-gated read over the dao's own mirror read (which already replays
+  // pending ops) — no second accumulator lives in the store.
+  function feedEvents(): FeedEvent[] {
+    void tick.value;
+    return dao.value?.getFeedEvents() ?? [];
+  }
+
   return {
     dao, username, submitting, tick, members, authed, custodians, isCustodian,
     votedProposals,
@@ -614,5 +627,6 @@ export const useDaoStore = defineStore('dao', () => {
     auditRound, reckonRound, completeRound, setRctAlpha, setCalibrationVersion,
     removeMember,
     evidenceSummary,
+    feedEvents,
   };
 });
