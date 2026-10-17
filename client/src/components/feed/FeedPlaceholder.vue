@@ -38,7 +38,7 @@ const DESTS = [
 </script>
 
 <style scoped>
-.dest { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: var(--space-8); }
+.dest { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
 .dest :deep(.panel) { padding: 22px 20px; }
 .dest__link { text-decoration: none; color: var(--ink-soft); font-family: var(--font-mono); font-size: .85rem; }
 .dest__link:hover { color: var(--jade); }

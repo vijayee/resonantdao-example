@@ -92,5 +92,5 @@ async function onSubmitContribution() {
 }
 .wizard-fieldset legend { color: var(--muted); font-size: .8125rem; font-weight: 600; padding: 0 var(--space-1); }
 .wizard-choice { display: flex; align-items: center; gap: var(--space-2); font-size: .9375rem; cursor: pointer; }
-#contributions-list { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-8); }
+#contributions-list { display: flex; flex-direction: column; gap: var(--space-4); }
 </style>

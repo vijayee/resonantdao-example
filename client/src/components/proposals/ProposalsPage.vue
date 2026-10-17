@@ -116,7 +116,7 @@ async function onCreateProposal() {
 </script>
 
 <style scoped>
-.proposal-list { list-style: none; margin: var(--space-8) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.proposal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
 .wizard-fieldset {
   border: 1px solid var(--line); border-radius: var(--radius);
   padding: var(--space-3) var(--space-4); margin: 0;

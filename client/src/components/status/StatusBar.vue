@@ -15,7 +15,7 @@ const { text, kind } = storeToRefs(useStatusStore());
 <style scoped>
 .status-bar {
   position: fixed;
-  bottom: var(--space-4);
+  bottom: var(--space-8);
   left: 50%;
   transform: translateX(-50%);
   max-width: min(640px, calc(100% - var(--space-8)));
