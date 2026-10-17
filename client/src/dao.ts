@@ -5,6 +5,7 @@ import {
 } from '@shared/policies';
 import { setOperationSignerKeyVersion } from '@shared/crabs-helpers';
 import { derivedVoteBalance } from '@shared/round';
+import { FeedEvent, feedEventFromOp } from '@shared/feed';
 import { fromRegisterUnits, strongestHarm, HarmVerdict } from '@shared/contribution';
 import {
   AuditRoundPayload,
@@ -157,6 +158,17 @@ export class BrowserDao {
     this.node.grantRole(username, 'reputation', '1', this.adminId);
     this.initResRegisters(username);
     try { this.node.setAdd(STATE_NAMES.members, username, this.signingKey.publicKeyHex()); } catch (err) { /* ignore duplicate */ }
+
+    // Push reactivity: CRABS notifies every mutation (executed ops, schedules,
+    // triggers, attribute changes). The listener only forwards — never mutates
+    // node state (upstream trust note).
+    this.node.on('change', (event: { kind: string; type: string; signer: string; target: string; preview: string; result: number }) => {
+      try {
+        this.onChange?.(event);
+      } catch (err) {
+        console.warn('browser dao onChange handler failed', err);
+      }
+    });
   }
 
   async createProposal(userId: string, payload: ProposalPayload): Promise<Uint8Array> {
@@ -286,6 +298,7 @@ export class BrowserDao {
       await this.mirrorContributionState(op);
       await this.mirrorElectionState(op);
       await this.mirrorRoundState(op);
+      await this.mirrorFeedEvent(op);
     } finally {
       op.destroy();
     }
@@ -386,6 +399,9 @@ export class BrowserDao {
   }
 
   private roundRecords = new Map<number, Array<Record<string, unknown>>>();
+  private feedEvents: FeedEvent[] = [];
+  private feedIndex = 0;
+  onChange: ((event: { kind: string; type: string; signer: string; target: string; preview: string; result: number }) => void) | null = null;
 
   // Simplified round-spine mirror: one record per audit/reckon/complete op,
   // attributed to the round whose stage was just advanced (complete_round
@@ -414,6 +430,30 @@ export class BrowserDao {
 
   getRoundRecords(round: number): Array<Record<string, unknown>> {
     return this.roundRecords.get(round) ?? [];
+  }
+
+  // Feed timeline capture: consequential ops only, newest first, bounded.
+  // Runs AFTER execute() so handler effects (status registers) are already
+  // applied — timestamps and round:current are exact at capture time.
+  private async mirrorFeedEvent(op: any): Promise<void> {
+    let payloadJson = '';
+    try {
+      const raw = op.payload;
+      payloadJson = typeof raw === 'string' ? raw : new TextDecoder().decode(raw as Uint8Array);
+    } catch {
+      payloadJson = '';
+    }
+    const event = feedEventFromOp(
+      op.type, op.signerId, payloadJson,
+      this.getNodeTimeMs(), this.getCurrentRound(), ++this.feedIndex,
+    );
+    if (!event) return;
+    this.feedEvents.unshift(event);
+    if (this.feedEvents.length > 200) this.feedEvents.length = 200;
+  }
+
+  getFeedEvents(): FeedEvent[] {
+    return Array.from(this.feedEvents);
   }
 
   private async mirrorElectionState(op: any): Promise<void> {
