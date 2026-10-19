@@ -89,17 +89,34 @@ export const useDaoStore = defineStore('dao', () => {
     }
   }
 
+  // Boot-time ingest rides the replay path (BrowserDao.replayRemote →
+  // node.replayOp, clamp policy): historic ops materialize instead of
+  // aborting the whole replay with 'protocol_violation'. Skips (e.g.
+  // 'unauthorized' entries the server-side hydrate also skips) never throw —
+  // log them (throttled to the same shape as the wrapper's replayOps warns)
+  // and keep converging.
+  const REPLAY_LOG_WARN_LIMIT = 10;
   async function replayLog(target?: BrowserDao) {
     const logMsg = await serverClient.getLog(0);
-    if (logMsg.kind !== 'log') return;
+    if (logMsg.kind !== 'log' || !dao.value) return;
+    let skipCount = 0;
     for (const stored of logMsg.operations) {
       try {
-        await safeExecuteRemote(base64ToBytes(stored.bytes));
+        const skip = await dao.value.replayRemote(base64ToBytes(stored.bytes));
+        if (skip) {
+          skipCount++;
+          if (skipCount <= REPLAY_LOG_WARN_LIMIT) {
+            console.warn(`dao replay: skipped op at index ${stored.index}: ${skip.message}`);
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         status.set(`State sync failed: ${message}`, 'error');
         return;
       }
+    }
+    if (skipCount > REPLAY_LOG_WARN_LIMIT) {
+      console.warn(`dao replay: ...and ${skipCount - REPLAY_LOG_WARN_LIMIT} more skipped (total ${skipCount})`);
     }
   }
 

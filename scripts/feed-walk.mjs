@@ -11,6 +11,14 @@ const fail = (msg) => { throw new Error(`WALK FAIL: ${msg}`); };
 
 async function registerUser(browser, username) {
   const page = await (await browser.newContext()).newPage();
+  // Answer the flows' confirm()/prompt() dialogs (same contract as the main
+  // e2e): headless chromium auto-DISMISSES dialogs, which would make the
+  // round-audit confirm() resolve UNFAIR and its required note prompt resolve
+  // to '' — the spine op would never land.
+  page.on('dialog', (dialog) => {
+    (dialog.type() === 'prompt' ? dialog.accept('walk note') : dialog.accept())
+      .catch(() => { /* dialog may already be gone */ });
+  });
   await page.goto(BASE);
   await page.fill('#register-username', username);
   await page.fill('#register-password', PASSWORD);
@@ -49,9 +57,16 @@ const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
   if (rows.some((t) => t.includes('proposal executed'))) fail('execute event appeared without execution');
 
   // Band projects an actionable for the OTHER viewer: second page, proposal
-  // open for voting → NeedsAttention lists it.
+  // open for voting → NeedsAttention lists it. The log replay is async
+  // relative to the dashboard render (bootstrap() sets dao before replayLog
+  // finishes), so poll for the projection instead of racing the ingest.
   const viewer2 = await registerUser(browser, 'feed_walk2_' + Math.floor(Math.random() * 10000));
-  const attention = await viewer2.locator('#needs-attention').textContent();
+  let attention = '';
+  for (let attempt = 0; attempt < 40; attempt++) {
+    attention = await viewer2.locator('#needs-attention').textContent();
+    if (attention.includes('"Walk proposal" is open for voting')) break;
+    await viewer2.waitForTimeout(250);
+  }
   if (!attention.includes('"Walk proposal" is open for voting')) fail(`attention band missing the open proposal: ${attention}`);
 
   // Spine: any member can audit the round; expect round_audited + band step.

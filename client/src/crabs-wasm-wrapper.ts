@@ -90,6 +90,10 @@ const ERROR_MESSAGES = {
   0x6005: 'vault_unavailable',
   0x7001: 'already_performed', 0x7002: 'already_executed', 0x7003: 'condition_not_met',
   0x7004: 'tracker_not_found', 0x7005: 'flag_not_found',
+  0xA001: 'not_item_writer', 0xA002: 'seq_mismatch', 0xA003: 'fork_detected',
+  0xA004: 'ordering_path', 0xA005: 'quarantined',
+  0xA006: 'ordering_pending', 0xA007: 'ordering_not_leader',
+  0xA008: 'ordering_change_in_flight',
 };
 
 function crabsError(code, ctx) {
@@ -316,6 +320,76 @@ function _ensureChangeTrampoline(M) {
 }
 
 // ============================================================
+// Skew options (bounded-skew replay fix, upstream bindings-core parity)
+// ============================================================
+
+// Warn throttling: the first N replayOps skips warn individually; on a bigger
+// batch ONE summary line follows — a 10k-op history must not flood the console.
+const REPLAY_SKIP_WARN_LIMIT = 10;
+
+// Skew configuration surface. Defaults mirror the C library exactly
+// (BOUNDED strategy / 5000ms window / reject on replay) so
+// Node.create(id) remains byte-identical to today's behavior.
+function parseSkewOptions(options) {
+  const skew = {
+    strategy: 0x01,       // HLC_STRATEGY_BOUNDED
+    maxSkewMs: 0,         // 0 keeps the C-side CRABS_HLC_DEFAULT_MAX_SKEW_MS (sentinel, NOT unbounded)
+    replayPolicy: 0,      // CRABS_HLC_REPLAY_REJECT
+    maxReplayAgeMs: 0,    // replay-clamp age horizon; 0 = unbounded (shipped v1 behavior)
+  };
+  if (!options || !options.skew) return skew;
+  const skewInput = options.skew;
+  if (typeof skewInput !== 'object') {
+    throw new TypeError('Node.create: skew must be an options object');
+  }
+  if (skewInput.strategy !== undefined) {
+    // Object.create(null) + Object.hasOwn: an `in` check would accept
+    // prototype-chain strings like 'toString' and map a Function to the wasm
+    // i32 param (NaN→0 = HLC_STRATEGY_NAIVE, silently disarming the skew
+    // defense instead of throwing).
+    const strategyNames = Object.assign(Object.create(null), {
+      naive: 0x00, bounded: 0x01, quorum: 0x02, strict: 0x03, trusted: 0x04,
+    });
+    if (typeof skewInput.strategy !== 'string' ||
+        !Object.hasOwn(strategyNames, skewInput.strategy)) {
+      throw new TypeError(
+          "Node.create: skew.strategy must be one of 'naive'|'bounded'|'quorum'|'strict'|'trusted'");
+    }
+    skew.strategy = strategyNames[skewInput.strategy];
+  }
+  if (skewInput.maxSkewMs !== undefined) {
+    // Number.isSafeInteger, not Number.isInteger: max_skew_ms crosses the
+    // wasm ABI as an i64 (BigInt ABI), so the value must survive 2^53-exact
+    // BigInt coercion — anything wider silently rounds BEFORE the cast.
+    if (typeof skewInput.maxSkewMs !== 'number' || !Number.isSafeInteger(skewInput.maxSkewMs) ||
+        skewInput.maxSkewMs < 0) {
+      throw new TypeError('Node.create: skew.maxSkewMs must be a non-negative safe integer');
+    }
+    skew.maxSkewMs = skewInput.maxSkewMs;
+  }
+  if (skewInput.maxReplayAgeMs !== undefined) {
+    // Same gate shape as maxSkewMs: both cross the wasm ABI as i64 (BigInt),
+    // so the value must survive 2^53-exact BigInt coercion.
+    if (typeof skewInput.maxReplayAgeMs !== 'number' ||
+        !Number.isSafeInteger(skewInput.maxReplayAgeMs) ||
+        skewInput.maxReplayAgeMs < 0) {
+      throw new TypeError('Node.create: skew.maxReplayAgeMs must be a non-negative safe integer');
+    }
+    skew.maxReplayAgeMs = skewInput.maxReplayAgeMs;
+  }
+  if (skewInput.replayPolicy !== undefined) {
+    const replayNames = Object.assign(Object.create(null), { reject: 0, clamp: 1 });
+    if (typeof skewInput.replayPolicy !== 'string' ||
+        !Object.hasOwn(replayNames, skewInput.replayPolicy)) {
+      throw new TypeError(
+          "Node.create: skew.replayPolicy must be 'reject' or 'clamp'");
+    }
+    skew.replayPolicy = replayNames[skewInput.replayPolicy];
+  }
+  return skew;
+}
+
+// ============================================================
 // Node
 // ============================================================
 
@@ -357,8 +431,19 @@ export class Node {
 
   static async create(adminId, options = {}) {
     const M = await getModule();
+    // Skew configuration (bounded-skew replay fix): { strategy, maxSkewMs,
+    // replayPolicy, maxReplayAgeMs }. Defaults produce the same config the
+    // 1-arg C entry always produced — Node.create(id) is byte-identical to
+    // today's. Validate options BEFORE staging the admin id: a rejected
+    // create must not leak the writeString allocation into the module heap.
+    const skew = parseSkewOptions(options);
     const adminPtr = writeString(M, adminId);
-    const amPtr = M._crabs_wasm_node_create(adminPtr);
+    // max_skew_ms and replay_max_age_ms cross the wasm ABI as i64 → a BigInt
+    // is REQUIRED at the call site (a Number throws `Cannot convert N to a
+    // BigInt`)
+    const amPtr = M._crabs_wasm_node_create_ex(
+        adminPtr, skew.strategy, BigInt(skew.maxSkewMs), skew.replayPolicy,
+        BigInt(skew.maxReplayAgeMs));
     if (adminPtr) M._free(adminPtr);
     if (!amPtr) throw new Error('Node.create failed');
     return new Node(M, amPtr, adminId);
@@ -566,10 +651,94 @@ export class Node {
   }
 
   execute(op) {
-    wrapRc(this._M._crabs_wasm_execute(this._am, op._ptr), 'execute');
+    // Audit M-7 parity with replayOp(): a foreign-module Operation's `_ptr`
+    // is a valid offset in a DIFFERENT address space — reading it here would
+    // be a memory-confusion read of someone else's heap; a destroyed op
+    // (`_ptr` 0) has nothing to execute either.
+    if (!op || !op._ptr || op._M !== this._M) {
+      throw new TypeError('execute: expected an Operation from this module');
+    }
+    // RAFT ordering module path: a GROUP_ORDERED write through an attached
+    // module returns ordering_pending (0xA006) — the op was ACCEPTED into
+    // the module's log as a pending proposal and materializes on commit;
+    // other error codes keep their pre-raft shape (upstream parity).
+    const rc = this._M._crabs_wasm_execute(this._am, op._ptr);
+    if (rc === 0xA006) return;
+    wrapRc(rc, 'execute');
+  }
+
+  // Replay ingest (bounded-skew replay fix): execute a signed op under this
+  // node's REPLAY skew policy (Node.create option skew.replayPolicy). For a
+  // VALID op it never throws — returns an outcome so a log replay can
+  // converge by design:
+  //   { status: 'applied' | 'pending' } on success / raft-pending
+  //   { status: 'skipped', code, message } on failure (e.g. 0x1001
+  //   protocol_violation for a future stamp, 0x7002 already_executed on a
+  //   re-ingested op) — a skipped op mutates nothing.
+  // A destroyed op (_ptr === 0) or an Operation minted by a DIFFERENT module
+  // instance throws TypeError: the destroyed case has nothing to replay, and
+  // a foreign-module op's `_ptr` is a valid offset in a different address
+  // space — feeding it here would be a memory-confusion read of someone
+  // else's heap.
+  // GROUP_ORDERED note: a pending outcome still emits a 'change' event on
+  // the node (the C layer notifies every non-ALREADY_EXECUTED result) — do
+  // not wire replay-driven events to live-UI mutation paths.
+  replayOp(op) {
+    if (!op || !op._ptr || op._M !== this._M) {
+      throw new TypeError('replayOp: expected an Operation from this module');
+    }
+    const rc = this._M._crabs_wasm_execute_replay(this._am, op._ptr);
+    if (rc === 0) return { status: 'applied' };
+    if (rc === 0xA006) return { status: 'pending' };   // raft GROUP_ORDERED path
+    return { status: 'skipped', code: rc, message: crabsError(rc, 'replayOp').message };
+  }
+
+  // Bulk history ingest: replay a batch of ALREADY-DESERIALIZED Operations.
+  // Per-op failures never abort the batch — each skip is returned with its
+  // index, so consumers converge (and can surface gaps) instead of dying on
+  // the first out-of-window or opaque entry. `applied` holds INDICES;
+  // pending outcomes (raft GROUP_ORDERED) also land in `applied` — accepted
+  // into the ordering log, not yet committed.
+  // Warn throttling: the first REPLAY_SKIP_WARN_LIMIT skips warn individually
+  // (`crabs-wasm: replay skipped op[N]: message`); on a bigger batch ONE
+  // summary line (`...and N more skipped (total K)`) follows — a 10k-op
+  // history must not flood the console. The `skipped` array STILL carries
+  // every skip entry; the throttle only trims console output.
+  replayOps(operations) {
+    if (!Array.isArray(operations)) {
+      throw new TypeError('replayOps: expected an array of Operations');
+    }
+    const applied = [];
+    const skipped = [];
+    let skipCount = 0;
+    operations.forEach((entryOperation, entryIndex) => {
+      const outcome = this.replayOp(entryOperation);
+      if (outcome.status !== 'skipped') {
+        applied.push(entryIndex);
+        return;
+      }
+      skipped.push({ index: entryIndex, code: outcome.code, message: outcome.message });
+      skipCount++;
+      if (skipCount <= REPLAY_SKIP_WARN_LIMIT) {
+        console.warn(`crabs-wasm: replay skipped op[${entryIndex}]: ${outcome.message}`);
+      }
+    });
+    if (skipCount > REPLAY_SKIP_WARN_LIMIT) {
+      console.warn(`crabs-wasm: ...and ${skipCount - REPLAY_SKIP_WARN_LIMIT} more skipped `
+        + `(total ${skipCount})`);
+    }
+    return { applied, skipped };
   }
 
   sign(op, signingKey) {
+    // Audit M-7 parity with replayOp(): a foreign-module Operation's `_ptr`
+    // is a valid offset in a DIFFERENT address space — reading it here would
+    // be a memory-confusion read of someone else's heap; a destroyed op
+    // (`_ptr` 0) has nothing to sign either. (The HLC hand-stamping below is
+    // this vendored fork's own behavior — preserved, not upstream's sign.)
+    if (!op || !op._ptr || op._M !== this._M) {
+      throw new TypeError('sign: expected an Operation from this module');
+    }
     const M = this._M;
     let privHex;
     if (typeof signingKey === 'string') {

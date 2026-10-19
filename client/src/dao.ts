@@ -94,7 +94,15 @@ export class BrowserDao {
     // plus member and reputation grants = 3). Track that as the baseline so later
     // sync_roles target versions map one-to-one to key version bumps.
     this.roleChangeCount.set(username, keyVersion);
-    this.node = await this.Node.create(this.adminId, { ordering: 'hlc' });
+    // HLC skew policy: the live path keeps the default 5s bounded window, but
+    // boot-time log ingest (replayRemote → node.replayOp) needs the 'clamp'
+    // replay policy — a viewer registering >5s after an op's authorship would
+    // otherwise abort its whole log replay with 'protocol_violation' (CRABS
+    // brief docs/2026-10-17-hlc-bounded-skew-replay-fix-brief.md).
+    this.node = await this.Node.create(this.adminId, {
+      ordering: 'hlc',
+      skew: { strategy: 'bounded', replayPolicy: 'clamp' },
+    });
     this.node.addORSet(STATE_NAMES.members);
     this.node.addORSet(STATE_NAMES.proposals);
     this.node.addORSet(STATE_NAMES.executedProposals);
@@ -291,17 +299,46 @@ export class BrowserDao {
         return;
       }
       this.node.execute(op);
-      const proposal = await this.parseCreateProposal(bytes);
-      if (proposal) {
-        this.proposals.set(proposal.proposalId, proposal);
-      }
-      await this.mirrorContributionState(op);
-      await this.mirrorElectionState(op);
-      await this.mirrorRoundState(op);
-      await this.mirrorFeedEvent(op);
+      await this.mirrors(bytes, op);
     } finally {
       op.destroy();
     }
+  }
+
+  // Boot-time log ingest goes through node.replayOp — the CLAMP replay path
+  // enabled by Node.create skew.replayPolicy 'clamp' — so historic ops
+  // older than the 5s live window materialize (clamped) instead of aborting
+  // the whole replay with 'protocol_violation'. A structurally-accepted op
+  // that still fails (e.g. 'unauthorized', 'already_executed') never throws;
+  // the skip outcome is returned so the store can converge like the server
+  // hydrate does. Throws only on malformed input (deserialize).
+  async replayRemote(
+    bytes: Uint8Array
+  ): Promise<{ status: string; code?: number; message?: string } | null> {
+    const op = await this.Operation.deserialize(bytes);
+    try {
+      if (op.type === 'sync_roles') {
+        await this.applySyncRolesFromOp(op);
+        return null;
+      }
+      const outcome = this.node.replayOp(op);
+      if (outcome.status === 'skipped') return outcome;
+      await this.mirrors(bytes, op);
+      return null;
+    } finally {
+      op.destroy();
+    }
+  }
+
+  private async mirrors(bytes: Uint8Array, op: any): Promise<void> {
+    const proposal = await this.parseCreateProposal(bytes);
+    if (proposal) {
+      this.proposals.set(proposal.proposalId, proposal);
+    }
+    await this.mirrorContributionState(op);
+    await this.mirrorElectionState(op);
+    await this.mirrorRoundState(op);
+    await this.mirrorFeedEvent(op);
   }
 
   private async parseCreateProposal(bytes: Uint8Array): Promise<ProposalPayload | null> {
