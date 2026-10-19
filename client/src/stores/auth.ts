@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import type { PublicUser } from '@shared/types';
 import { BrowserDao, bytesToHex } from '../dao';
 import { registerWallet, loginWallet } from '../eauth-wallet';
+import { sanitizeUsername } from '@shared/username';
 import {
   saveLoginBundle, loadLoginBundle, saveWalletState, loadWalletState,
   importWalletState, WalletState,
@@ -24,19 +25,9 @@ export const useAuthStore = defineStore('auth', () => {
     confirmPassword: string
   ): Promise<boolean> {
     const daoStore = useDaoStore();
-    // Strip every invisible character class that rides in on pastes/IMEs and
-    // defeats trim(): Unicode format characters (Cf — zero-widths, joiners,
-    // soft hyphen, BOM), variation selectors (+ supplement), Mongolian free
-    // variation selectors, the Hangul fillers (invisible-width letters), and
-    // control characters (Cc — e.g. a literal DEL from a remote-desktop
-    // Backspace or a terminal clipboard, which renders invisibly and fails
-    // the CRABS id charset check).
-    const username = usernameRaw
-      .replace(
-        /[\p{Cc}\p{Cf}\u{FE00}-\u{FE0F}\u{E0100}-\u{E01EF}\u{180B}-\u{180E}\u{115F}\u{1160}\u{034F}\u{2065}]/gu,
-        ''
-      )
-      .trim();
+    // Same normalization the login path uses — see shared/src/username.ts for
+    // the invisible-character history this guards against.
+    const username = sanitizeUsername(usernameRaw);
     if (!username || !password) {
       status.set('Username and password are required.', 'error');
       return false;
@@ -115,38 +106,42 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function login(username: string, password: string): Promise<boolean> {
+  async function login(usernameRaw: string, password: string): Promise<boolean> {
     const daoStore = useDaoStore();
-    if (!username.trim() || !password) {
+    // Same normalization the register path uses (shared/src/username.ts): an
+    // invisible character that survives trim() would otherwise fail the
+    // server's exact-key user lookup as a misleading "User not found".
+    const username = sanitizeUsername(usernameRaw);
+    if (!username || !password) {
       status.set('Username and password are required.', 'error');
       return false;
     }
     try {
       status.set('Logging in...', 'loading');
-      const loginRes = await serverClient.login(username.trim());
+      const loginRes = await serverClient.login(username);
       if (loginRes.kind !== 'login_ok') {
         status.set('Login failed.', 'error');
         return false;
       }
 
-      const bundle = await loadLoginBundle(username.trim());
+      const bundle = await loadLoginBundle(username);
       if (!bundle) {
         status.set('No wallet found for this browser.', 'error');
         return false;
       }
 
       status.set('Unlocking wallet...', 'loading');
-      const keys = await loginWallet(username.trim(), password, bundle.loginInfo, bundle.keyStore);
+      const keys = await loginWallet(username, password, bundle.loginInfo, bundle.keyStore);
 
-      let state = await loadWalletState(username.trim(), keys.encryptionKey);
+      let state = await loadWalletState(username, keys.encryptionKey);
       if (!state) {
         status.set('Fetching wallet snapshot from server...', 'loading');
-        const snapshotRes = await serverClient.getSnapshot(username.trim());
+        const snapshotRes = await serverClient.getSnapshot(username);
         if (snapshotRes.kind !== 'snapshot' || !snapshotRes.snapshot) {
           status.set('No wallet state found locally or on server.', 'error');
           return false;
         }
-        const restored = await importWalletState(username.trim(), keys.encryptionKey, snapshotRes.snapshot);
+        const restored = await importWalletState(username, keys.encryptionKey, snapshotRes.snapshot);
         if (!restored) {
           status.set('Failed to restore wallet from server snapshot.', 'error');
           return false;
@@ -156,19 +151,19 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       const d = new BrowserDao();
-      await d.init(username.trim(), bytesToHex(state.signingSeed), state.keyVersion);
-      d.setWalletUser(username.trim());
+      await d.init(username, bytesToHex(state.signingSeed), state.keyVersion);
+      d.setWalletUser(username);
 
       wallet.value = state;
       daoStore.members = loginRes.members.map((m: PublicUser) => m.username);
 
       for (const member of loginRes.members) {
-        if (member.username !== username.trim()) {
+        if (member.username !== username) {
           d.registerMember(member.username, member.publicKeyHex, member.keyVersion);
         }
       }
 
-      await daoStore.bootstrap(d, username.trim());
+      await daoStore.bootstrap(d, username);
       await daoStore.replayLog();
 
       status.set('Logged in.', 'success');
