@@ -63,7 +63,7 @@ const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
   const viewer2 = await registerUser(browser, 'feed_walk2_' + Math.floor(Math.random() * 10000));
   let attention = '';
   for (let attempt = 0; attempt < 40; attempt++) {
-    attention = await viewer2.locator('#needs-attention').textContent();
+    attention = await viewer2.locator('#needs-attention').textContent({ timeout: 250 });
     if (attention.includes('"Walk proposal" is open for voting')) break;
     await viewer2.waitForTimeout(250);
   }

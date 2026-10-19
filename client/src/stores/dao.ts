@@ -101,6 +101,7 @@ export const useDaoStore = defineStore('dao', () => {
     if (logMsg.kind !== 'log' || !dao.value) return;
     let skipCount = 0;
     for (const stored of logMsg.operations) {
+      if (!dao.value) return;
       try {
         const skip = await dao.value.replayRemote(base64ToBytes(stored.bytes));
         if (skip) {
