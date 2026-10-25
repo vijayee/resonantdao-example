@@ -112,8 +112,15 @@ async function completeFlow(page, flowId, { choiceValue = null, textValue = '' }
         await flow.locator('.wizard-next').click();
         await flow.locator('textarea').waitFor({ state: 'visible', timeout: 3000 });
       }
-      if ((await textareas.count()) > 0 && !(await textareas.first().inputValue())) {
-        await textareas.first().fill(textValue);
+      if ((await textareas.count()) > 0) {
+        // Fill only when empty: the on-step answer is uncommitted by
+        // construction (a commit moves the flow past the step), so a filled
+        // textarea here means a prior attempt's NEXT click was swallowed mid-
+        // drive (or a backward draft resume) — clicking Next again is the
+        // recovery, not a double-advance.
+        if (!(await textareas.first().inputValue())) {
+          await textareas.first().fill(textValue);
+        }
         await flow.locator('.wizard-next').click();
         await flow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 3000 });
       }

@@ -94,6 +94,9 @@ const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
       await reckonFlow.locator('.wizard-submit').click();
       await viewer2.waitForTimeout(2000);
     }
+    // The row-assert is the failure point (not a skip): the button was visible
+    // and clicked, so a wizard that never opened means the click was lost —
+    // the reckon row must be missing and the fail below fires.
     await nav(viewer2, '/');
     rows = await viewer2.locator('.event-row').allTextContents();
     if (!rows.some((t) => t.includes('round 1 reckoned — ready to complete'))) fail('round_reckoned row missing');
