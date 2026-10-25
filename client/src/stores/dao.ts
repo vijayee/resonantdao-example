@@ -369,15 +369,17 @@ export const useDaoStore = defineStore('dao', () => {
   }
 
   // Verify flow (ported): no-self verify, distinct-actor + reciprocity bars,
-  // harm-choice prompt, mandatory written reason.
-  async function verifyContribution(entry: ContributionMirrorEntry) {
+  // mandatory written reason. The decision UI lives in
+  // flows/contribute-flows.ts (verifyFlow); this store op is the gate +
+  // payload assembler.
+  async function verifyContribution(entry: ContributionMirrorEntry, input: { pass: boolean; harm: HarmVerdict; reason: string }): Promise<boolean> {
     const d = dao.value;
-    if (!d || submitting.value) return;
-    if (entry.submitter === username.value) return;
+    if (!d || submitting.value) return false;
+    if (entry.submitter === username.value) return false;
     const prior = entry.verifiedBy ? [entry.verifiedBy] : [];
     if (prior.includes(username.value)) {
       status.set('You already verified this contribution.', 'error');
-      return;
+      return false;
     }
     const verifier = username.value;
     if (
@@ -385,34 +387,20 @@ export const useDaoStore = defineStore('dao', () => {
       d.node.setContains(RECIP_NAMES.verifiedBy(verifier), entry.submitter)
     ) {
       status.set('You already verified this submitter’s earlier work — reciprocity bars re-verification.', 'error');
-      return;
+      return false;
     }
-    const choice = prompt('Accept this contribution? Type: yes / yes-harm (reduced) / voided / no. (Cancel = nothing)');
-    if (choice === null) return;
-    const normalized = choice.trim().toLowerCase();
-    let pass = false;
-    let harm: HarmVerdict = 'none';
-    if (normalized === 'yes' || normalized === 'y') { pass = true; }
-    else if (normalized === 'yes-harm' || normalized === 'reduced') { pass = true; harm = 'reduced'; }
-    else if (normalized === 'voided') { pass = true; harm = 'voided'; }
-    else if (normalized === 'no' || normalized === 'n') { pass = false; }
-    else {
-      status.set('Answer with yes / yes-harm / voided / no.', 'error');
-      return;
-    }
-    const reason = prompt('Written reason for your verification (recorded permanently):') ?? '';
-    if (!reason.trim()) {
+    if (!input.reason.trim()) {
       status.set('A written reason is required for every verification.', 'error');
-      return;
+      return false;
     }
     const payload: VerifyContributionPayload = {
       contributionId: entry.record.contributionId,
       submitter: entry.submitter,
       dims: entry.record.dims,
       stepId: 'verify',
-      pass,
-      reason,
-      harm,
+      pass: input.pass,
+      reason: input.reason.trim(),
+      harm: input.harm,
       priorVerifiers: prior,
       ...(entry.verifiedBy ? { priorHarm: entry.harm ?? ('none' as HarmVerdict) } : {}),
     };
@@ -423,64 +411,68 @@ export const useDaoStore = defineStore('dao', () => {
       await safeExecuteRemote(bytes);
       status.set(`Verification recorded (+${RES_CONFIG.verificationCheckCredit} $RES).`, 'success');
       bump();
+      return true;
     } catch (err) {
       status.set(`Verify error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
+      return false;
     } finally {
       submitting.value = false;
     }
   }
 
-  async function settleContribution(entry: ContributionMirrorEntry) {
+  async function settleContribution(entry: ContributionMirrorEntry, input: { reason: string }): Promise<boolean> {
     const d = dao.value;
-    if (!d || submitting.value || entry.submitter !== username.value) return;
-    const reason = prompt('Settlement note (recorded permanently):') ?? '';
-    if (!reason.trim()) {
+    if (!d || submitting.value || entry.submitter !== username.value) return false;
+    if (!input.reason.trim()) {
       status.set('A written reason is required to settle.', 'error');
-      return;
+      return false;
     }
     submitting.value = true;
     try {
       const bytes = await d.settleContribution(username.value, {
         contributionId: entry.record.contributionId,
         submitter: entry.submitter,
-        reason,
+        reason: input.reason.trim(),
         verifiers: entry.verifiers ?? [],
       });
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Contribution settled.', 'success');
       bump();
+      return true;
     } catch (err) {
       status.set(`Settle error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
+      return false;
     } finally {
       submitting.value = false;
     }
   }
 
-  async function appealContribution(entry: ContributionMirrorEntry) {
+  async function appealContribution(entry: ContributionMirrorEntry, input: { reason: string }): Promise<boolean> {
     const d = dao.value;
-    if (!d || submitting.value || entry.submitter !== username.value) return;
-    const reason = prompt('Appeal reason (recorded permanently):') ?? '';
-    if (!reason.trim()) {
+    if (!d || submitting.value || entry.submitter !== username.value) return false;
+    if (!input.reason.trim()) {
       status.set('A written reason is required to appeal.', 'error');
-      return;
+      return false;
     }
     submitting.value = true;
     try {
       const bytes = await d.appealVerdict(username.value, {
         contributionId: entry.record.contributionId,
         submitter: entry.submitter,
-        reason,
+        reason: input.reason.trim(),
       });
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Appeal recorded — awaiting re-verification.', 'success');
       bump();
+      return true;
     } catch (err) {
       status.set(`Appeal error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
+      return false;
     } finally {
       submitting.value = false;
     }
@@ -488,52 +480,53 @@ export const useDaoStore = defineStore('dao', () => {
 
   // ---- round-spine ops ----
 
-  async function auditRound() {
+  async function auditRound(input: { fair: boolean; note: string }): Promise<boolean> {
     const d = dao.value;
-    if (!d || submitting.value) return;
-    const fair = confirm('Close the round as FAIR? OK = fair, Cancel = UNFAIR (records the round debt and skips aggregation).');
-    const note = prompt('Audit note (recorded permanently):') ?? '';
-    if (!note.trim()) {
+    if (!d || submitting.value) return false;
+    if (!input.note.trim()) {
       status.set('An audit note is required.', 'error');
-      return;
+      return false;
     }
     submitting.value = true;
     try {
       const bytes = await d.auditRound(username.value, {
-        fair,
-        note,
+        fair: input.fair,
+        note: input.note.trim(),
         calibrationVersion: 'v1',
       });
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
-      status.set(fair ? 'Round audited as fair.' : 'Round closed with a debt record; next round begins.', fair ? 'success' : 'error');
+      status.set(input.fair ? 'Round audited as fair.' : 'Round closed with a debt record; next round begins.', input.fair ? 'success' : 'error');
       bump();
+      return true;
     } catch (err) {
       status.set(`Audit error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
+      return false;
     } finally {
       submitting.value = false;
     }
   }
 
-  async function reckonRound() {
+  async function reckonRound(input: { note: string }): Promise<boolean> {
     const d = dao.value;
-    if (!d || submitting.value) return;
-    const note = prompt('Reckoning note (recorded permanently):') ?? '';
-    if (!note.trim()) {
+    if (!d || submitting.value) return false;
+    if (!input.note.trim()) {
       status.set('A reckoning note is required.', 'error');
-      return;
+      return false;
     }
     submitting.value = true;
     try {
-      const bytes = await d.reckonRound(username.value, { note });
+      const bytes = await d.reckonRound(username.value, { note: input.note.trim() });
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set('Round reckoned — ready to complete.', 'success');
       bump();
+      return true;
     } catch (err) {
       status.set(`Reckon error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
+      return false;
     } finally {
       submitting.value = false;
     }
