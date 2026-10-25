@@ -33,6 +33,16 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
+// Dev diagnostic for the auth lookups: usernames are exact dict keys, so this
+// records exactly what arrived on the wire (length + code points) — an
+// invisible character or a wrong-server mixup is distinguishable only from
+// what the server actually received.
+function logIdentityLookup(kind: string, username: unknown): void {
+  if (typeof username !== 'string') return;
+  const cps = [...username].map((c) => `U+${c.codePointAt(0)!.toString(16).toUpperCase()}`).join(' ');
+  console.info(`[auth-trace] ${kind} ${JSON.stringify(username)} (len ${username.length}) ${cps}`);
+}
+
 export class ConnectionHandler {
   private sockets = new Set<WebSocket>();
   private socketUsers = new WeakMap<WebSocket, string>();
@@ -77,6 +87,7 @@ export class ConnectionHandler {
           }
           this.registering.add(msg.username);
           try {
+            logIdentityLookup('register', msg.username);
             if (await this.db.userExists(msg.username)) {
               return this.send(ws, { kind: 'error', message: 'Username taken' });
             }
@@ -111,6 +122,7 @@ export class ConnectionHandler {
           if (!isNonEmptyString(msg.username)) {
             return this.send(ws, { kind: 'error', message: 'Invalid login payload' });
           }
+          logIdentityLookup('login', msg.username);
           if (!(await this.db.userExists(msg.username))) {
             return this.send(ws, { kind: 'error', message: 'User not found' });
           }
