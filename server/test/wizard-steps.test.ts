@@ -7,6 +7,7 @@ describe('validateStep', () => {
 
   it('requires exactly one choice selection', () => {
     expect(validateStep(choice, {})).toBe('Choose one to continue.');
+    expect(validateStep(choice, { decision: '' })).toBe('Choose one to continue.');
     expect(validateStep(choice, { decision: 'yes' })).toBeNull();
   });
 
