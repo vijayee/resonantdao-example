@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { FlowAnswers, FlowDefinition, stepTitle, validateStep } from './types';
-import { loadDraft, saveDraft, clearDraft } from './drafts';
+import { saveDraft, clearDraft } from './drafts';
 import { useDaoStore } from '../stores/dao';
 
 const props = defineProps<{
@@ -80,7 +80,6 @@ const committedAnswers = computed(() => {
   return rest;
 });
 const stepValid = computed(() => validateStep(current.value, answers.value) === null);
-const isReview = computed(() => current.value.kind === 'review');
 
 function persist(): void {
   if (ds.username) {
