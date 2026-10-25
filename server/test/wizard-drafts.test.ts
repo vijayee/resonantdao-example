@@ -65,4 +65,32 @@ describe('wizard draft store', () => {
     expect(loadDraft(store, 'alice', 'verify', 'c-9')).toBeNull();
     expect(listDrafts(store, 'alice', 'verify').size).toBe(1);
   });
+
+  it('ignores keys outside the wizard draft prefix', () => {
+    const store = fakeStorage();
+    store.value['theme'] = 'dark';
+    store.value['snapshots/alice'] = '{}';
+    expect(loadDraft(store, 'alice', 'verify', 'c-1')).toBeNull();
+    expect(listDrafts(store, 'alice', 'verify').size).toBe(0);
+    expect(store.value['theme']).toBe('dark');
+  });
+
+  it('cleanStaleDrafts with an empty actionable set clears the flow (round rollover)', () => {
+    const store = fakeStorage();
+    saveDraft(store, 'alice', 'audit', '1', draft(1));
+    cleanStaleDrafts(store, 'alice', 'audit', new Set<string>());
+    expect(loadDraft(store, 'alice', 'audit', '1')).toBeNull();
+  });
+
+  it('a missing savedAt tolerates to 0', () => {
+    const store = fakeStorage();
+    store.value['wizard-draft/alice/verify/c-3'] = JSON.stringify({ answers: { decision: 'yes' }, stepIndex: 1 });
+    expect(loadDraft(store, 'alice', 'verify', 'c-3')?.savedAt).toBe(0);
+  });
+
+  it('an array answers value is rejected, not cast', () => {
+    const store = fakeStorage();
+    store.value['wizard-draft/alice/verify/c-4'] = JSON.stringify({ answers: ['yes'], stepIndex: 1 });
+    expect(loadDraft(store, 'alice', 'verify', 'c-4')).toBeNull();
+  });
 });

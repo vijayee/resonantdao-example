@@ -30,6 +30,7 @@ export function loadDraft(store: DraftStore, username: string, flowId: string, t
     const parsed = JSON.parse(raw) as Partial<WizardDraft>;
     if (typeof parsed !== 'object' || parsed === null) return null;
     if (typeof parsed.stepIndex !== 'number' || typeof parsed.answers !== 'object' || parsed.answers === null) return null;
+    if (Array.isArray(parsed.answers)) return null;
     return { answers: parsed.answers as Record<string, string>, stepIndex: parsed.stepIndex, savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : 0 };
   } catch {
     return null;
