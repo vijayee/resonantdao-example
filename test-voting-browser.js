@@ -76,35 +76,6 @@ async function voteOption(page, proposalId, optionLabel) {
   await page.waitForTimeout(1500);
 }
 
-// Answers for the flows' confirm()/prompt() dialogs. All browser contexts
-// share them because the flows run strictly sequentially; a single handler
-// per page (registered once) avoids double-answering the same dialog.
-// The verify flow opens the HARM-CHOICE prompt first ('Accept this
-// contribution? Type: yes / yes-harm (reduced) / voided / no.' — its answer
-// records the verdict, and 'no' records a REJECTION), then the reason prompt;
-// `dialogChoice` feeds the choice prompt (routed by message text) and
-// `dialogAnswer` feeds the reason/settle/appeal prompts; `confirmAccept`
-// answers the round-audit FAIR confirm().
-let dialogChoice = 'yes';
-let dialogAnswer = '';
-let confirmAccept = true;
-const armDialogs = (page) => page.on('dialog', async (dialog) => {
-  if (dialog.type() === 'confirm') {
-    if (confirmAccept) {
-      await dialog.accept();
-    } else {
-      confirmAccept = true;
-      await dialog.dismiss();
-    }
-    return;
-  }
-  if (dialog.message().startsWith('Accept this contribution?')) {
-    await dialog.accept(dialogChoice);
-    return;
-  }
-  await dialog.accept(dialogAnswer);
-});
-
 // The demo clock re-renders the list every second (replacing every rendered
 // node), which can swallow mouse clicks in flight, so click from inside the
 // page (always the current node) — callers retry until the op's UI effect
@@ -117,6 +88,41 @@ const clickInCard = (page, cardText, selector) =>
     if (btn && !btn.disabled) btn.click();
     return !!btn && !btn.disabled;
   }, { cardText, selector });
+
+// Drive an in-place wizard flow to completion. `choiceValue` selects the
+// flow's FIRST-STEP radio (verify decision / audit fairness); `textValue`
+// fills the first text step encountered. Retries through the flow's own
+// draft-resume path: a failed submit keeps the draft (and the open flow),
+// so a later attempt resumes at the restored step with everything filled.
+async function completeFlow(page, flowId, { choiceValue = null, textValue = '' } = {}) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const flow = page.locator(`.wizard-flow[data-flow-id="${flowId}"]`);
+    if (!(await flow.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false))) return false;
+    const radios = flow.locator('.wizard-option:checked');
+    const needRadio = choiceValue !== null && (await radios.count() === 0);
+    const textareas = flow.locator('textarea');
+    if (needRadio) {
+      await flow.locator(`.wizard-option[value="${choiceValue}"]`).check();
+      await flow.locator('.wizard-next').click();
+      await flow.locator('textarea').waitFor({ state: 'visible', timeout: 3000 });
+    }
+    if ((await textareas.count()) > 0 && !(await textareas.first().inputValue())) {
+      await textareas.first().fill(textValue);
+      await flow.locator('.wizard-next').click();
+      await flow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 3000 });
+    }
+    if (await flow.locator('.wizard-submit').count()) {
+      if (!(await flow.locator('.wizard-submit').isDisabled())) {
+        await flow.locator('.wizard-submit').click();
+        return true;
+      }
+      await page.waitForTimeout(1000); // submitting — retry window
+      continue;
+    }
+    await page.waitForTimeout(1000);
+  }
+  return false;
+}
 
 // Wizard submit only: fills the contribution form on the submitter's page
 // and waits for the card. Returns the card locator (scoped to the summary).
@@ -146,15 +152,13 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
     .locator(`.contribution-card:has-text("${summary}") .settle-contribution`)
     .first();
 
-  // The verify flow opens the harm-choice prompt then the reason prompt —
-  // dialogs must be armed before the click or Playwright auto-dismisses them
-  // (a cancelled choice records nothing), so retry until the settle step
-  // becomes actionable.
-  dialogChoice = 'yes';
+  // Retry until the settle step becomes actionable: each attempt re-clicks
+  // the verify button and drives the in-place wizard (harm choice → written
+  // reason → review submit) to completion.
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
-    dialogAnswer = verifyReason;
     await clickInCard(verifier.page, summary, '.verify-contribution');
+    await completeFlow(verifier.page, 'verify', { choiceValue: 'yes', textValue: verifyReason });
     settleReady = await settleBtn
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
@@ -167,14 +171,14 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
   // The settle step is only actionable once the verifier's op has been
   // applied (requirement + step register), so its appearance proves the
   // verify round-trip succeeded.
-  dialogAnswer = settleNote;
 
   // The demo clock re-renders the whole list every second and can swallow a
-  // click in flight; click from inside the page and retry until the pill
-  // flips to 'accepted'.
+  // click in flight; click from inside the page, drive the settle wizard
+  // (note → review submit), and retry until the pill flips to 'accepted'.
   let settled = false;
   for (let attempt = 0; !settled && attempt < 15; attempt++) {
     await clickInCard(submitter.page, summary, '.settle-contribution');
+    await completeFlow(submitter.page, 'settle', { textValue: settleNote });
     settled = await card
       .locator('.contribution-pill:text-is("accepted")')
       .waitFor({ state: 'visible', timeout: 3000 })
@@ -192,19 +196,19 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
 // v2 (whose button reads 'Verify (2nd)'), settle. The settle step only
 // becomes actionable once BOTH verifications have applied.
 //
-// v1's verify can be armed with a harm answer (`harmChoice`, 'yes' by
-// default): 'yes-harm' records a 'reduced' verdict on the FIRST check, and
-// the completing check automatically carries that verdict forward as the
-// payload's priorHarm (the UI reads it out of its mirror), so strongest-wins
-// keeps 'reduced' effective at settle — asserted via the card's harm receipt.
+// v1's verify wizard is driven with a harm verdict (`harmChoice`, the FIRST
+// decision radio's value — 'yes' by default): 'yes-harm' records a 'reduced'
+// verdict on the FIRST check, and the completing check automatically carries
+// that verdict forward as the payload's priorHarm (the UI reads it out of
+// its mirror), so strongest-wins keeps 'reduced' effective at settle —
+// asserted via the card's harm receipt.
 async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyReason, settleNote, harmChoice = 'yes') {
   const card = await submitContribution(submitter, dimValue, summary);
 
   let halfDone = false;
   for (let attempt = 0; !halfDone && attempt < 15; attempt++) {
-    dialogChoice = harmChoice;
-    dialogAnswer = verifyReason;
     await clickInCard(v1.page, summary, '.verify-contribution');
+    await completeFlow(v1.page, 'verify', { choiceValue: harmChoice, textValue: verifyReason });
     halfDone = await v1.page
       .locator(`.contribution-card:has-text("${summary}") .contribution-step--current:has-text("(1/2)")`)
       .waitFor({ state: 'visible', timeout: 3000 })
@@ -237,9 +241,10 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
     .first();
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
-    dialogChoice = 'yes'; // the completing check carries the prior verdict — no fresh harm
-    dialogAnswer = verifyReason;
     await clickInCard(v2.page, summary, '.verify-contribution');
+    // the completing check rides 'yes' — it carries the prior verdict
+    // (priorHarm from the mirror), so no fresh harm choice is made
+    await completeFlow(v2.page, 'verify', { choiceValue: 'yes', textValue: verifyReason });
     settleReady = await settleBtn
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
@@ -249,10 +254,10 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
     throw new Error(`Settle step never became actionable after the second verify. Status bar: ${statusBar || '(empty)'}`);
   }
 
-  dialogAnswer = settleNote;
   let settled = false;
   for (let attempt = 0; !settled && attempt < 15; attempt++) {
     await clickInCard(submitter.page, summary, '.settle-contribution');
+    await completeFlow(submitter.page, 'settle', { textValue: settleNote });
     settled = await card
       .locator('.contribution-pill:text-is("accepted")')
       .waitFor({ state: 'visible', timeout: 3000 })
@@ -278,18 +283,18 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
   }
 }
 
-// Phase-3 appeal flow: submit → a REJECTING verification (the harm-choice
-// prompt answered 'no') → the submitter appeals (status pill 'appealed')
-// → a fresh member re-verifies accepted → settle. The appealed pill must be
-// visible between the appeal and the settle.
+// Phase-3 appeal flow: submit → a REJECTING verification (the verify
+// wizard's decision radio answered 'no') → the submitter appeals (status
+// pill 'appealed') → a fresh member re-verifies accepted → settle. The
+// appealed pill must be visible between the appeal and the settle.
 async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary, rejectReason, appealReason, reVerifyReason, settleNote) {
   const card = await submitContribution(submitter, dimValue, summary);
 
   let rejected = false;
   for (let attempt = 0; !rejected && attempt < 15; attempt++) {
-    dialogChoice = 'no';          // the choice prompt's 'no' records the rejection
-    dialogAnswer = rejectReason;  // prompt: the recorded rejection reason
+    // the decision radio's 'no' records the rejection with the written reason
     await clickInCard(rejecter.page, summary, '.verify-contribution');
+    await completeFlow(rejecter.page, 'verify', { choiceValue: 'no', textValue: rejectReason });
     rejected = await submitter.page
       .locator(`.contribution-card:has-text("${summary}") .contribution-pill:text-is("rejected")`)
       .waitFor({ state: 'visible', timeout: 3000 })
@@ -301,10 +306,10 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
   }
   console.log('CONTRIBUTION STATUS PILL: rejected');
 
-  dialogAnswer = appealReason;
   let appealed = false;
   for (let attempt = 0; !appealed && attempt < 15; attempt++) {
     await clickInCard(submitter.page, summary, '.appeal-contribution');
+    await completeFlow(submitter.page, 'appeal', { textValue: appealReason });
     appealed = await submitter.page
       .locator(`.contribution-card:has-text("${summary}") .contribution-pill:text-is("appealed")`)
       .waitFor({ state: 'visible', timeout: 3000 })
@@ -333,9 +338,8 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
     .first();
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
-    dialogChoice = 'yes';
-    dialogAnswer = reVerifyReason;
     await clickInCard(reVerifier.page, summary, '.verify-contribution');
+    await completeFlow(reVerifier.page, 'verify', { choiceValue: 'yes', textValue: reVerifyReason });
     settleReady = await settleBtn
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
@@ -345,10 +349,10 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
     throw new Error(`Settle step never became actionable after the re-verification. Status bar: ${statusBar || '(empty)'}`);
   }
 
-  dialogAnswer = settleNote;
   let settled = false;
   for (let attempt = 0; !settled && attempt < 15; attempt++) {
     await clickInCard(submitter.page, summary, '.settle-contribution');
+    await completeFlow(submitter.page, 'settle', { textValue: settleNote });
     settled = await card
       .locator('.contribution-pill:text-is("accepted")')
       .waitFor({ state: 'visible', timeout: 3000 })
@@ -362,21 +366,28 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
 }
 
 // One round-spine step: click the persistent stage-gated round-panel button
-// (armed dialogs first) and retry until the NEXT stage's button becomes
-// visible — its appearance proves the op was executed, mirroring how the
-// wizard loop waits for the settle button. The spine ops need no extra UI
-// data besides the dialogs: complete collects the round's accepted entries
-// (contribution id, submitter, dims) itself. Spine policies are
-// 'role:member OR role:custodian', so a plain member can close the round.
-async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
-  if (note !== null) {
-    dialogAnswer = note;
-  }
+// and retry until the NEXT stage's button becomes visible — its appearance
+// proves the op was executed, mirroring how the wizard loop waits for the
+// settle button. The button opens the stage's in-place wizard (audit or
+// reckon); completeFlow drives its choice/note/review steps. Reckon carries
+// only a note (choiceValue stays null); audit passes 'fair' (or 'unfair')
+// as the fairness radio's value. The complete button collects the round's
+// accepted entries (contribution id, submitter, dims) itself. Spine policies
+// are 'role:member OR role:custodian', so a plain member can close the round.
+async function runRoundSpineStep(actor, buttonId, nextButtonId, note, choiceValue = null) {
   let ready = false;
   for (let attempt = 0; !ready && attempt < 15; attempt++) {
     if (await actor.page.locator(`#${buttonId}`).isVisible().catch(() => false)) {
       await actor.page.locator(`#${buttonId}`).click({ force: true }).catch(() => {});
-      await actor.page.waitForTimeout(1500);
+      const flowId = buttonId === 'audit-round-btn' ? 'audit' : 'reckon';
+      if (await actor.page
+        .locator(`.wizard-flow[data-flow-id="${flowId}"]`)
+        .waitFor({ state: 'visible', timeout: 4000 })
+        .then(() => true, () => false)) {
+        await completeFlow(actor.page, flowId, { choiceValue, textValue: note ?? '' });
+      } else {
+        await actor.page.waitForTimeout(1500); // op in flight; next button may already be flipping
+      }
     }
     ready = await actor.page
       .locator(`#${nextButtonId}:not(.hidden)`)
@@ -428,10 +439,6 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // Runs before quadratic voting: the settled contributions fund the round's
   // $RES bounties and — since phase 2 — the C-dimension tallies that set the
   // salient quadratic vote balance ($RES itself no longer gates votes).
-  armDialogs(alice.page);
-  armDialogs(bob.page);
-  armDialogs(carol.page);
-  armDialogs(dave.page);
 
   // Cycle 1 (phase-3 two-verifier C_1, HARM path): alice submits a Building
   // claim; bob checks it (quorum 1/2) answering 'yes-harm' — the reduced
@@ -461,8 +468,9 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   // --- Phase-3 appeal flow: reject -> appeal -> re-verify -> settle ---
   // Pair ledger so far (one check per pair, mutual bar kills both
   // directions): a-b, a-c (cycle 1), b-d (cycle 2). The appealed submission
-  // belongs to carol (page 3): bob's check REJECTS it (confirm dialog
-  // dismissed — pair b-c), carol appeals from her page ('Appeal…' prompt),
+  // belongs to carol (page 3): bob's check REJECTS it (the decision radio
+  // answered 'no' — pair b-c), carol appeals from her page via the appeal
+  // wizard,
   // dave's re-verification overturns it (pair c-d — fresh), carol settles.
   // dave's re-verify button title at that point reads his accuracy stat —
   // one check, upheld once by cycle 2's settlement-attested verifier list.
@@ -479,11 +487,10 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
   console.log('Closing round 1 through the spine (audit → reckon → complete)');
   // The round panel (stepper, stage buttons, round label) lives on /round.
   await nav(alice.page, '/round');
-  await runRoundSpineStep(alice, 'audit-round-btn', 'reckon-round-btn', 'phase-2 e2e audit note: fair against v1');
+  await runRoundSpineStep(alice, 'audit-round-btn', 'reckon-round-btn', 'phase-2 e2e audit note: fair against v1', 'fair');
   console.log('ROUND STAGE: audited');
   await runRoundSpineStep(alice, 'reckon-round-btn', 'complete-round-btn', 'phase-2 e2e reckon note: records settled');
   console.log('ROUND STAGE: reckoned');
-  dialogAnswer = '';
   // The complete button collects the accepted entries itself; success is
   // proven by the stepper label advancing to Round 2.
   let round2 = false;
@@ -519,7 +526,6 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note) {
     const tallies = await getOptionTallies(alice.page, qId);
     firstLanded = tallies[0] === '1';
   }
-  dialogAnswer = '';
   let baseVoteRejected = false;
   for (let attempt = 0; !baseVoteRejected && attempt < 15; attempt++) {
     await voteOption(alice.page, qId, 'Red');
