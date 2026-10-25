@@ -616,6 +616,9 @@ the existing `submitContribution`:
   (keep the existing status.set + console.error), and on the success path `return true;` after
   `bump()`.
 - `void` returns become `return false;` where the body exits early.
+- CRITICAL ordering: each action sets `submitting.value = true` BEFORE its first `await` — the
+  wizard shell's double-submit guard disables the button only once `ds.submitting` flips, so an
+  await before the lock would admit a second click.
 
 Task 5's factories wrap this: `const ok = await ds.verifyContribution(entry, {...}); if (!ok) throw new Error('The op did not record — check the message below the page.');` so the Review
 step keeps the draft and shows the inline error while the specific guard reason stays visible in
@@ -873,6 +876,7 @@ Insert the wizard region immediately after the `harmReceipt` div:
 ```vue
     <div v-if="activeFlow" class="contribution-card__wizard">
       <WizardFlow
+        :key="props.activeFlowKey ?? 'none'"
         :flow="activeFlow"
         :target-id="entry.record.contributionId"
         :initial-answers="resumeDraft?.answers"
@@ -979,10 +983,10 @@ Template — the contributions-list block becomes:
     </div>
 
     <div v-if="activeFlow === 'audit'" class="round-wizard">
-      <WizardFlow :flow="auditFlow(current)" :target-id="String(current)" :initial-answers="auditResume?.answers" :initial-step="auditResume?.stepIndex" @close="onFlowClose" />
+      <WizardFlow :key="activeFlow" :flow="auditFlow(current)" :target-id="String(current)" :initial-answers="auditResume?.answers" :initial-step="auditResume?.stepIndex" @close="onFlowClose" />
     </div>
     <div v-else-if="activeFlow === 'reckon'" class="round-wizard">
-      <WizardFlow :flow="reckonFlow(current)" :target-id="String(current)" :initial-answers="reckonResume?.answers" :initial-step="reckonResume?.stepIndex" @close="onFlowClose" />
+      <WizardFlow :key="activeFlow" :flow="reckonFlow(current)" :target-id="String(current)" :initial-answers="reckonResume?.answers" :initial-step="reckonResume?.stepIndex" @close="onFlowClose" />
     </div>
 ```
 
