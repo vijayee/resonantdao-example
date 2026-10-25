@@ -11,14 +11,6 @@ const fail = (msg) => { throw new Error(`WALK FAIL: ${msg}`); };
 
 async function registerUser(browser, username) {
   const page = await (await browser.newContext()).newPage();
-  // Answer the flows' confirm()/prompt() dialogs (same contract as the main
-  // e2e): headless chromium auto-DISMISSES dialogs, which would make the
-  // round-audit confirm() resolve UNFAIR and its required note prompt resolve
-  // to '' — the spine op would never land.
-  page.on('dialog', (dialog) => {
-    (dialog.type() === 'prompt' ? dialog.accept('walk note') : dialog.accept())
-      .catch(() => { /* dialog may already be gone */ });
-  });
   await page.goto(BASE);
   await page.fill('#register-username', username);
   await page.fill('#register-password', PASSWORD);
@@ -71,8 +63,14 @@ const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
 
   // Spine: any member can audit the round; expect round_audited + band step.
   await nav(viewer2, '/round');
-  const auditBtn = viewer2.locator('#audit-round-btn:not(.hidden)');
-  await auditBtn.click();
+  await (await viewer2.waitForSelector('#audit-round-btn:not(.hidden)')).click();
+  const auditFlow = viewer2.locator('.wizard-flow[data-flow-id="audit"]');
+  await auditFlow.waitFor({ state: 'visible', timeout: 10000 });
+  await auditFlow.locator('.wizard-option[value="fair"]').check();
+  await auditFlow.locator('.wizard-next').click();
+  await auditFlow.locator('textarea').fill('feed walk audit note');
+  await auditFlow.locator('.wizard-next').click();
+  await auditFlow.locator('.wizard-submit').click();
   await viewer2.waitForTimeout(2000);
   await nav(viewer2, '/');
   rows = await viewer2.locator('.event-row').allTextContents();
@@ -83,8 +81,19 @@ const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
   await nav(viewer2, '/round');
   const reckonBtn = viewer2.locator('#reckon-round-btn:not(.hidden)');
   if (await reckonBtn.count()) {
-    await viewer2.locator('#reckon-round-btn').click();
-    await viewer2.waitForTimeout(2000);
+    await reckonBtn.click();
+    // A draft from an earlier attempt may resume straight into review — drive
+    // defensively: fill the note only if the textarea is present, then submit.
+    const reckonFlow = viewer2.locator('.wizard-flow[data-flow-id="reckon"]');
+    if (await reckonFlow.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false)) {
+      const textarea = reckonFlow.locator('textarea');
+      if ((await textarea.count()) > 0) {
+        await textarea.first().fill('feed walk reckon note');
+        await reckonFlow.locator('.wizard-next').click();
+      }
+      await reckonFlow.locator('.wizard-submit').click();
+      await viewer2.waitForTimeout(2000);
+    }
     await nav(viewer2, '/');
     rows = await viewer2.locator('.event-row').allTextContents();
     if (!rows.some((t) => t.includes('round 1 reckoned — ready to complete'))) fail('round_reckoned row missing');
