@@ -597,15 +597,29 @@ git commit -m "feat(wizard): generic WizardFlow shell — steps, drafts, submit"
 
 (rest unchanged.)
 
-- [ ] **Step 3: typecheck** — this MUST fail now (needs step-level `HarmVerdict` import is already there; callers ContributionCard still calls old signatures)
+- [ ] **Step 3: typecheck** — this MUST fail now (host pages still call the old signatures)
 
 Run: `npm run typecheck:client`
 Expected: FAIL in `ContributionCard.vue` (old `ds.verifyContribution(props.entry)` / `ds.settleContribution(props.entry)` / `ds.appealContribution(props.entry)` calls) and `RoundPage.vue` (`@click="ds.auditRound"`). That failure is fixed by Tasks 6-7 — do NOT half-fix here.
 
-- [ ] **Step 3: typecheck** — this MUST fail right now (host pages still call the old signatures)
+### Boolean-return contract (applies to ALL five refactors above)
 
-Run: `npm run typecheck:client`
-Expected: FAIL in `ContributionCard.vue` (old `ds.verifyContribution(props.entry)` / `ds.settleContribution(props.entry)` / `ds.appealContribution(props.entry)` calls) and `RoundPage.vue` (`@click="ds.auditRound"`). That failure is fixed by Tasks 6-7 — do NOT half-fix here.
+The shell's Review step distinguishes "op recorded" from "guard rejected" by what `flow.submit`
+resolves with — and guard rejections otherwise look identical to success (status pill only),
+which would wrongly clear the draft and close the wizard. So, in the same mechanical pattern as
+the existing `submitContribution`:
+
+- Signatures gain `: Promise<boolean>`.
+- Every early guard exit (no dao, submitting lock, ownership, reciprocity, empty reason,
+  stage/eligibility) becomes `return false;` — the status store keeps its specific message.
+- `const ok = await serverClient.submitOp(...)` etc.: on any caught exception `return false;`
+  (keep the existing status.set + console.error), and on the success path `return true;` after
+  `bump()`.
+- `void` returns become `return false;` where the body exits early.
+
+Task 5's factories wrap this: `const ok = await ds.verifyContribution(entry, {...}); if (!ok) throw new Error('The op did not record — check the message below the page.');` so the Review
+step keeps the draft and shows the inline error while the specific guard reason stays visible in
+the status pill.
 
 - [ ] **Step 4: commit (known-red typecheck is acceptable mid-plan; Tasks 5-7 land before the next gate run)**
 
@@ -657,11 +671,14 @@ export function verifyFlow(entry: ContributionMirrorEntry): FlowDefinition {
       `Verdict: ${a.decision}`,
       `Reason: ${(a.reason ?? '').trim()}`,
     ],
-    submit: (a) => ds.verifyContribution(entry, {
-      pass: a.decision !== 'no',
-      harm: (a.decision === 'yes-harm' ? 'reduced' : a.decision === 'voided' ? 'voided' : 'none') as HarmVerdict,
-      reason: (a.reason ?? '').trim(),
-    }),
+    submit: async (a) => {
+      const ok = await ds.verifyContribution(entry, {
+        pass: a.decision !== 'no',
+        harm: (a.decision === 'yes-harm' ? 'reduced' : a.decision === 'voided' ? 'voided' : 'none') as HarmVerdict,
+        reason: (a.reason ?? '').trim(),
+      });
+      if (!ok) throw new Error('The verification did not record — check the message below the page.');
+    },
   };
 }
 
@@ -675,7 +692,10 @@ export function settleFlow(entry: ContributionMirrorEntry): FlowDefinition {
       { kind: 'review' },
     ],
     reviewSummary: (a) => [`Note: ${(a.note ?? '').trim()}`],
-    submit: (a) => ds.settleContribution(entry, { reason: (a.note ?? '').trim() }),
+    submit: async (a) => {
+      const ok = await ds.settleContribution(entry, { reason: (a.note ?? '').trim() });
+      if (!ok) throw new Error('The settlement did not record — check the message below the page.');
+    },
   };
 }
 
@@ -689,7 +709,10 @@ export function appealFlow(entry: ContributionMirrorEntry): FlowDefinition {
       { kind: 'review' },
     ],
     reviewSummary: (a) => [`Reason: ${(a.reason ?? '').trim()}`],
-    submit: (a) => ds.appealContribution(entry, { reason: (a.reason ?? '').trim() }),
+    submit: async (a) => {
+      const ok = await ds.appealContribution(entry, { reason: (a.reason ?? '').trim() });
+      if (!ok) throw new Error('The appeal did not record — check the message below the page.');
+    },
   };
 }
 ```
@@ -722,7 +745,10 @@ export function auditFlow(round: number): FlowDefinition {
       `Round ${round} closes as: ${a.fairness}`,
       `Note: ${(a.note ?? '').trim()}`,
     ],
-    submit: (a) => ds.auditRound({ fair: a.fairness === 'fair', note: (a.note ?? '').trim() }),
+    submit: async (a) => {
+      const ok = await ds.auditRound({ fair: a.fairness === 'fair', note: (a.note ?? '').trim() });
+      if (!ok) throw new Error('The audit did not record — check the message below the page.');
+    },
   };
 }
 
@@ -738,7 +764,10 @@ export function reckonFlow(round: number): FlowDefinition {
     reviewSummary: (a) => [
       `Reckoning round ${round}.`,
     ],
-    submit: (a) => ds.reckonRound({ note: (a.note ?? '').trim() }),
+    submit: async (a) => {
+      const ok = await ds.reckonRound({ note: (a.note ?? '').trim() });
+      if (!ok) throw new Error('The reckoning did not record — check the message below the page.');
+    },
   };
 }
 ```
