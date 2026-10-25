@@ -32,13 +32,22 @@
 
   <section id="contributions-list" aria-live="polite">
     <p v-if="entries.length === 0" class="muted">No contributions yet.</p>
-    <ContributionCard v-for="entry in entries" :key="entry.record.contributionId" :entry="entry" />
+    <ContributionCard
+      v-for="entry in entries"
+      :key="entry.record.contributionId"
+      :entry="entry"
+      :active-flow-key="activeFlow"
+      :drafts="cardDrafts"
+      @start-flow="onFlowStart"
+      @close-flow="onFlowClose"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { DIMENSIONS } from '@shared/contribution';
+import { listDrafts, cleanStaleDrafts, WizardDraft } from '../../wizard/drafts';
 import { useDaoStore } from '../../stores/dao';
 import { useStatusStore } from '../../stores/status';
 import SectionHeading from '../../design/components/SectionHeading.vue';
@@ -58,6 +67,42 @@ const entries = computed(() => {
   void ds.tick;
   return [...(ds.dao?.getContributions() ?? [])].reverse();
 });
+
+const activeFlow = ref<string | null>(null);          // `{flowId}/{contributionId}`
+
+// Re-derives on tick AND on activeFlow changes: a Cancel deletes a draft in
+// localStorage without touching the dao, so open/close must invalidate too.
+const cardDrafts = computed(() => {
+  void ds.tick;
+  void activeFlow.value;
+  const empty = new Map<string, WizardDraft>();
+  if (!ds.username) return { verify: empty, settle: empty, appeal: empty };
+  return {
+    verify: listDrafts(localStorage, ds.username, 'verify'),
+    settle: listDrafts(localStorage, ds.username, 'settle'),
+    appeal: listDrafts(localStorage, ds.username, 'appeal'),
+  };
+});
+
+// Drop drafts whose contribution left the actionable set — NEVER against an
+// empty mirror (replay may not have finished at mount; an empty sweep would
+// nuke every draft).
+function sweepStaleDrafts() {
+  void ds.tick;
+  if (!ds.username || !ds.dao) return;
+  const ids = new Set(ds.dao.getContributions().map((e) => e.record.contributionId));
+  if (ids.size === 0) return;
+  cleanStaleDrafts(localStorage, ds.username, 'verify', ids);
+  cleanStaleDrafts(localStorage, ds.username, 'settle', ids);
+  cleanStaleDrafts(localStorage, ds.username, 'appeal', ids);
+}
+onMounted(sweepStaleDrafts);
+
+function onFlowStart(key: string) { activeFlow.value = key; }
+function onFlowClose() {
+  activeFlow.value = null;
+  sweepStaleDrafts();
+}
 
 const reviewLine = computed(() => {
   const dims = Object.keys({ [dim.value]: 1 }).map((k) => `C_${k} ${DIMENSIONS[Number(k)].name}`).join(', ');

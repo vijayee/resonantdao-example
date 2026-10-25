@@ -36,25 +36,36 @@
 
     <div v-if="appealed" class="muted">appealed — awaiting re-verification</div>
     <button
-      v-else-if="model.outcome === 'rejected' && entry.submitter === ds.username && !contributionAppealed"
+      v-else-if="!activeFlow && model.outcome === 'rejected' && entry.submitter === ds.username && !contributionAppealed"
       type="button"
       class="button button--secondary appeal-contribution"
       :disabled="ds.submitting"
-      @click="ds.appealContribution(entry)"
-    >Appeal…</button>
+      @click="startFlow('appeal')"
+    >{{ drafts.appeal.has(entry.record.contributionId) ? 'Resume draft — Appeal…' : 'Appeal…' }}</button>
 
     <div v-if="harmReceipt" :class="['contribution-card__harm', `contribution-card__harm--${entry.harm}`]">{{ harmReceipt }}</div>
 
-    <div v-if="actions.length > 0" class="contribution-card__actions">
+    <div v-if="activeFlow" class="contribution-card__wizard">
+      <WizardFlow
+        :key="props.activeFlowKey ?? 'none'"
+        :flow="activeFlow"
+        :target-id="entry.record.contributionId"
+        :initial-answers="resumeDraft?.answers"
+        :initial-step="resumeDraft?.stepIndex"
+        @close="emit('close-flow')"
+      />
+    </div>
+
+    <div v-if="actions.length > 0 && !activeFlow" class="contribution-card__actions">
       <button
         v-for="action in actions"
-        :key="action.label"
+        :key="action.flow"
         type="button"
         :class="['button', `button--${action.variant}`, action.cls]"
         :title="action.title"
         :disabled="ds.submitting"
-        @click="action.run()"
-      >{{ action.label }}</button>
+        @click="startFlow(action.flow)"
+      >{{ (action.flow === 'verify' && drafts.verify.has(entry.record.contributionId)) || (action.flow === 'settle' && drafts.settle.has(entry.record.contributionId)) ? `Resume draft — ${action.label}` : action.label }}</button>
     </div>
   </div>
 </template>
@@ -65,10 +76,42 @@ import { harmFactorFor, paymentFor, schemaForDims } from '@shared/contribution';
 import { ContributionFacts, wizardModel } from '@shared/wizard';
 import { serverClient, useDaoStore } from '../../stores/dao';
 import type { ContributionMirrorEntry } from '../../dao';
+import WizardFlow from '../../wizard/WizardFlow.vue';
+import { loadDraft, WizardDraft } from '../../wizard/drafts';
+import type { FlowDefinition } from '../../wizard/types';
+import { appealFlow, settleFlow, verifyFlow } from '../../wizard/flows/contribute-flows';
 
-const props = defineProps<{ entry: ContributionMirrorEntry }>();
+const props = defineProps<{
+  entry: ContributionMirrorEntry;
+  activeFlowKey: string | null;   // `{flowId}/{contributionId}` — page-owned; null = no wizard open
+  drafts: { verify: Map<string, WizardDraft>; settle: Map<string, WizardDraft>; appeal: Map<string, WizardDraft> };
+}>();
+const emit = defineEmits<{ 'start-flow': [flowKey: string]; 'close-flow': [] }>();
 
 const ds = useDaoStore();
+
+const ownKey = (flowId: string) => `${flowId}/${props.entry.record.contributionId}`;
+function startFlow(flowId: string) { emit('start-flow', ownKey(flowId)); }
+
+const FLOW_FACTORIES: Record<string, (e: ContributionMirrorEntry) => FlowDefinition> = {
+  verify: verifyFlow, settle: settleFlow, appeal: appealFlow,
+};
+
+const activeFlow = computed(() => {
+  void ds.tick;
+  const key = props.activeFlowKey;
+  if (!key) return null;
+  const flowId = key.split('/')[0];
+  return key === ownKey(flowId) ? (FLOW_FACTORIES[flowId]?.(props.entry) ?? null) : null;
+});
+
+// Resume state is read fresh at open time; the shell consumes it once on
+// mount, so a stale computed after that is harmless.
+const resumeDraft = computed(() => {
+  const key = props.activeFlowKey;
+  if (!key || !ds.username) return null;
+  return loadDraft(window.localStorage, ds.username, key.split('/')[0], props.entry.record.contributionId);
+});
 
 const schema = computed(() => schemaForDims(props.entry.record.dims));
 const statusOf = computed(() => {
@@ -123,7 +166,7 @@ const harmReceipt = computed(() => {
 // may act — with no extra 'appealed' gate, so a fresh verifier (and, after a
 // re-verification, the submitter) can still act on an appealed card exactly
 // as the legacy DOM did.
-type CardAction = { label: string; variant: string; cls?: string; title?: string; run: () => void };
+type CardAction = { label: string; variant: string; cls?: string; title?: string; flow: 'verify' | 'settle' };
 const actions = computed<CardAction[]>(() => {
   void ds.tick;
   const currentStep = model.value.steps[model.value.currentStepIndex];
@@ -139,11 +182,11 @@ const actions = computed<CardAction[]>(() => {
         variant: 'secondary',
         cls: 'verify-contribution',
         title: `Your checks: ${stats.total} (${stats.upheld} upheld)`,
-        run: () => void ds.verifyContribution(props.entry),
+        flow: 'verify',
       });
     }
     if (role.op === 'settle_contribution' && actor === 'submitter') {
-      out.push({ label: 'Settle…', variant: 'primary', cls: 'settle-contribution', run: () => void ds.settleContribution(props.entry) });
+      out.push({ label: 'Settle…', variant: 'primary', cls: 'settle-contribution', flow: 'settle' });
     }
   }
   return out;
@@ -203,6 +246,7 @@ async function loadEvidence() {
 .contribution-card__verdict { color: var(--danger); font-size: .8125rem; }
 .contribution-card__harm { color: var(--amber); font-size: .8125rem; }
 .contribution-card__actions { display: flex; gap: var(--space-2); }
+.contribution-card__wizard { display: flex; flex-direction: column; }
 .contribution-card__evidence-img { max-width: 100%; border-radius: var(--radius); }
 .contribution-card__evidence-dl { color: var(--jade); font-family: var(--font-mono); font-size: .8125rem; }
 </style>

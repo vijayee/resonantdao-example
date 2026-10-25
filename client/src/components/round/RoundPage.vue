@@ -10,9 +10,16 @@
     </div>
     <div id="round-explanations" class="muted">{{ explanations }}</div>
     <div class="proposal-form__actions">
-      <button id="audit-round-btn" :class="['button', 'button--secondary', { hidden: stage !== STAGE_OPEN }]" type="button" :disabled="ds.submitting" @click="ds.auditRound">Audit round…</button>
-      <button id="reckon-round-btn" :class="['button', 'button--secondary', { hidden: stage !== STAGE_AUDITED }]" type="button" :disabled="ds.submitting" @click="ds.reckonRound">Reckon round…</button>
-      <button id="complete-round-btn" :class="['button', 'button--primary', { hidden: stage !== STAGE_RECKONED }]" type="button" :disabled="ds.submitting" @click="ds.completeRound">Complete round &amp; publish</button>
+      <button id="audit-round-btn" :class="['button', 'button--secondary', { hidden: stage !== STAGE_OPEN }]" type="button" :disabled="ds.submitting" @click="openFlow('audit')">Audit round…</button>
+      <button id="reckon-round-btn" :class="['button', 'button--secondary', { hidden: stage !== STAGE_AUDITED }]" type="button" :disabled="ds.submitting" @click="openFlow('reckon')">Reckon round…</button>
+      <button v-if="!activeFlow" id="complete-round-btn" :class="['button', 'button--primary', { hidden: stage !== STAGE_RECKONED }]" type="button" :disabled="ds.submitting" @click="ds.completeRound">Complete round &amp; publish</button>
+    </div>
+
+    <div v-if="activeFlow === 'audit'" class="round-wizard">
+      <WizardFlow :key="activeFlow" :flow="auditFlow(current)" :target-id="String(current)" :initial-answers="auditResume?.answers" :initial-step="auditResume?.stepIndex" @close="onFlowClose" />
+    </div>
+    <div v-else-if="activeFlow === 'reckon'" class="round-wizard">
+      <WizardFlow :key="activeFlow" :flow="reckonFlow(current)" :target-id="String(current)" :initial-answers="reckonResume?.answers" :initial-step="reckonResume?.stepIndex" @close="onFlowClose" />
     </div>
   </Panel>
 
@@ -31,8 +38,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { STAGE_AUDITED, STAGE_OPEN, STAGE_RECKONED } from '@shared/round';
+import WizardFlow from '../../wizard/WizardFlow.vue';
+import { loadDraft, WizardDraft } from '../../wizard/drafts';
+import { auditFlow, reckonFlow } from '../../wizard/flows/round-flows';
 import { useDaoStore } from '../../stores/dao';
 import { useStatusStore } from '../../stores/status';
 import SectionHeading from '../../design/components/SectionHeading.vue';
@@ -44,6 +54,29 @@ const stageNames = ['Open', 'Audited', 'Reckoned', 'Published'];
 
 const current = computed(() => { void ds.tick; return ds.dao?.getCurrentRound() ?? 1; });
 const stage = computed(() => { void ds.tick; return ds.dao?.getRoundStage(current.value) ?? 0; });
+
+const activeFlow = ref<'audit' | 'reckon' | null>(null);
+const auditResume = ref<WizardDraft | null>(null);
+const reckonResume = ref<WizardDraft | null>(null);
+
+function openFlow(which: 'audit' | 'reckon') {
+  if (!ds.username) return;
+  const draft = loadDraft(localStorage, ds.username, which, String(current.value));
+  if (which === 'audit') auditResume.value = draft; else reckonResume.value = draft;
+  activeFlow.value = which;
+}
+function onFlowClose() {
+  activeFlow.value = null;
+  auditResume.value = null;
+  reckonResume.value = null;
+}
+
+// When the stage changes away from a flow's stage (e.g. STAGE_OPEN →
+// STAGE_AUDITED after a successful audit) the flow must close.
+watch(stage, () => {
+  const stageOk = (f: 'audit' | 'reckon') => (f === 'audit' ? stage.value === STAGE_OPEN : stage.value === STAGE_AUDITED);
+  if (activeFlow.value && !stageOk(activeFlow.value)) onFlowClose();
+});
 const explanations = computed(() => {
   void ds.tick;
   const records = ds.dao?.getRoundRecords(current.value) ?? [];
