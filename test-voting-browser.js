@@ -95,31 +95,42 @@ const clickInCard = (page, cardText, selector) =>
 // draft-resume path: a failed submit keeps the draft (and the open flow),
 // so a later attempt resumes at the restored step with everything filled.
 async function completeFlow(page, flowId, { choiceValue = null, textValue = '' } = {}) {
+  // Return value intentionally ignored by callers: the UI effect (settle
+  // button, pill flip, next spine button) is the assertion.
   for (let attempt = 0; attempt < 3; attempt++) {
-    const flow = page.locator(`.wizard-flow[data-flow-id="${flowId}"]`);
-    if (!(await flow.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false))) return false;
-    const radios = flow.locator('.wizard-option:checked');
-    const needRadio = choiceValue !== null && (await radios.count() === 0);
-    const textareas = flow.locator('textarea');
-    if (needRadio) {
-      await flow.locator(`.wizard-option[value="${choiceValue}"]`).check();
-      await flow.locator('.wizard-next').click();
-      await flow.locator('textarea').waitFor({ state: 'visible', timeout: 3000 });
-    }
-    if ((await textareas.count()) > 0 && !(await textareas.first().inputValue())) {
-      await textareas.first().fill(textValue);
-      await flow.locator('.wizard-next').click();
-      await flow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 3000 });
-    }
-    if (await flow.locator('.wizard-submit').count()) {
-      if (!(await flow.locator('.wizard-submit').isDisabled())) {
-        await flow.locator('.wizard-submit').click();
-        return true;
+    try {
+      const flow = page.locator(`.wizard-flow[data-flow-id="${flowId}"]`);
+      if (!(await flow.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false))) return false;
+      // Drive only from the CURRENT step: a flow resumed past the choice step
+      // renders no radios at all — ':checked' alone can't tell "not checked"
+      // from "already committed", so require the control to exist.
+      const choiceControl = choiceValue !== null ? flow.locator(`.wizard-option[value="${choiceValue}"]`) : null;
+      const atChoiceStep = choiceControl && (await choiceControl.count()) > 0;
+      const textareas = flow.locator('textarea');
+      if (atChoiceStep) {
+        await choiceControl.check();
+        await flow.locator('.wizard-next').click();
+        await flow.locator('textarea').waitFor({ state: 'visible', timeout: 3000 });
       }
-      await page.waitForTimeout(1000); // submitting — retry window
-      continue;
+      if ((await textareas.count()) > 0 && !(await textareas.first().inputValue())) {
+        await textareas.first().fill(textValue);
+        await flow.locator('.wizard-next').click();
+        await flow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 3000 });
+      }
+      if (await flow.locator('.wizard-submit').count()) {
+        if (!(await flow.locator('.wizard-submit').isDisabled())) {
+          await flow.locator('.wizard-submit').click();
+          return true;
+        }
+        await page.waitForTimeout(1000); // submitting — retry window
+        continue;
+      }
+      await page.waitForTimeout(1000); // mid-drive race — the outer loop re-enters
+    } catch (err) {
+      // A transient race inside one attempt must not escape into the caller's
+      // UI-effect retry loop.
+      await page.waitForTimeout(1000);
     }
-    await page.waitForTimeout(1000);
   }
   return false;
 }
