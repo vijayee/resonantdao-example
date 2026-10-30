@@ -68,7 +68,7 @@ export function publishFlow(round: number): FlowDefinition {
           && d.getContributionRound(e.record.contributionId) === round,
       );
       const lines = [`Aggregating ${accepted.length} accepted contribution(s) from round ${round}.`];
-      if (accepted.length === 0) lines.push('Nothing settled to aggregate — publishing records an empty round.');
+      if (accepted.length === 0) lines.push('Nothing settled in this round yet — publish needs at least one accepted contribution.');
       return lines;
     },
     submit: async () => {
