@@ -532,9 +532,9 @@ export const useDaoStore = defineStore('dao', () => {
     }
   }
 
-  async function completeRound() {
+  async function completeRound(): Promise<boolean> {
     const d = dao.value;
-    if (!d || submitting.value) return;
+    if (!d || submitting.value) return false;
     submitting.value = true;
     try {
       const currentRound = d.getCurrentRound();
@@ -544,16 +544,18 @@ export const useDaoStore = defineStore('dao', () => {
         .map((entry) => ({ contributionId: entry.record.contributionId, submitter: entry.submitter, dims: entry.record.dims, harm: entry.harm ?? ('none' as const) }));
       if (entries.length === 0) {
         status.set('Nothing settled to aggregate in this round.', 'error');
-        return;
+        return false;
       }
       const bytes = await d.completeRound(username.value, { entries });
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
       status.set(`Round published — ${entries.length} contribution(s) aggregated.`, 'success');
       bump();
+      return true;
     } catch (err) {
       status.set(`Complete error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
+      return false;
     } finally {
       submitting.value = false;
     }
