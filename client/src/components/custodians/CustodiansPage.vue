@@ -40,16 +40,47 @@
         <span v-else class="muted">Custodian-only controls.</span>
       </div>
     </Panel>
+
+    <Panel number="04" kicker="Weights (custodian)">
+      <form class="proposal-form" :class="{ hidden: !ds.isCustodian }" @submit.prevent>
+        <div class="form-group"><input id="alpha-c1" v-model="alpha.c1" class="form-input" type="text" placeholder="alpha C_1 (e.g. 2)" /></div>
+        <div class="form-group"><input id="alpha-c2" v-model="alpha.c2" class="form-input" type="text" placeholder="alpha C_2 (e.g. 0.5)" /></div>
+        <div class="form-group"><input id="alpha-version" v-model="alpha.version" class="form-input" type="text" placeholder="weights version label" /></div>
+        <div class="proposal-form__actions">
+          <button id="set-alpha-btn" class="button button--secondary" type="button" :disabled="ds.submitting" @click="onSetAlpha">Set weights</button>
+          <button id="set-calibration-btn" class="button button--secondary" type="button" :disabled="ds.submitting" @click="ds.setCalibrationVersion">Set calibration v1</button>
+        </div>
+      </form>
+      <p v-if="!ds.isCustodian" class="muted">Custodian-only controls.</p>
+    </Panel>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, reactive } from 'vue';
 import { useDaoStore } from '../../stores/dao';
+import { useStatusStore } from '../../stores/status';
 import SectionHeading from '../../design/components/SectionHeading.vue';
 import Panel from '../../design/components/Panel.vue';
 
 const ds = useDaoStore();
+const status = useStatusStore();
+const alpha = reactive({ c1: '', c2: '', version: '' });
+
+async function onSetAlpha() {
+  const raw: Record<string, number> = {};
+  const c1 = parseFloat(alpha.c1);
+  const c2 = parseFloat(alpha.c2);
+  if (Number.isFinite(c1) && c1 > 0) raw['1'] = c1;
+  if (Number.isFinite(c2) && c2 > 0) raw['2'] = c2;
+  const version = alpha.version;
+  if (Object.keys(raw).length === 0 || !version.trim()) {
+    status.set('At least one weight and a version label are required.', 'error');
+    return;
+  }
+  await ds.setRctAlpha(raw, version.trim());
+  if (status.kind === 'success') alpha.c1 = alpha.c2 = alpha.version = '';
+}
 
 const otherMembers = computed(() => ds.members.filter((m) => m !== ds.username));
 const seats = computed(() => { void ds.tick; return ds.dao?.custodians ?? []; });
