@@ -383,39 +383,30 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
   console.log('CONTRIBUTION STATUS PILL: accepted after appeal');
 }
 
-// One round-spine step: click the persistent stage-gated round-panel button
-// and retry until the NEXT stage's button becomes visible — its appearance
-// proves the op was executed, mirroring how the wizard loop waits for the
-// settle button. The button opens the stage's in-place wizard (audit or
-// reckon); completeFlow drives its choice/note/review steps. Reckon carries
-// only a note (choiceValue stays null); audit passes 'fair' (or 'unfair')
-// as the fairness radio's value. The complete button collects the round's
-// accepted entries (contribution id, submitter, dims) itself. Spine policies
-// are 'role:member OR role:custodian', so a plain member can close the round.
-async function runRoundSpineStep(actor, buttonId, nextButtonId, note, choiceValue = null) {
-  let ready = false;
-  for (let attempt = 0; !ready && attempt < 15; attempt++) {
-    if (await actor.page.locator(`#${buttonId}`).isVisible().catch(() => false)) {
-      await actor.page.locator(`#${buttonId}`).click({ force: true }).catch(() => {});
-      const flowId = buttonId === 'audit-round-btn' ? 'audit' : 'reckon';
-      if (await actor.page
-        .locator(`.wizard-flow[data-flow-id="${flowId}"]`)
-        .waitFor({ state: 'visible', timeout: 4000 })
-        .then(() => true, () => false)) {
-        await completeFlow(actor.page, flowId, { choiceValue, textValue: note ?? '' });
-      } else {
-        await actor.page.waitForTimeout(1500); // op in flight; next button may already be flipping
-      }
+// The /round page hosts ONE always-present settlement wizard; the round's
+// stage selects the flow (audit at Open, reckon at Audited, publish at
+// Reckoned). Drive the current stage's flow, then wait for the stage chip to
+// flip to the expected stage name. After publish the round ADVANCES (next
+// round, stage Open again) — hence afterStage for publish is 'Open'.
+async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterStage) {
+  await nav(actor.page, '/round');
+  let driven = false;
+  for (let attempt = 0; !driven && attempt < 15; attempt++) {
+    if (await actor.page.locator(`.wizard-flow[data-flow-id="${flowId}"]`).count()) {
+      await completeFlow(actor.page, flowId, { choiceValue, textValue: note ?? '' });
+      driven = await actor.page
+        .locator(`.round-step--current:text-is("${afterStage}")`)
+        .waitFor({ state: 'visible', timeout: 3000 })
+        .then(() => true, () => false);
+    } else {
+      await actor.page.waitForTimeout(1000);
     }
-    ready = await actor.page
-      .locator(`#${nextButtonId}:not(.hidden)`)
-      .waitFor({ state: 'visible', timeout: 3000 })
-      .then(() => true, () => false);
   }
-  if (!ready) {
+  if (!driven) {
     const statusBar = await actor.page.locator('#status').textContent();
-    throw new Error(`Round spine stuck at ${buttonId}; ${nextButtonId} never became visible. Status bar: ${statusBar || '(empty)'}`);
+    throw new Error(`Round spine stuck at ${flowId}; stage chip never reached "${afterStage}". Status bar: ${statusBar || '(empty)'}`);
   }
+  console.log(`ROUND STAGE: ${afterStage.toLowerCase()}`);
 }
 
 (async () => {
@@ -502,30 +493,16 @@ async function runRoundSpineStep(actor, buttonId, nextButtonId, note, choiceValu
   // alice's harm-reduced C_1 contributes 0.5 (0.5 factor), bob's C_2 1 and
   // carol's appealed-and-re-verified C_2 1 (alpha defaults to 1) — so alice
   // publishes 0.5 cumulative RCT and advances to Round 2.
-  console.log('Closing round 1 through the spine (audit → reckon → complete)');
-  // The round panel (stepper, stage buttons, round label) lives on /round.
-  await nav(alice.page, '/round');
-  await runRoundSpineStep(alice, 'audit-round-btn', 'reckon-round-btn', 'phase-2 e2e audit note: fair against v1', 'fair');
-  console.log('ROUND STAGE: audited');
-  await runRoundSpineStep(alice, 'reckon-round-btn', 'complete-round-btn', 'phase-2 e2e reckon note: records settled');
-  console.log('ROUND STAGE: reckoned');
-  // The complete button collects the accepted entries itself; success is
-  // proven by the stepper label advancing to Round 2.
-  let round2 = false;
-  for (let attempt = 0; !round2 && attempt < 15; attempt++) {
-    if (await alice.page.locator('#complete-round-btn').isVisible().catch(() => false)) {
-      await alice.page.locator('#complete-round-btn').click({ force: true }).catch(() => {});
-    }
-    round2 = await alice.page
-      .locator('.round-label', { hasText: 'Round 2' })
-      .waitFor({ state: 'visible', timeout: 3000 })
-      .then(() => true, () => false);
-  }
-  if (!round2) {
-    const statusBar = await alice.page.locator('#status').textContent();
-    throw new Error(`Round never advanced to 2 after complete. Status bar: ${statusBar || '(empty)'}`);
-  }
-  console.log('ROUND PUBLISHED: round 2 is open');
+  console.log('Closing round 1 through the spine (audit → reckon → publish)');
+  // Each spine step navigates to /round itself; the round's stage selects the
+  // always-present wizard's flow and the stage chip flip is the assertion.
+  await runRoundSpineStep(alice, 'audit', 'phase-4a e2e audit note: fair against v1', 'fair', 'Audited');
+  await runRoundSpineStep(alice, 'reckon', 'phase-4a e2e reckon note: records settled', null, 'Reckoned');
+  // Publish submits the round's settlement directly (no entry button) and
+  // ADVANCES the round — the next round opens at stage Open again; success is
+  // proven by the chip flipping back to Open (the Round 2 panel label and the
+  // post-publish aggregation asserts below keep their own waits).
+  await runRoundSpineStep(alice, 'publish', null, null, 'Open');
 
   // --- Quadratic voting (base-only funding since phase 2) ---
   // Without salient dims a quadratic proposal grants the base balance (3), so
