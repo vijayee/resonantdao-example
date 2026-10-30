@@ -51,7 +51,13 @@ const explanations = computed(() => {
 // already cleared the draft); stage/round changes remount naturally.
 const wizardEpoch = ref(0);
 const stageFlow = computed(() => { void ds.tick; return stageFlowFor(stage.value, current.value); });
+// The epoch is read HERE, not just in the key: cancel() clears the draft
+// before the close event arrives, and localStorage is not reactive. Without
+// the epoch dependency this computed would serve its cached (stale) draft to
+// the remounted wizard for up to one demo-clock second — Cancel would
+// re-show the answers it just discarded.
 const stageResume = computed(() => {
+  void wizardEpoch.value;
   if (!ds.username || !stageFlow.value) return null;
   return loadDraft(localStorage, ds.username, stageFlow.value.id, String(current.value));
 });

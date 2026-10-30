@@ -93,7 +93,7 @@ function rctOf(m: string) { void ds.tick; return ds.dao?.getRctBalance(m) ?? 0; 
 
 <style scoped>
 .cols { display: grid; grid-template-columns: 1fr; gap: var(--space-6); }
-@media (min-width: 900px) { .cols { grid-template-columns: 1fr 1fr; } .cols .panel:nth-child(3) { grid-column: 1 / -1; } }
+@media (min-width: 900px) { .cols { grid-template-columns: 1fr 1fr; } .cols .panel:nth-child(n+3) { grid-column: 1 / -1; } }
 .cols > :deep(.panel) { min-height: min-content; }
 .member-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .member-item {

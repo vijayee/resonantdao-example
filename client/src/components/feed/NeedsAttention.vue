@@ -78,7 +78,7 @@ const items = computed<Item[]>(() => {
 
   const stage = d.getRoundStage(d.getCurrentRound());
   if (stage === STAGE_OPEN || stage === STAGE_AUDITED) {
-    out.push({ key: 'round', kind: 'round', text: 'The round spine is waiting for its next step', to: '/round' });
+    out.push({ key: 'round', kind: 'round', text: 'The settlement cycle is waiting for its next step', to: '/round' });
   }
 
   return out;

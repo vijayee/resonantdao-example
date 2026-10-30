@@ -13,7 +13,7 @@ const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
 // op log at registration, and an earlier session's ops can leave a new
 // replica unauthenticated against old signers, leaving their pages without
 // prior-state content. The phase-2 round extension below (audit → reckon →
-// complete, then a salient quadratic proposal on the published round) also
+// publish, then a salient quadratic proposal on the published round) also
 // REQUIRES the fresh DB: the spine publishes round 1's accepted contributions
 // and re-running on a used database would find no open round to close.
 //

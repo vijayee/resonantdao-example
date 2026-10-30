@@ -31,7 +31,7 @@ const DESTS = [
   { to: '/proposals', no: '01', label: 'Proposals', blurb: 'Create proposals and vote.' },
   { to: '/elections', no: '02', label: 'Elections', blurb: 'Custodian elections and runoff.' },
   { to: '/contribute', no: '03', label: 'Contribute', blurb: 'Submit and verify contributions.' },
-  { to: '/round', no: '04', label: 'Round', blurb: 'The settlement spine.' },
+  { to: '/round', no: '04', label: 'Round', blurb: 'Close the cycle: audit, reckon, publish.' },
   { to: '/custodians', no: '05', label: 'Custodians', blurb: 'Members and custodian admin.' },
   { to: '/account', no: '06', label: 'Account', blurb: 'Your tokens and tallies.' },
 ];
