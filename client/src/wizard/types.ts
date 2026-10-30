@@ -10,7 +10,7 @@ export type FlowStep =
   | { kind: 'review' };
 
 export interface FlowDefinition {
-  id: string;   // draft-key part ('verify' | 'settle' | 'appeal' | 'audit' | 'reckon')
+  id: string;   // draft-key part ('verify' | 'settle' | 'appeal' | 'audit' | 'reckon' | 'publish')
   title: string;
   steps: FlowStep[];
   reviewSummary(answers: FlowAnswers): string[];
