@@ -61,9 +61,8 @@ const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
   }
   if (!attention.includes('"Walk proposal" is open for voting')) fail(`attention band missing the open proposal: ${attention}`);
 
-  // Spine: any member can audit the round; expect round_audited + band step.
+  // Spine: the /round wizard is always present; audit is the stage's flow.
   await nav(viewer2, '/round');
-  await (await viewer2.waitForSelector('#audit-round-btn:not(.hidden)')).click();
   const auditFlow = viewer2.locator('.wizard-flow[data-flow-id="audit"]');
   await auditFlow.waitFor({ state: 'visible', timeout: 10000 });
   await auditFlow.locator('.wizard-option[value="fair"]').check();
@@ -77,32 +76,24 @@ const nav = (page, href) => page.click(`header nav a[href="${href}"]`);
   if (!rows.some((t) => t.includes('round 1 audited — fair'))) fail(`round_audited row missing; rows=${JSON.stringify(rows)}`);
 
   // Publish path needs accepted contributions — skip (covered by the main
-  // e2e); assert the RECKON step event instead.
+  // e2e); assert the RECKON step event instead. The reckoning flow mounts
+  // when the stage is Audited; give the op its 2000ms then move on.
   await nav(viewer2, '/round');
-  const reckonBtn = viewer2.locator('#reckon-round-btn:not(.hidden)');
-  if (await reckonBtn.count()) {
-    await reckonBtn.click();
+  const reckonFlow = viewer2.locator('.wizard-flow[data-flow-id="reckon"]');
+  if (await reckonFlow.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false)) {
     // A draft from an earlier attempt may resume straight into review — drive
     // defensively: fill the note only if the textarea is present, then submit.
-    const reckonFlow = viewer2.locator('.wizard-flow[data-flow-id="reckon"]');
-    if (await reckonFlow.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false)) {
-      const textarea = reckonFlow.locator('textarea');
-      if ((await textarea.count()) > 0) {
-        await textarea.first().fill('feed walk reckon note');
-        await reckonFlow.locator('.wizard-next').click();
-      }
-      await reckonFlow.locator('.wizard-submit').click();
-      await viewer2.waitForTimeout(2000);
+    const textarea = reckonFlow.locator('textarea');
+    if ((await textarea.count()) > 0) {
+      await textarea.first().fill('feed walk reckon note');
+      await reckonFlow.locator('.wizard-next').click();
     }
-    // The row-assert is the failure point (not a skip): the button was visible
-    // and clicked, so a wizard that never opened means the click was lost —
-    // the reckon row must be missing and the fail below fires.
-    await nav(viewer2, '/');
-    rows = await viewer2.locator('.event-row').allTextContents();
-    if (!rows.some((t) => t.includes('round 1 reckoned — ready to complete'))) fail('round_reckoned row missing');
-  } else {
-    console.log('(reckon button not yet visible — spine advanced slower than 2s; acceptable in dev, investigate if persistent)');
+    await reckonFlow.locator('.wizard-submit').click();
+    await viewer2.waitForTimeout(2000);
   }
+  await nav(viewer2, '/');
+  rows = await viewer2.locator('.event-row').allTextContents();
+  if (!rows.some((t) => t.includes('round 1 reckoned — ready to complete'))) fail('round_reckoned row missing');
 
   console.log('FEED WALK PASSED');
   await browser.close();
