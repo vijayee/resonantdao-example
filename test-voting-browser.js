@@ -399,7 +399,13 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
         .waitFor({ state: 'visible', timeout: 3000 })
         .then(() => true, () => false);
     } else {
-      await actor.page.waitForTimeout(1000);
+      // A slow apply unmounts this flow after the 3s chip window above — the
+      // already-flipped chip must count as driven here, or we'd throw
+      // "stuck" on a step that actually landed.
+      driven = await actor.page
+        .locator(`.round-step--current:text-is("${afterStage}")`)
+        .waitFor({ state: 'visible', timeout: 1000 })
+        .then(() => true, () => false);
     }
   }
   if (!driven) {
