@@ -17,7 +17,7 @@
       <div v-if="!model.appealed && model.outcome === 'rejected' && entry.submitter === ds.username" class="lc-appeal">
         <WizardFlow
           :key="'appeal'"
-          :flow="appealFlow"
+          :flow="appealFlow!"
           :target-id="entry.record.contributionId"
           :initial-answers="appealResume?.answers"
           :initial-step="appealResume?.stepIndex"
