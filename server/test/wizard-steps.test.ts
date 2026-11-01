@@ -20,4 +20,14 @@ describe('validateStep', () => {
   it('review steps are always valid', () => {
     expect(validateStep(review, {})).toBeNull();
   });
+
+  it('evidence steps are optional (both paths empty is valid)', () => {
+    // One new kind in slice #4b: the submit wizard's evidence step. BOTH
+    // inputs are optional at the shell — the store's own gate
+    // ('Attach evidence or give a pointer') is the authority that rejects
+    // submitting with nothing, at the submit boundary.
+    const evidence: FlowStep = { kind: 'evidence', id: 'evidence', title: 'Evidence', pointerPlaceholder: 'URL, commit, record id…' };
+    expect(validateStep(evidence, {})).toBeNull();
+    expect(validateStep(evidence, { evidence: 'https://example.com/e1' })).toBeNull();
+  });
 });

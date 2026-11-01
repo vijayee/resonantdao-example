@@ -7,6 +7,7 @@ export type FlowAnswers = Record<string, string>;
 export type FlowStep =
   | { kind: 'choice'; id: string; title: string; options: Array<{ value: string; label: string; desc?: string }> }
   | { kind: 'text'; id: string; title: string; placeholder?: string }
+  | { kind: 'evidence'; id: string; title: string; pointerPlaceholder?: string }
   | { kind: 'review' };
 
 export interface FlowDefinition {
@@ -31,5 +32,7 @@ export function validateStep(step: FlowStep, answers: FlowAnswers): string | nul
   if (step.kind === 'text') {
     return (answers[step.id] ?? '').trim() ? null : 'A written note is required.';
   }
+  // Evidence: optional at the shell level; the store's submit gate rejects
+  // an evidence-less submission (both inputs empty) — not duplicated here.
   return null;
 }
