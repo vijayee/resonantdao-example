@@ -5,7 +5,7 @@ import {
   ServerMessage,
 } from '@shared/types';
 import {
-  CONTENT_LIMITS, schemaForDims, EvidenceRef, HarmVerdict, SCHEMA_VERSION,
+  CONTENT_LIMITS, schemaForDims, EvidenceRef, HarmVerdict, SCHEMA_VERSION, STATUS_APPEALED,
 } from '@shared/contribution';
 import type { ContributionFacts } from '@shared/wizard';
 import { RECIP_NAMES, RES_CONFIG } from '@shared/policies';
@@ -22,8 +22,11 @@ export const serverClient = new ServerClient();
 export function contributionFacts(d: BrowserDao, entry: ContributionMirrorEntry): { schema: ReturnType<typeof schemaForDims>; facts: ContributionFacts } {
   const status = d.getContributionStatus(entry.record.contributionId);
   const schema = schemaForDims(entry.record.dims);
+  const appealed = status === 'pending' && d.getContributionAppealed(entry.record.contributionId);
   const facts: ContributionFacts = {
-    status: status === 'unknown' ? -1 : status === 'accepted' ? 1 : status === 'rejected' ? 2 : 0,
+    // STATUS_APPEALED renders through wizardModel like pending with the
+    // appealed flag lit — the register's raw mapping would lose the appeal.
+    status: appealed ? STATUS_APPEALED : status === 'unknown' ? -1 : status === 'accepted' ? 1 : status === 'rejected' ? 2 : 0,
     stepIndex: d.getContributionStepIndex(entry.record.contributionId),
     done: Object.fromEntries(schema.steps.map((s) => [
       s.stepId, d.getContributionStepDone(entry.record.contributionId, s.stepId),
