@@ -67,7 +67,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { FlowAnswers, FlowDefinition, FlowStep, stepTitle, validateStep } from './types';
+import { FlowAnswers, FlowDefinition, stepTitle, validateStep } from './types';
 import { saveDraft, clearDraft } from './drafts';
 import { useDaoStore } from '../stores/dao';
 
