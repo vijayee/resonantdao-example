@@ -76,19 +76,6 @@ async function voteOption(page, proposalId, optionLabel) {
   await page.waitForTimeout(1500);
 }
 
-// The demo clock re-renders the list every second (replacing every rendered
-// node), which can swallow mouse clicks in flight, so click from inside the
-// page (always the current node) — callers retry until the op's UI effect
-// appears.
-const clickInCard = (page, cardText, selector) =>
-  page.evaluate(({ cardText, selector }) => {
-    const el = [...document.querySelectorAll('.contribution-card')]
-      .find((c) => c.textContent.includes(cardText));
-    const btn = el && el.querySelector(selector);
-    if (btn && !btn.disabled) btn.click();
-    return !!btn && !btn.disabled;
-  }, { cardText, selector });
-
 // Drive an in-place wizard flow to completion. `choiceValue` selects the
 // flow's FIRST-STEP radio (verify decision / audit fairness); `textValue`
 // fills the first text step encountered. Retries through the flow's own
@@ -142,42 +129,68 @@ async function completeFlow(page, flowId, { choiceValue = null, textValue = '' }
   return false;
 }
 
-// Wizard submit only: fills the contribution form on the submitter's page
-// and waits for the card. Returns the card locator (scoped to the summary).
+// Drive /contribute/new's wizard (dim choice → summary → evidence pointer →
+// review submit); the submit's route push lands on the new lifecycle page —
+// waitForURL proves the round-trip succeeded, and the id is parsed from the
+// URL the push landed on. The submitter is left ON the lifecycle page
+// (the helper's caller keeps acting from it).
 async function submitContribution(submitter, dimValue, summary) {
-  await submitter.page.check(`#contribution-step-1 input[name="contrib-dim"][value="${dimValue}"]`);
-  await submitter.page.fill('#contribution-summary', summary);
-  await submitter.page.fill('#contribution-evidence-text', 'https://example.com/evidence/e2e');
-  await submitter.page.click('#contribution-form button[type="submit"]');
-  const card = submitter.page
-    .locator(`.contribution-card:has-text("${summary}")`)
-    .first();
-  await card.waitFor({ state: 'visible', timeout: 30000 });
-  console.log('Submitted contribution via wizard flow:', summary);
-  return card;
+  await nav(submitter.page, '/contribute');
+  await submitter.page.click('#new-contribution-btn');
+  const flow = submitter.page.locator('.wizard-flow[data-flow-id="contribute-new"]');
+  await flow.waitFor({ state: 'visible', timeout: 10000 });
+  await flow.locator(`.wizard-option[value="${dimValue}"]`).check();
+  await flow.locator('.wizard-next').click();
+  await flow.locator('textarea').fill(summary);
+  await flow.locator('.wizard-next').click();
+  await flow.locator('.wizard-evidence-pointer').fill('https://example.com/evidence/e2e');
+  await flow.locator('.wizard-next').click();
+  await flow.locator('.wizard-submit').click();
+  await submitter.page.waitForURL(/\/contribute\/[0-9a-f-]{36}$/, { timeout: 30000 });
+  const id = submitter.page.url().split('/contribute/')[1];
+  console.log('Submitted contribution via wizard flow:', summary, id);
+  return id;
+}
+
+// Open a contribution's lifecycle page from the feed: click the row whose
+// title span carries the summary. SPA clicks only — page.goto is forbidden
+// (a reload drops the wallet state). The participants-only list renders the
+// row for every actor with an actionable role or a completed act.
+async function openContribution(user, rowTitle) {
+  await nav(user.page, '/contribute');
+  const row = user.page.locator(`.contribution-row:has-text("${rowTitle}")`).first();
+  await row.waitFor({ state: 'visible', timeout: 30000 });
+  await row.click();
+}
+
+// Drive a flow on a contribution's lifecycle page: open it from the feed's
+// row link, then drive the current turn's form (verify) via completeFlow.
+// The UI effect (the next turn's flow mounting, a pill flip) is the caller's
+// assertion.
+async function runContributionFlow(user, rowTitle, flowId, { choiceValue = null, textValue = '' } = {}) {
+  await openContribution(user, rowTitle);
+  await completeFlow(user.page, flowId, { choiceValue, textValue });
 }
 
 // One full wizard cycle (single-verifier schema): submit, verify, settle.
+// Every turn plays on the contribution's lifecycle page (/contribute/:id):
+// the submitter lands there on submit (waitForURL in submitContribution);
+// verifiers open it via their feed row.
 async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReason, settleNote) {
-  const card = await submitContribution(submitter, dimValue, summary);
+  await submitContribution(submitter, dimValue, summary);
 
-  const verifyBtn = verifier.page
-    .locator(`.contribution-card:has-text("${summary}") .verify-contribution`)
-    .first();
-  await verifyBtn.waitFor({ state: 'visible', timeout: 30000 });
+  const settleFlow = submitter.page.locator('.wizard-flow[data-flow-id="settle"]');
 
-  const settleBtn = submitter.page
-    .locator(`.contribution-card:has-text("${summary}") .settle-contribution`)
-    .first();
-
-  // Retry until the settle step becomes actionable: each attempt re-clicks
-  // the verify button and drives the in-place wizard (harm choice → written
-  // reason → review submit) to completion.
+  // Retry until the settle step becomes actionable: each attempt re-opens the
+  // page from the verifier's row and drives the verify wizard (harm choice →
+  // written reason → review submit). The settle flow only mounts on the
+  // submitter's page once the verifier's op has been applied (requirement +
+  // step register), so its appearance proves the verify round-trip succeeded
+  // — the retired card's settle-button visibility was the equivalent.
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
-    await clickInCard(verifier.page, summary, '.verify-contribution');
-    await completeFlow(verifier.page, 'verify', { choiceValue: 'yes', textValue: verifyReason });
-    settleReady = await settleBtn
+    await runContributionFlow(verifier, summary, 'verify', { choiceValue: 'yes', textValue: verifyReason });
+    settleReady = await settleFlow
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -186,19 +199,14 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
     throw new Error(`Settle step never became actionable. Status bar: ${statusBar || '(empty)'}`);
   }
 
-  // The settle step is only actionable once the verifier's op has been
-  // applied (requirement + step register), so its appearance proves the
-  // verify round-trip succeeded.
-
-  // The demo clock re-renders the whole list every second and can swallow a
-  // click in flight; click from inside the page, drive the settle wizard
-  // (note → review submit), and retry until the pill flips to 'accepted'.
+  // The submitter is still on the lifecycle page: drive the settle wizard
+  // (note → review submit) and retry until the pill flips to 'accepted' —
+  // the pill lives in the lifecycle wizard's head on this page now.
   let settled = false;
   for (let attempt = 0; !settled && attempt < 15; attempt++) {
-    await clickInCard(submitter.page, summary, '.settle-contribution');
     await completeFlow(submitter.page, 'settle', { textValue: settleNote });
-    settled = await card
-      .locator('.contribution-pill:text-is("accepted")')
+    settled = await submitter.page
+      .locator('.lc-pill--accepted')
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -210,25 +218,24 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
 }
 
 // Phase-3 two-verifier cycle (schema v2: C_1's verify is all-parties, count
-// 2): submit, verify from v1 (the stepper chip must show (1/2)), verify from
-// v2 (whose button reads 'Verify (2nd)'), settle. The settle step only
-// becomes actionable once BOTH verifications have applied.
+// 2): submit, verify from v1 (whose page then shows the (1/2) progress chip),
+// verify from v2, settle. The settle flow only mounts on the submitter's page
+// once BOTH verifications have applied.
 //
 // v1's verify wizard is driven with a harm verdict (`harmChoice`, the FIRST
 // decision radio's value — 'yes' by default): 'yes-harm' records a 'reduced'
 // verdict on the FIRST check, and the completing check automatically carries
 // that verdict forward as the payload's priorHarm (the UI reads it out of
 // its mirror), so strongest-wins keeps 'reduced' effective at settle —
-// asserted via the card's harm receipt.
+// asserted via the lifecycle page's harm receipt.
 async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyReason, settleNote, harmChoice = 'yes') {
-  const card = await submitContribution(submitter, dimValue, summary);
+  await submitContribution(submitter, dimValue, summary);
 
   let halfDone = false;
   for (let attempt = 0; !halfDone && attempt < 15; attempt++) {
-    await clickInCard(v1.page, summary, '.verify-contribution');
-    await completeFlow(v1.page, 'verify', { choiceValue: harmChoice, textValue: verifyReason });
+    await runContributionFlow(v1, summary, 'verify', { choiceValue: harmChoice, textValue: verifyReason });
     halfDone = await v1.page
-      .locator(`.contribution-card:has-text("${summary}") .contribution-step--current:has-text("(1/2)")`)
+      .locator('.lc-phase__progress:text-is("1/2")')
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -238,32 +245,36 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
   }
   console.log('VERIFY PROGRESS: (1/2) after the first verifier');
 
-  // The second check's button is labelled 'Verify (2nd)' — the mirror's
-  // verifiedBy copy proves the first check replicated to this page.
-  const secondBtn = v2.page
-    .locator(`.contribution-card:has-text("${summary}") .verify-contribution:has-text("Verify (2nd)")`)
-    .first();
-  let secondVisible = false;
-  for (let attempt = 0; !secondVisible && attempt < 15; attempt++) {
-    secondVisible = await secondBtn
+  // The second check's pre-drive proof: v2's lifecycle page renders the
+  // verify flow (its head reads 'Verify — "<summary>"') with the (1/2)
+  // progress chip still up BEFORE v2 acts — the mirror's copy proving the
+  // first check replicated to this page (the retired card's 'Verify (2nd)'
+  // button label was the equivalent).
+  const secondFlow = v2.page.locator('.wizard-flow[data-flow-id="verify"]');
+  let secondReady = false;
+  for (let attempt = 0; !secondReady && attempt < 15; attempt++) {
+    await openContribution(v2, summary);
+    secondReady = await secondFlow
       .waitFor({ state: 'visible', timeout: 3000 })
-      .then(() => true, () => false);
+      .then(() => true, () => false)
+      && (await v2.page.locator('.lc-phase__progress:text-is("1/2")').count()) > 0;
   }
-  if (!secondVisible) {
+  if (!secondReady) {
     const statusBar = await v2.page.locator('#status').textContent();
-    throw new Error(`'Verify (2nd)' button never appeared for the second verifier. Status bar: ${statusBar || '(empty)'}`);
+    throw new Error(`The second verifier's verify flow (with the 1/2 chip) never rendered. Status bar: ${statusBar || '(empty)'}`);
+  }
+  const flowTitle = ((await secondFlow.locator('.wizard-flow__head .eyebrow').textContent()) ?? '').trim();
+  if (!flowTitle.includes(`Verify — "${summary}"`)) {
+    throw new Error(`Expected the verify flow head to read 'Verify — "${summary}"', got '${flowTitle}'`);
   }
 
-  const settleBtn = submitter.page
-    .locator(`.contribution-card:has-text("${summary}") .settle-contribution`)
-    .first();
+  const settleFlow = submitter.page.locator('.wizard-flow[data-flow-id="settle"]');
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
-    await clickInCard(v2.page, summary, '.verify-contribution');
     // the completing check rides 'yes' — it carries the prior verdict
     // (priorHarm from the mirror), so no fresh harm choice is made
-    await completeFlow(v2.page, 'verify', { choiceValue: 'yes', textValue: verifyReason });
-    settleReady = await settleBtn
+    await runContributionFlow(v2, summary, 'verify', { choiceValue: 'yes', textValue: verifyReason });
+    settleReady = await settleFlow
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -274,10 +285,9 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
 
   let settled = false;
   for (let attempt = 0; !settled && attempt < 15; attempt++) {
-    await clickInCard(submitter.page, summary, '.settle-contribution');
     await completeFlow(submitter.page, 'settle', { textValue: settleNote });
-    settled = await card
-      .locator('.contribution-pill:text-is("accepted")')
+    settled = await submitter.page
+      .locator('.lc-pill--accepted')
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -288,33 +298,36 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
   console.log('CONTRIBUTION STATUS PILL: accepted (two verifiers)');
 
   // A harm verdict rides the replicate verify ops, so the submitter's settled
-  // card must render the adjusted receipt once it is accepted ('reduced' →
-  // 'accepted — bounty 12 → 6 (harm reduced)' for a C_1 dims '1': 1).
+  // lifecycle page must render the adjusted receipt once it is accepted
+  // ('reduced' → 'accepted — bounty 12 → 6 (harm reduced)' for a C_1 dims
+  // '1': 1).
   if (harmChoice !== 'yes') {
-    const receipt = card.locator('.contribution-card__harm');
+    const receipt = submitter.page.locator('.lc-harm');
     await receipt.waitFor({ state: 'visible', timeout: 10000 });
     const receiptText = (await receipt.textContent()).trim();
     console.log('HARM RECEIPT:', receiptText);
     if (!receiptText.includes('(harm reduced)')) {
-      throw new Error(`Expected the settled card's harm receipt, got '${receiptText}'`);
+      throw new Error(`Expected the settled contribution page's harm receipt, got '${receiptText}'`);
     }
   }
 }
 
 // Phase-3 appeal flow: submit → a REJECTING verification (the verify
-// wizard's decision radio answered 'no') → the submitter appeals (status
+// wizard's decision radio answered 'no') → the submitter appeals (lifecycle
 // pill 'appealed') → a fresh member re-verifies accepted → settle. The
-// appealed pill must be visible between the appeal and the settle.
+// appealed pill must be visible between the appeal and the settle. Every
+// pill assert reads the lifecycle wizard's head ON the contribution page —
+// and the asserting user stays on that page (submitter throughout; rejecter
+// and re-verifier arrive via their feed rows).
 async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary, rejectReason, appealReason, reVerifyReason, settleNote) {
-  const card = await submitContribution(submitter, dimValue, summary);
+  await submitContribution(submitter, dimValue, summary);
 
   let rejected = false;
   for (let attempt = 0; !rejected && attempt < 15; attempt++) {
     // the decision radio's 'no' records the rejection with the written reason
-    await clickInCard(rejecter.page, summary, '.verify-contribution');
-    await completeFlow(rejecter.page, 'verify', { choiceValue: 'no', textValue: rejectReason });
+    await runContributionFlow(rejecter, summary, 'verify', { choiceValue: 'no', textValue: rejectReason });
     rejected = await submitter.page
-      .locator(`.contribution-card:has-text("${summary}") .contribution-pill:text-is("rejected")`)
+      .locator('.lc-pill--rejected')
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -324,12 +337,13 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
   }
   console.log('CONTRIBUTION STATUS PILL: rejected');
 
+  // The appeal form is embedded on the submitter's own lifecycle page once
+  // the verdict is rejected.
   let appealed = false;
   for (let attempt = 0; !appealed && attempt < 15; attempt++) {
-    await clickInCard(submitter.page, summary, '.appeal-contribution');
     await completeFlow(submitter.page, 'appeal', { textValue: appealReason });
     appealed = await submitter.page
-      .locator(`.contribution-card:has-text("${summary}") .contribution-pill:text-is("appealed")`)
+      .locator('.lc-pill--appealed')
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -339,26 +353,16 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
   }
   console.log('APPEALED PILL: visible before settle');
 
-  // The re-verifier's button title carries their live accuracy stat ("Your
-  // checks: X (Y upheld)") — fed by earlier settles' attested verifier lists.
-  const reVerifyBtn = reVerifier.page
-    .locator(`.contribution-card:has-text("${summary}") .verify-contribution`)
-    .first();
-  await reVerifyBtn.waitFor({ state: 'visible', timeout: 30000 });
-  const btnTitle = await reVerifyBtn.getAttribute('title');
-  console.log('VERIFY BUTTON TITLE:', btnTitle);
-  if (!btnTitle || !btnTitle.includes('upheld')) {
-    throw new Error(`Verify button title should include the accuracy stat, got '${btnTitle}'`);
-  }
+  // (The retired card carried the re-verifier's accuracy stat on the check
+  // button's title attribute — 'Your checks: X (Y upheld)'; the lifecycle
+  // page renders no such surface, so the re-verification driving through and
+  // the settle flow mounting below are the surviving proof.)
 
-  const settleBtn = submitter.page
-    .locator(`.contribution-card:has-text("${summary}") .settle-contribution`)
-    .first();
+  const settleFlow = submitter.page.locator('.wizard-flow[data-flow-id="settle"]');
   let settleReady = false;
   for (let attempt = 0; !settleReady && attempt < 15; attempt++) {
-    await clickInCard(reVerifier.page, summary, '.verify-contribution');
-    await completeFlow(reVerifier.page, 'verify', { choiceValue: 'yes', textValue: reVerifyReason });
-    settleReady = await settleBtn
+    await runContributionFlow(reVerifier, summary, 'verify', { choiceValue: 'yes', textValue: reVerifyReason });
+    settleReady = await settleFlow
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -369,10 +373,9 @@ async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary,
 
   let settled = false;
   for (let attempt = 0; !settled && attempt < 15; attempt++) {
-    await clickInCard(submitter.page, summary, '.settle-contribution');
     await completeFlow(submitter.page, 'settle', { textValue: settleNote });
-    settled = await card
-      .locator('.contribution-pill:text-is("accepted")')
+    settled = await submitter.page
+      .locator('.lc-pill--accepted')
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
   }
@@ -461,23 +464,18 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // carries the prior verdict forward automatically (priorHarm from the
   // mirror); alice settles, attesting both verifiers. The verified harm
   // halves the outcome BEFORE payment: alice's bounty is 6 $RES (12 × 0.5,
-  // surfaced by the card's harm receipt asserted in the flow), while each
-  // verifier still earns a check credit (2 $RES); alice's C_1 tally is
+  // surfaced by the lifecycle page's harm receipt asserted in the flow), while
+  // each verifier still earns a check credit (2 $RES); alice's C_1 tally is
   // the halved delta 0.5 (it feeds the salient proposal below and the
   // published RCT).
-  // The wizard lives on /contribute — every page that acts in a cycle navigates
-  // there ONCE before its first act (nav is a plain router-link click; repeat
-  // clicks inside retry loops are unnecessary and could race the demo clock).
-  await nav(alice.page, '/contribute');
-  await nav(bob.page, '/contribute');
-  await nav(carol.page, '/contribute');
+  // The lifecycle pages host every turn — each cycle helper navigates its own
+  // actors from the feed (the row link), so no pre-nav runs here.
   await runTwoVerifierCycle(alice, bob, carol, '1', 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000), 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm');
 
   // Cycle 2: bob submits a Recording claim; dave verifies (alice is barred —
   // her pair with bob was consumed when bob checked her C_1); bob settles.
   // Pays bob the C_2 base credit (3 $RES) and dave a check credit (2 $RES);
   // bob's settle gives him a C_2 tally of 1.
-  await nav(dave.page, '/contribute');
   await runWizardCycle(bob, dave, '2', 'Wizard-recorded e2e demo ' + Math.floor(Math.random() * 10000), 'the record is attributed and findable', 'accepting the verified outcome');
 
   // --- Phase-3 appeal flow: reject -> appeal -> re-verify -> settle ---
@@ -487,8 +485,9 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // answered 'no' — pair b-c), carol appeals from her page via the appeal
   // wizard,
   // dave's re-verification overturns it (pair c-d — fresh), carol settles.
-  // dave's re-verify button title at that point reads his accuracy stat —
-  // one check, upheld once by cycle 2's settlement-attested verifier list.
+  // (The retired card showed dave's live accuracy stat on the re-verify
+  // button's title — one check, upheld once by cycle 2's settlement-attested
+  // verifier list; the lifecycle page dropped that surface.)
   await runAppealFlow(carol, bob, dave, '2', 'Appealed e2e demo ' + Math.floor(Math.random() * 10000), 'the record does not match the claim', 'the evidence was misread — the record stands', 'the appealed re-review finds the record accurate', 'accepting the re-verified outcome');
 
   // --- Round spine close (phase 2) ---
