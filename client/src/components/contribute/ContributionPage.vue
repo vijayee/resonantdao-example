@@ -53,6 +53,7 @@ import { loadDraft } from '../../wizard/drafts';
 import type { FlowDefinition } from '../../wizard/types';
 import type { ContributionMirrorEntry } from '../../dao';
 import LifecycleWizard from '../../wizard/LifecycleWizard.vue';
+import WizardFlow from '../../wizard/WizardFlow.vue';
 import SectionHeading from '../../design/components/SectionHeading.vue';
 import Panel from '../../design/components/Panel.vue';
 
