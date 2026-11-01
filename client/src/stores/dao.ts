@@ -5,8 +5,9 @@ import {
   ServerMessage,
 } from '@shared/types';
 import {
-  CONTENT_LIMITS, EvidenceRef, HarmVerdict, SCHEMA_VERSION,
+  CONTENT_LIMITS, schemaForDims, EvidenceRef, HarmVerdict, SCHEMA_VERSION,
 } from '@shared/contribution';
+import type { ContributionFacts } from '@shared/wizard';
 import { RECIP_NAMES, RES_CONFIG } from '@shared/policies';
 import type { FeedEvent } from '@shared/feed';
 import { BrowserDao, ContributionMirrorEntry, bytesToBase64, base64ToBytes } from '../dao';
@@ -14,6 +15,23 @@ import { ServerClient } from '../server-client';
 import { useStatusStore } from './status';
 
 export const serverClient = new ServerClient();
+
+// Per-entry fact assembly for the contribution wizards (extracted from the
+// retired ContributionCard's computed). Takes the dao as a param — it must
+// not read store refs from module scope.
+export function contributionFacts(d: BrowserDao, entry: ContributionMirrorEntry): { schema: ReturnType<typeof schemaForDims>; facts: ContributionFacts } {
+  const status = d.getContributionStatus(entry.record.contributionId);
+  const schema = schemaForDims(entry.record.dims);
+  const facts: ContributionFacts = {
+    status: status === 'unknown' ? -1 : status === 'accepted' ? 1 : status === 'rejected' ? 2 : 0,
+    stepIndex: d.getContributionStepIndex(entry.record.contributionId),
+    done: Object.fromEntries(schema.steps.map((s) => [
+      s.stepId, d.getContributionStepDone(entry.record.contributionId, s.stepId),
+    ])),
+    submitter: entry.submitter,
+  };
+  return { schema, facts };
+}
 
 // Uniform sha-256 for both evidence paths: stored files and text pointers.
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -322,8 +340,8 @@ export const useDaoStore = defineStore('dao', () => {
 
   // ---- contribution ops ----
 
-  async function submitContribution(summary: string, dim: number, evidenceFile: File | null, evidenceText: string): Promise<boolean> {
-    if (!dao.value || submitting.value) return false;
+  async function submitContribution(summary: string, dim: number, evidenceFile: File | null, evidenceText: string): Promise<string | null> {
+    if (!dao.value || submitting.value) return null;
     submitting.value = true;
     try {
       // Evidence priority: attached file → text pointer. Files go to the
@@ -333,7 +351,7 @@ export const useDaoStore = defineStore('dao', () => {
         const bytes = new Uint8Array(await evidenceFile.arrayBuffer());
         if (bytes.length > CONTENT_LIMITS.maxObjectBytes) {
           status.set(`Evidence exceeds ${CONTENT_LIMITS.maxObjectBytes / (1024 * 1024)}MB — split it up.`, 'error');
-          return false;
+          return null;
         }
         const mediaType = evidenceFile.type || 'application/octet-stream';
         const hash = await serverClient.putContent(bytes, mediaType);
@@ -343,7 +361,7 @@ export const useDaoStore = defineStore('dao', () => {
         evidenceRef = { hash: await sha256Hex(bytes), uri: evidenceText, mediaType: 'text/uri-list', size: bytes.length };
       } else {
         status.set('Attach evidence or give a pointer — pay follows proven outcomes.', 'error');
-        return false;
+        return null;
       }
 
       const payload = {
@@ -358,11 +376,11 @@ export const useDaoStore = defineStore('dao', () => {
       await safeExecuteRemote(bytes);
       status.set('Contribution submitted — awaiting verification.', 'success');
       bump();
-      return true;
+      return payload.contributionId;
     } catch (err) {
       status.set(`Contribution error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
-      return false;
+      return null;
     } finally {
       submitting.value = false;
     }
