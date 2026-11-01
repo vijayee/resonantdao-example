@@ -11,11 +11,11 @@ export type FlowStep =
   | { kind: 'review' };
 
 export interface FlowDefinition {
-  id: string;   // draft-key part ('verify' | 'settle' | 'appeal' | 'audit' | 'reckon' | 'publish')
+  id: string;   // draft-key part ('verify' | 'settle' | 'appeal' | 'audit' | 'reckon' | 'publish' | 'contribute-new')
   title: string;
   steps: FlowStep[];
-  reviewSummary(answers: FlowAnswers): string[];
-  submit(answers: FlowAnswers): Promise<void>;
+  reviewSummary(answers: FlowAnswers, files?: Record<string, string | null>): string[];
+  submit(answers: FlowAnswers, files?: Record<string, File | null>): Promise<void>;
 }
 
 export function stepTitle(step: FlowStep): string {

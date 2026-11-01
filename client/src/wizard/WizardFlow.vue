@@ -32,9 +32,26 @@
         />
       </div>
 
+      <div v-else-if="current.kind === 'evidence'" class="form-group">
+        <span class="form-label">{{ current.title }} <span class="muted">— optional</span></span>
+        <input
+          :class="['form-input', `wizard-evidence-pointer wizard-evidence-pointer--${current.id}`]"
+          :aria-label="current.title"
+          :value="answers[currentStepId] ?? ''"
+          :placeholder="current.pointerPlaceholder ?? 'Evidence pointer (URL, commit, record id)…'"
+          @input="answers[currentStepId] = ($event.target as HTMLInputElement).value"
+        />
+        <input
+          :class="['form-input', `wizard-evidence-file wizard-evidence-file--${current.id}`]"
+          type="file"
+          :aria-label="current.title + ' — file'"
+          @change="onEvidenceFile(current.id, $event)"
+        />
+      </div>
+
       <div v-else>
         <ul id="wizard-review" class="muted">
-          <li v-for="line in flow.reviewSummary(committedAnswers)" :key="line">{{ line }}</li>
+          <li v-for="line in flow.reviewSummary(committedAnswers, filesForReview)" :key="line">{{ line }}</li>
         </ul>
         <p v-if="error" class="wizard-flow__error" role="alert">{{ error }}</p>
       </div>
@@ -50,7 +67,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { FlowAnswers, FlowDefinition, stepTitle, validateStep } from './types';
+import { FlowAnswers, FlowDefinition, FlowStep, stepTitle, validateStep } from './types';
 import { saveDraft, clearDraft } from './drafts';
 import { useDaoStore } from '../stores/dao';
 
@@ -63,6 +80,21 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 
 const ds = useDaoStore();
+
+// Evidence files ride OUTSIDE answers: Files never serialize into drafts.
+const files = ref<Record<string, File | null>>({});
+
+function onEvidenceFile(stepId: string, ev: Event): void {
+  files.value = { ...files.value, [stepId]: (ev.target as HTMLInputElement).files?.[0] ?? null };
+}
+
+// Review summary sees the file NAMES (for 'file attached' lines) but never
+// receives the File objects.
+const filesForReview = computed(() =>
+  Object.fromEntries(Object.entries(files.value).map(([k, f]) => [k, f ? f.name : null])));
+
+// The REAL File objects (unwrapped from ref for the submit handoff).
+const pickedFiles = computed(() => files.value);
 
 const stepIndex = ref(Math.max(0, Math.min(props.initialStep ?? 0, props.flow.steps.length - 1)));
 const initial: FlowAnswers = props.initialAnswers ? { ...props.initialAnswers } : {};
@@ -111,7 +143,7 @@ function cancel(): void {
 async function submitNow(): Promise<void> {
   error.value = null;
   try {
-    await props.flow.submit(committedAnswers.value);
+    await props.flow.submit(committedAnswers.value, pickedFiles.value);
     if (ds.username) clearDraft(window.localStorage, ds.username, props.flow.id, props.targetId);
     emit('close');
   } catch (err) {
