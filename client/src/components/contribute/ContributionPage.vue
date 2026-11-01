@@ -14,7 +14,7 @@
         @flow-close="onFlowClose"
       />
       <div v-if="harmReceipt" class="lc-harm">{{ harmReceipt }}</div>
-      <div v-if="!model.appealed && model.outcome === 'rejected' && entry.submitter === ds.username" class="lc-appeal">
+      <div v-if="!model.appealed && model.outcome === 'rejected' && entry.submitter === ds.username && !appealUsed" class="lc-appeal">
         <WizardFlow
           :key="'appeal'"
           :flow="appealFlow!"
@@ -94,6 +94,15 @@ const pageFlow = computed(() => composed.value!.pageFlow);
 const resume = computed(() => composed.value!.resume);
 
 const appealFlow = computed(() => (entry.value ? appealFlowFactory(entry.value) : null));
+// The raw once-guard register: an appeal survives re-review, so after an
+// appealed contribution is RE-rejected the handler bars a second appeal —
+// the retired card hid its button here, and this page must not render a
+// form every submit of which fails. (model.appealed alone can't carry this:
+// it is scoped to the pending window by contributionFacts.)
+const appealUsed = computed(() => {
+  void ds.tick;
+  return ds.dao?.getContributionAppealed(entry.value?.record.contributionId ?? '') ?? false;
+});
 const appealResume = computed(() => (ds.username && entry.value ? loadDraft(localStorage, ds.username, 'appeal', entry.value.record.contributionId) : null));
 function onAppealClose() {
   // The shell already cleared/closed the draft; the tick re-derives the
