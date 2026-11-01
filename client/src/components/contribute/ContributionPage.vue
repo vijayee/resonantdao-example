@@ -49,7 +49,7 @@ import { harmFactorFor, paymentFor } from '@shared/contribution';
 import { useDaoStore, contributionFacts, serverClient } from '../../stores/dao';
 import { appealFlow as appealFlowFactory, settleFlow, verifyFlow } from '../../wizard/flows/contribute-flows';
 import { lifecycleModel, isParticipant } from '../../wizard/lifecycle';
-import { loadDraft, WizardDraft } from '../../wizard/drafts';
+import { loadDraft } from '../../wizard/drafts';
 import type { FlowDefinition } from '../../wizard/types';
 import type { ContributionMirrorEntry } from '../../dao';
 import LifecycleWizard from '../../wizard/LifecycleWizard.vue';
@@ -58,12 +58,14 @@ import Panel from '../../design/components/Panel.vue';
 
 const ds = useDaoStore();
 const route = useRoute();
-const contributionId = String(route.params.contributionId);
+// Live params: vue-router reuses the component record across same-route
+// navigation, so a setup-time read would go stale; the computed re-derives.
+const contributionId = computed(() => String(route.params.contributionId ?? ''));
 
 const located = computed(() => {
   void ds.tick;
   const d = ds.dao;
-  return d ? d.getContributions().find((e) => e.record.contributionId === contributionId) : undefined;
+  return d ? d.getContributions().find((e) => e.record.contributionId === contributionId.value) : undefined;
 });
 
 const composed = computed(() => {
@@ -75,13 +77,11 @@ const composed = computed(() => {
   // Attach the CURRENT phase's form (page-side duty; never in the pure model).
   const current = model.phases.find((p) => p.state === 'current' && p.mayAct);
   const FACTORIES: Record<string, (e: ContributionMirrorEntry) => FlowDefinition> = {
-    verify: verifyFlow, settle: settleFlow, appeal: appealFlowFactory,
+    verify: verifyFlow, settle: settleFlow,
   };
   return {
     entry,
     model,
-    schema,
-    facts,
     pageFlow: current ? (FACTORIES[current.stepId]?.(entry) ?? null) : null,
     resume: current ? loadDraft(localStorage, ds.username, current.stepId, entry.record.contributionId) : null,
   };

@@ -56,7 +56,16 @@ const visibleEntries = computed(() => {
   });
 });
 
-function statusFor(entry: ContributionMirrorEntry) { return ds.dao?.getContributionStatus(entry.record.contributionId) ?? 'unknown'; }
+function statusFor(entry: ContributionMirrorEntry) {
+  void ds.tick;
+  const d = ds.dao;
+  if (!d) return 'unknown';
+  const status = d.getContributionStatus(entry.record.contributionId);
+  // The status register stays 'pending' while the appealed register is set —
+  // surface the appeal, like the retired card did.
+  if (status === 'pending' && d.getContributionAppealed(entry.record.contributionId)) return 'appealed';
+  return status;
+}
 function dimLabels(entry: ContributionMirrorEntry) {
   return Object.keys(entry.record.dims).map((k) => `C_${k} ${DIMENSIONS[Number(k)]?.name ?? '?'}`).join(', ');
 }
