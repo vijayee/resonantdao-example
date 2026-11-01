@@ -81,6 +81,27 @@ describe('lifecycleModel', () => {
     const m = lifecycleModel(c1, facts(1, { submit: 1, verify: 1 }), entry({ record: { contributionId: 'c-1', dims: { '1': 1 }, summary: 'x', evidenceRef: { hash: 'h', uri: 'u', mediaType: 'text/uri-list', size: 3 }, schemaVersion: 'v2' }, verifiedBy: 'bob', verifiers: ['bob'] } as Partial<ContributionMirrorEntry>), 'carol', false, []);
     expect(m.phases[1].state).toBe('current');
     expect(m.phases[1].progress).toEqual({ done: 1, required: 2 });
+    // The partial phase shows no verdict note — note rides DONE phases only.
+    expect(m.phases[1].note).toBeUndefined();
+  });
+
+  it('a completed two-verifier phase credits BOTH verifiers', () => {
+    const c1 = SCHEMAS.get(1)!;
+    const mirror: Partial<ContributionMirrorEntry> = {
+      record: { contributionId: 'c-1', dims: { '1': 1 }, summary: 'x', evidenceRef: { hash: 'h', uri: 'u', mediaType: 'text/uri-list', size: 3 }, schemaVersion: 'v2' },
+      verifiedBy: 'carol', verifiers: ['bob', 'carol'],
+    };
+    const m = lifecycleModel(c1, facts(2, { submit: 1, verify: 2 }), entry(mirror as Partial<ContributionMirrorEntry>), 'alice', false, [verifyEvent('bob', 2000), verifyEvent('carol', 3000)]);
+    expect(m.phases[1].state).toBe('complete');
+    expect(m.phases[1].doneBy).toBe('bob & carol');
+    expect(m.phases[1].doneAt).toBe(3000);
+  });
+
+  it('the completion timestamp is order-independent on the feed array (dao serves newest-first)', () => {
+    const m = lifecycleModel(schema, facts(2, { submit: 1, verify: 1 }), entry({ verifiedBy: 'bob', verifiers: ['bob'] }), 'carol', false, [verifyEvent('bob', 2000), verifyEvent('alice', 1000)]);
+    // newest-first (as the dao's accessor serves it): bob's 2000 is the
+    // completion at; the older event must not win by array position.
+    expect(m.phases[1].doneAt).toBe(2000);
   });
 });
 

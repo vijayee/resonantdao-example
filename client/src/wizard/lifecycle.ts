@@ -40,11 +40,18 @@ const WAITING_TEXT: Record<string, string> = {
   settle: 'awaiting the submitter',
 };
 
+// doneBy credits EVERY actor who completed the phase (a 2-verifier
+// all-parties step joins both) — order-independent on feed events: the
+// dao's feed accessor is newest-first, so pick the completion timestamp by
+// the newest matching event's at, never array position.
 function verifyAnnotations(entry: ContributionMirrorEntry, feedEvents: FeedEvent[]): { doneBy?: string; doneAt?: number } {
-  const who = entry.verifiedBy ?? entry.verifiers?.[0];
+  const who = (entry.verifiers?.length ?? 0) > 1
+    ? (entry.verifiers ?? []).join(' & ')
+    : entry.verifiedBy ?? entry.verifiers?.[0];
   if (!who) return {};
   const matching = feedEvents.filter((e) => e.targetId === entry.record.contributionId && e.type === 'contribution_verified');
-  return { doneBy: who, doneAt: matching.length > 0 ? matching[matching.length - 1].at : undefined };
+  const latest = matching.reduce<FeedEvent | null>((acc, e) => (acc === null || e.at > acc.at ? e : acc), null);
+  return { doneBy: who, doneAt: latest ? latest.at : undefined };
 }
 
 function phaseFor(step: WizardStep, entry: ContributionMirrorEntry, feedEvents: FeedEvent[]): LifecyclePhase {
@@ -57,7 +64,10 @@ function phaseFor(step: WizardStep, entry: ContributionMirrorEntry, feedEvents: 
     progress: { done: step.progress.done, required: step.progress.required },
     mayAct,
     waitingOn: step.state === 'current' && !mayAct ? WAITING_TEXT[step.stepId] : undefined,
-    note: step.stepId === 'verify' && entry.verdictReason ? entry.verdictReason : undefined,
+    // note rides DONE phases only (the spec scopes the verdict display there;
+    // a partial all-parties verify shows its own progress, not the first
+    // check's reason).
+    note: step.state === 'complete' && step.stepId === 'verify' && entry.verdictReason ? entry.verdictReason : undefined,
   };
   if (step.state === 'complete') {
     if (step.stepId === 'submit') {
@@ -87,6 +97,8 @@ export function lifecycleModel(
     contributionId: entry.record.contributionId,
     summary: entry.record.summary,
     submitter: entry.submitter,
+    // In readOnly mode outcome is always 'pending' (unknown registers) — the
+    // page's terminal banner must gate on readOnly, never on outcome.
     outcome: wm.outcome,
     appealed: wm.appealed ?? false,
     readOnly: wm.readOnly,
