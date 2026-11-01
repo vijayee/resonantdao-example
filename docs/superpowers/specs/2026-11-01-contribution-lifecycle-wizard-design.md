@@ -22,7 +22,12 @@ wizard IS the surface**, with the engine gaining native turn-taking.
    rides the tested validation/draft/error machinery.
 2. **The facts adapter stays `wizardModel`** — the engine consumes its projection
    (phases/actors/mayAct/progress); domain lifecycle rules are NOT reimplemented inside the
-   engine (that projection is jest-covered and single-source).
+   engine (that projection is jest-covered and single-source). Dividing rule, per Victor
+   (2026-11-01): **everything that is the protocol representation of a contribution lives in the
+   state machine** (registers, authorization rules, requirement counts — handlers are the
+   referee); **everything cosmetic lives elsewhere** — `wizardModel` is a read-only re-derivation
+   for display that can never grant a turn (a stale replica's preview is corrected by handler
+   rejection), and the engine renders that preview only.
 3. **Per-contribution routes**: `/contribute/:contributionId` (lifecycle page) and
    `/contribute/new` (the submit wizard). The /contribute list becomes slim linked rows.
 4. **Participant blocking (page-level)**: participants = submitter + anyone holding an
