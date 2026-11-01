@@ -38,7 +38,7 @@
             @close="emit('flow-close')"
           />
         </div>
-        <div v-else-if="phase.state === 'current' && !phase.mayAct" class="muted lc-phase__wait">{{ phase.waitingOn }}</div>
+        <div v-else-if="phase.state === 'current'" class="muted lc-phase__wait">{{ phase.waitingOn ?? 'the form for this turn is not available' }}</div>
       </div>
     </div>
   </div>
@@ -58,8 +58,9 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'flow-close': [] }>();
 
-// The embedded flow's key INCLUDES the phase id: a facts-driven phase change
-// remounts cleanly (stale-initial insurance, slice #3 rule).
+// The embedded flow's key includes the FLOW id + the contribution id: a
+// facts-driven phase/flow change remounts cleanly (stale-initial insurance,
+// slice #3 rule).
 const phaseKey = computed(() => `${props.pageFlow?.id ?? 'none'}/${props.model.contributionId}`);
 
 function clock(atMs: number): string {
