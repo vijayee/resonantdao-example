@@ -17,7 +17,7 @@ import { useStatusStore } from './status';
 export const serverClient = new ServerClient();
 
 // Per-entry fact assembly for the contribution wizards (extracted from the
-// retired ContributionCard's computed). Takes the dao as a param — it must
+// retired contribution card's computed). Takes the dao as a param — it must
 // not read store refs from module scope.
 export function contributionFacts(d: BrowserDao, entry: ContributionMirrorEntry): { schema: ReturnType<typeof schemaForDims>; facts: ContributionFacts } {
   const status = d.getContributionStatus(entry.record.contributionId);

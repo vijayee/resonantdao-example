@@ -74,3 +74,37 @@ export function appealFlow(entry: ContributionMirrorEntry): FlowDefinition {
     },
   };
 }
+
+// The new-contribution wizard: linear flow at /contribute/new. The submit
+// success routes to the new lifecycle page — the page supplies onSubmitted
+// (the store returns the id; routing is the page's business, never the
+// factory's).
+export function contributeNewFlow(onSubmitted: (contributionId: string) => void): FlowDefinition {
+  const ds = useDaoStore();
+  return {
+    id: 'contribute-new',
+    title: 'New contribution',
+    steps: [
+      {
+        kind: 'choice', id: 'dim', title: 'What kind of contribution?',
+        options: [
+          { value: '2', label: 'C_2 Recording', desc: 'a durable, findable record — base credit 3 $RES' },
+          { value: '1', label: 'C_1 Building', desc: 'built something real — bounty 12 $RES' },
+        ],
+      },
+      { kind: 'text', id: 'summary', title: 'Describe it', placeholder: 'What did you make or record?' },
+      { kind: 'evidence', id: 'evidence', title: 'Evidence', pointerPlaceholder: 'URL, commit, record id…' },
+      { kind: 'review' },
+    ],
+    reviewSummary: (a, files) => [
+      `Type: ${a.dim}`,
+      `Summary: ${(a.summary ?? '').trim()}`,
+      files?.['evidence'] ? 'Evidence: stored file' : a.evidence ? `Pointer: ${a.evidence}` : 'No evidence yet',
+    ],
+    submit: async (a, files) => {
+      const id = await ds.submitContribution((a.summary ?? '').trim(), Number(a.dim), files?.['evidence'] ?? null, (a.evidence ?? '').trim());
+      if (!id) throw new Error('The contribution did not record — check the message below the page.');
+      onSubmitted(id);
+    },
+  };
+}

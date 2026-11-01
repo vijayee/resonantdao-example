@@ -1,141 +1,100 @@
 <template>
   <SectionHeading number="03" eyebrow="Contribute" title="Work, witnessed">
-    <template #lede>Submit a contribution with evidence. Another member verifies it;
-      accepted outcomes pay bounties and build your dimension tallies.</template>
+    <template #lede>Contributions are flows — open one to act on it, or start a new one below.</template>
   </SectionHeading>
 
-  <Panel number="01" kicker="Submit contribution">
-    <form id="contribution-form" class="proposal-form" @submit.prevent="onSubmitContribution">
-      <fieldset id="contribution-step-1" class="wizard-fieldset">
-        <legend>1 — What kind of contribution?</legend>
-        <label class="wizard-choice"><input v-model="dim" type="radio" name="contrib-dim" :value="2" /> C_2 Recording — durable, findable record (base credit 3 $RES)</label>
-        <label class="wizard-choice"><input v-model="dim" type="radio" name="contrib-dim" :value="1" /> C_1 Building — built something real (bounty 12 $RES)</label>
-      </fieldset>
-      <fieldset class="wizard-fieldset">
-        <legend>2 — Describe it and attach evidence</legend>
-        <input id="contribution-summary" v-model="summary" class="form-input" placeholder="What did you make or record?" required />
-        <input id="contribution-evidence-text" v-model="evidenceText" class="form-input" placeholder="Evidence pointer (URL, commit, record id)…" />
-        <input id="contribution-evidence-file" ref="fileInput" class="form-input" type="file" @change="onFileChange" />
-      </fieldset>
-      <fieldset class="wizard-fieldset">
-        <legend>3 — Review</legend>
-        <div id="contribution-review" class="muted">
-          <p><strong>{{ summary || '(no summary yet)' }}</strong></p>
-          <p>{{ reviewLine }}</p>
-        </div>
-      </fieldset>
-      <div class="proposal-form__actions">
-        <button class="button button--primary" type="submit" :disabled="ds.submitting">Submit contribution</button>
-      </div>
-    </form>
+  <Panel number="01" kicker="New contribution">
+    <button id="new-contribution-btn" class="button button--primary" type="button" @click="router.push('/contribute/new')">Start a new contribution…</button>
   </Panel>
 
   <section id="contributions-list" aria-live="polite">
-    <p v-if="entries.length === 0" class="muted">No contributions yet.</p>
-    <ContributionCard
-      v-for="entry in entries"
+    <p v-if="visibleEntries.length === 0" class="muted">No contributions involve you yet — start one above.</p>
+    <RouterLink
+      v-for="entry in visibleEntries"
       :key="entry.record.contributionId"
-      :entry="entry"
-      :active-flow-key="activeFlow"
-      :drafts="cardDrafts"
-      @start-flow="onFlowStart"
-      @close-flow="onFlowClose"
-    />
+      :to="`/contribute/${entry.record.contributionId}`"
+      class="contribution-row"
+    >
+      <span class="contribution-row__title">{{ entry.record.summary }}</span>
+      <span class="contribution-row__dim mono">{{ dimLabels(entry) }}</span>
+      <span :class="['contribution-pill', `contribution-pill--${statusFor(entry)}`]">{{ statusFor(entry) }}</span>
+      <span class="muted contribution-row__evidence">{{ evidenceLabel(entry) }}</span>
+      <span class="contribution-row__arrow">→</span>
+    </RouterLink>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
+import { RouterLink, useRouter } from 'vue-router';
 import { DIMENSIONS } from '@shared/contribution';
-import { listDrafts, cleanStaleDrafts, WizardDraft } from '../../wizard/drafts';
-import { useDaoStore } from '../../stores/dao';
-import { useStatusStore } from '../../stores/status';
+import { useDaoStore, contributionFacts } from '../../stores/dao';
+import { isParticipant } from '../../wizard/lifecycle';
+import { cleanStaleDrafts } from '../../wizard/drafts';
+import type { ContributionMirrorEntry } from '../../dao';
 import SectionHeading from '../../design/components/SectionHeading.vue';
 import Panel from '../../design/components/Panel.vue';
-import ContributionCard from './ContributionCard.vue';
 
 const ds = useDaoStore();
-const status = useStatusStore();
-
-const dim = ref<number>(2);
-const summary = ref('');
-const evidenceText = ref('');
-const evidenceFile = ref<File | null>(null);
-const fileInput = ref<HTMLInputElement | null>(null);
+const router = useRouter();
 
 const entries = computed(() => {
   void ds.tick;
   return [...(ds.dao?.getContributions() ?? [])].reverse();
 });
 
-const activeFlow = ref<string | null>(null);          // `{flowId}/{contributionId}`
-
-// Re-derives on tick AND on activeFlow changes: a Cancel deletes a draft in
-// localStorage without touching the dao, so open/close must invalidate too.
-const cardDrafts = computed(() => {
+// Participants-only list (spec decision 4): the viewer's own submissions,
+// contributions an actionable role reaches, and (as custodian) everything.
+const visibleEntries = computed(() => {
   void ds.tick;
-  void activeFlow.value;
-  const empty = new Map<string, WizardDraft>();
-  if (!ds.username) return { verify: empty, settle: empty, appeal: empty };
-  return {
-    verify: listDrafts(localStorage, ds.username, 'verify'),
-    settle: listDrafts(localStorage, ds.username, 'settle'),
-    appeal: listDrafts(localStorage, ds.username, 'appeal'),
-  };
+  const d = ds.dao;
+  if (!d || !ds.username) return [];
+  const isCust = (ds.custodians ?? []).includes(ds.username);
+  return entries.value.filter((e) => {
+    const { schema, facts } = contributionFacts(d, e);
+    return isParticipant(e, ds.username, isCust, schema, facts);
+  });
 });
 
-// Drop drafts whose contribution left the actionable set — NEVER against an
-// empty mirror (replay may not have finished at mount; an empty sweep would
-// nuke every draft).
+function statusFor(entry: ContributionMirrorEntry) { return ds.dao?.getContributionStatus(entry.record.contributionId) ?? 'unknown'; }
+function dimLabels(entry: ContributionMirrorEntry) {
+  return Object.keys(entry.record.dims).map((k) => `C_${k} ${DIMENSIONS[Number(k)]?.name ?? '?'}`).join(', ');
+}
+function evidenceLabel(entry: ContributionMirrorEntry) {
+  const uri = entry.record.evidenceRef.uri;
+  return uri.startsWith('content://') ? 'stored evidence' : `pointer: ${uri}`;
+}
+
+// Draft sweep: verify/settle/appeal drafts for vanished targets (kept from
+// slice #3; the pages read their own drafts). NEVER against an empty mirror —
+// replay may not have finished at mount; an empty sweep would nuke every draft.
+const flowIds = ['verify', 'settle', 'appeal'] as const;
 function sweepStaleDrafts() {
   void ds.tick;
   if (!ds.username || !ds.dao) return;
   const ids = new Set(ds.dao.getContributions().map((e) => e.record.contributionId));
   if (ids.size === 0) return;
-  cleanStaleDrafts(localStorage, ds.username, 'verify', ids);
-  cleanStaleDrafts(localStorage, ds.username, 'settle', ids);
-  cleanStaleDrafts(localStorage, ds.username, 'appeal', ids);
+  for (const fid of flowIds) cleanStaleDrafts(localStorage, ds.username, fid, ids);
 }
 onMounted(sweepStaleDrafts);
-
-function onFlowStart(key: string) { activeFlow.value = key; }
-function onFlowClose() {
-  activeFlow.value = null;
-  sweepStaleDrafts();
-}
-
-const reviewLine = computed(() => {
-  const dims = Object.keys({ [dim.value]: 1 }).map((k) => `C_${k} ${DIMENSIONS[Number(k)].name}`).join(', ');
-  return `${dims} — ${evidenceFile.value ? 'stored evidence (file)' : evidenceText.value ? `pointer: ${evidenceText.value}` : 'no evidence yet'}`;
-});
-
-function onFileChange(ev: Event) {
-  evidenceFile.value = (ev.target as HTMLInputElement).files?.[0] ?? null;
-}
-
-async function onSubmitContribution() {
-  if (!ds.dao || ds.submitting) return;
-  if (!summary.value) {
-    status.set('A summary is required.', 'error');
-    return;
-  }
-  const ok = await ds.submitContribution(summary.value, dim.value, evidenceFile.value, evidenceText.value);
-  if (ok) {
-    summary.value = '';
-    evidenceText.value = '';
-    evidenceFile.value = null;
-    if (fileInput.value) fileInput.value.value = '';
-  }
-}
 </script>
 
 <style scoped>
-.wizard-fieldset {
+.contribution-row {
+  display: flex; align-items: baseline; gap: var(--space-3);
   border: 1px solid var(--line); border-radius: var(--radius);
-  padding: var(--space-3) var(--space-4); margin: 0;
-  display: flex; flex-direction: column; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4); background: var(--glass);
+  transition: border-color .2s, transform .2s;
 }
-.wizard-fieldset legend { color: var(--muted); font-size: .8125rem; font-weight: 600; padding: 0 var(--space-1); }
-.wizard-choice { display: flex; align-items: center; gap: var(--space-2); font-size: .9375rem; cursor: pointer; }
-#contributions-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.contribution-row:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.contribution-row__title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9375rem; }
+.contribution-row__dim { color: var(--faint); font-size: .75rem; flex: 0 0 auto; }
+.contribution-row__evidence { font-size: .78rem; flex: 0 0 auto; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contribution-row__arrow { color: var(--jade); flex: 0 0 auto; }
+.contribution-pill { font-family: var(--font-mono); font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; padding: .15rem var(--space-2); border-radius: 999px; flex-shrink: 0; }
+.contribution-pill--pending { color: var(--muted); border: 1px solid var(--line); }
+.contribution-pill--accepted { color: var(--jade); border: 1px solid rgba(95, 208, 160, .5); }
+.contribution-pill--rejected { color: var(--danger); border: 1px solid rgba(226, 128, 126, .5); }
+.contribution-pill--appealed { color: var(--amber); border: 1px solid rgba(232, 168, 76, .5); }
+#contributions-list { display: flex; flex-direction: column; gap: var(--space-2); }
 </style>
