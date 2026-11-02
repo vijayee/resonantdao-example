@@ -12,7 +12,7 @@ const router = createRouter({
     { path: '/contribute/:contributionId', name: 'contribution', component: () => import('../components/contribute/ContributionPage.vue') },
     { path: '/round', name: 'round', component: () => import('../components/round/RoundPage.vue') },
     { path: '/custodians', name: 'custodians', component: () => import('../components/custodians/CustodiansPage.vue') },
-    { path: '/account', name: 'account', component: () => import('../components/account/AccountPlaceholder.vue') },
+    { path: '/account', name: 'account', component: () => import('../components/account/AccountPage.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 });
