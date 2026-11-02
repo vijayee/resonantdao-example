@@ -44,7 +44,7 @@ async function runUser(username, headless = true) {
   // The feed is the landing page now — route to the proposal page up front.
   await nav(page, '/proposals');
 
-  return { browser, page };
+  return { browser, page, name: username };
 }
 
 async function createProposal(page, title, type, options = '', salientDims = []) {
@@ -208,7 +208,7 @@ async function runContributionFlow(user, rowTitle, flowId, { choiceValue = null,
 // (/contribute/:id): the submitter lands there on submit (waitForURL in
 // submitContribution); the named verifier opens it via their feed row.
 async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReason, settleNote) {
-  await submitContribution(submitter, dimValue, summary, [verifier]);
+  await submitContribution(submitter, dimValue, summary, [verifier.name]);
 
   const settleFlow = submitter.page.locator('.wizard-flow[data-flow-id="settle"]');
 
@@ -266,7 +266,7 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
 // their page (the targeting driver's denial assert below): neither the
 // contribution row nor an attention-band item for this summary.
 async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyReason, settleNote, harmChoice = 'yes', observer = null) {
-  await submitContribution(submitter, dimValue, summary, [v1, v2]);
+  await submitContribution(submitter, dimValue, summary, [v1.name, v2.name]);
 
   let halfDone = false;
   for (let attempt = 0; !halfDone && attempt < 15; attempt++) {
@@ -400,7 +400,7 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
 // and the rewound re-review then rides the named set that survived the
 // appeal (jest P).
 async function runAppealFlow(submitter, rejecter, reVerifier, reassignName, dimValue, summary, rejectReason, appealReason, reVerifyReason, settleNote) {
-  await submitContribution(submitter, dimValue, summary, [rejecter]);
+  await submitContribution(submitter, dimValue, summary, [rejecter.name]);
 
   // The reassign section is mounted on the submitter's own lifecycle page
   // (she is still on it post-submit): members step (count = the remaining
