@@ -132,14 +132,18 @@ const reassignResume = computed(() => (ds.username && entry.value ? loadDraft(lo
 
 // Submitter-only, verify incomplete (slots remain), targeted contribution
 // (the named register is non-empty — an untargeted legacy flow never
-// reassigns).
+// reassigns). The APPEAL window stays reassignable — the machine accepts
+// status pending OR appealed here (the appeal rewinds the counters, so the
+// slots are open again, and the named verifier is often now reciprocity-
+// barred: exactly when the escape valve is needed).
 const reassignAvailable = computed(() => {
   void ds.tick;
   const e = entry.value; const d = ds.dao;
   if (!e || !d || !ds.username) return false;
   if (e.submitter !== ds.username) return false;
+  // getContributionStatus maps BOTH the pending and appealed registers to
+  // 'pending' — the machine's legal reassign states are exactly this set.
   if (d.getContributionStatus(e.record.contributionId) !== 'pending') return false;
-  if (d.getContributionAppealed(e.record.contributionId)) return false;
   const named = d.getDefinedVerifiers(e.record.contributionId);
   if (named.length === 0) return false;
   const { schema, facts } = contributionFacts(d, e);
