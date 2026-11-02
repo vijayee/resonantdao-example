@@ -12,7 +12,7 @@ import {
   CALIBRATION_VERSION, DIMENSION_COUNT, SCHEMA_VERSION, KNOWN_SCHEMA_VERSIONS, dimensionDeltaFor,
   fromRegisterUnits, harmFactorFor, isValidDims, isValidHarm, paymentFor, schemaForRecord,
   strongestHarm, toRegisterUnits, validateEvidenceRef,
-  STATUS_APPEALED, STATUS_PENDING, STATUS_REJECTED,
+  STATUS_ACCEPTED, STATUS_APPEALED, STATUS_PENDING, STATUS_REJECTED,
 } from './contribution';
 
 function isNonEmptyString(value: unknown): value is string {
@@ -244,6 +244,28 @@ export function makeVerifyContributionHandler(
       return -1; // mutual loop bar: the submitter previously verified this verifier
     }
 
+    // The dimension gate hook (slice #6a): per-dim predicates the pass path
+    // must satisfy before ANY write. C_19: the verify payload RE-CARRIES the
+    // claim's ties (the machine cannot enumerate the claim's tie OR-set — the
+    // record rides the payload, client-attested like dims/submitter): the
+    // tied record must exist AND hold the machine's accepted status, and the
+    // recognized member must be a member ≠ the submitter. A failing gate
+    // exits all-or-nothing: no per-check credit, no guard set, no record.
+    if (payload.dims['19'] !== undefined && payload.pass) {
+      const tieId = payload.recordId;
+      const rec = payload.recognized;
+      if (
+        !isNonEmptyString(tieId) ||
+        !state.setContains(STATE_NAMES.contributions, tieId) ||
+        state.getRegister(CONTRIB_NAMES.status(tieId)) !== STATUS_ACCEPTED ||
+        !isNonEmptyString(rec) ||
+        !state.setContains(STATE_NAMES.members, rec) ||
+        rec === payload.submitter
+      ) {
+        return -1;
+      }
+    }
+
     // Per-check credit for the ACTOR on every completed verification,
     // pass or reject (C_18 Moon). RES balances are stored in per-mille
     // register units (toRegisterUnits); reads divide by REG_SCALE.
@@ -324,6 +346,10 @@ export function makeVerifyContributionHandler(
         payments[payload.submitter] = submitterAmount;
       }
 
+      // The calibration term (slice #6a's general rule): the dimension's
+      // live weight scales every tally credit — the same register the RCT
+      // aggregation reads; default weight 1 (the :1251 idiom).
+      const alphaFor = (i: number) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1;
       // Dimension tallies grow by the accept delta scaled by the harm factor —
       // but only for dimensions with an implemented payment rule;
       // classification-only dims (payment 0) cannot be distinguished from
@@ -334,10 +360,6 @@ export function makeVerifyContributionHandler(
         if (paymentFor(dimIndex, match) <= 0) {
           continue;
         }
-        // The calibration term (slice #6a's general rule): the dimension's
-        // live weight scales every tally credit — the same register the RCT
-        // aggregation reads; default weight 1 (the :1251 idiom).
-        const alphaFor = (i: number) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1;
         const delta = dimensionDeltaFor(dimIndex, match) * alphaFor(dimIndex) * harmFactor;
         if (delta <= 0) {
           continue;
@@ -348,6 +370,23 @@ export function makeVerifyContributionHandler(
         // rounded once and added to the scaled total (no read-scale-write
         // cycle, so no rounding drift across rounds).
         state.setRegister(tallyReg, (state.getRegister(tallyReg) || 0) + toRegisterUnits(delta), op.signerId);
+      }
+
+      // Recognition (slice #6a, C_19): the RECOGNIZED member carries the
+      // credit — the submitter earns nothing on C_19 (no $RES: the bounty
+      // loop above pays nothing for classification dims and the tally loop
+      // skips them; the calibration term scales this credit like every other).
+      if (payload.dims['19'] !== undefined) {
+        const rec = payload.recognized;
+        if (rec && rec !== payload.submitter) {
+          const recTally = CONTRIB_NAMES.dimensionBalance(rec, 19);
+          try { node.addRegister(recTally, 0); } catch (err) { /* ignore duplicate */ }
+          state.setRegister(
+            recTally,
+            (state.getRegister(recTally) || 0) + toRegisterUnits(dimensionDeltaFor(19, payload.dims['19']) * alphaFor(19) * harmFactor),
+            op.signerId
+          );
+        }
       }
 
       // Step advance: at a terminal step the contribution is accepted.

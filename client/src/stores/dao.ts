@@ -352,7 +352,17 @@ export const useDaoStore = defineStore('dao', () => {
   // The 5th param defaults to [] so untargeted (legacy) call sites —
   // contribute-flows.ts until Task 8 wires the members picker, and the e2e —
   // keep compiling with byte-identical untargeted payloads.
-  async function submitContribution(summary: string, dim: number, evidenceFile: File | null, evidenceText: string, verifiers: string[] = []): Promise<string | null> {
+  // The 6th param (slice #6a, C_19): the recognition claim's ties — the
+  // wizard passes them only for dim 19; they ride the submit payload, where
+  // the handler validates them and stamps the registers.
+  async function submitContribution(
+    summary: string,
+    dim: number,
+    evidenceFile: File | null,
+    evidenceText: string,
+    verifiers: string[] = [],
+    ties?: { recognized: string; recordId: string }
+  ): Promise<string | null> {
     if (!dao.value || submitting.value) return null;
     submitting.value = true;
     try {
@@ -385,6 +395,9 @@ export const useDaoStore = defineStore('dao', () => {
         // Targeted verification (slice #4c): when names are picked, the
         // payload carries them (count-exact validation lives in the handler).
         ...(verifiers.length > 0 ? { verifiers } : {}),
+        // Recognition ties (slice #6a, C_19): recognized member + the tied
+        // record — only on a C_19 claim, where the submit handler validates them.
+        ...(Number(dim) === 19 && ties ? { recognized: ties.recognized, recordId: ties.recordId } : {}),
       };
       const bytes = await dao.value.submitContribution(username.value, payload);
       await serverClient.submitOp(bytesToBase64(bytes));
@@ -436,6 +449,12 @@ export const useDaoStore = defineStore('dao', () => {
       harm: input.harm,
       priorVerifiers: prior,
       ...(entry.verifiedBy ? { priorHarm: entry.harm ?? ('none' as HarmVerdict) } : {}),
+      // C_19 recognition ties (slice #6a): re-carried from the claim's mirror
+      // so the handler's gate can machine-check the tie (the machine cannot
+      // enumerate the claim's tie OR-set).
+      ...(entry.record.dims['19'] !== undefined
+        ? { recognized: entry.recognized, recordId: entry.recordIdTie }
+        : {}),
     };
     submitting.value = true;
     try {

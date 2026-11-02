@@ -251,3 +251,112 @@ describe('C_19 submit: the claim validates its ties and stamps the registers', (
     expect(state.setContains(STATE_NAMES.contributions, 'c-claim')).toBe(false);
   });
 });
+
+describe('C_19 verify: the tie gate + the recognized member’s tally credit', () => {
+  let node: MockNode;
+  let state: MockState;
+  let submit: (state: HandlerState, op: HandlerOperation) => number;
+  let verify: (state: HandlerState, op: HandlerOperation) => number;
+  let settle: (state: HandlerState, op: HandlerOperation) => number;
+  let tally: (username: string, dimIndex: number) => number;
+  let res: (username: string) => number;
+
+  beforeEach(() => {
+    node = new MockNode();
+    state = new MockState(node);
+    for (const u of ['alice', 'bob', 'carol', 'dave']) {
+      state.setAdd(STATE_NAMES.members, u, u);
+    }
+    submit = makeSubmitContributionHandler(node, { getTimeMs: () => 1000 });
+    verify = makeVerifyContributionHandler(node, { getTimeMs: () => 2000 });
+    settle = makeSettleContributionHandler(node, { getTimeMs: () => 4000 });
+    tally = (username, dimIndex) => state.getRegister(CONTRIB_NAMES.dimensionBalance(username, dimIndex));
+    res = (username) => state.getRegister(RES_NAMES.balance(username));
+  });
+
+  // bob's tied record, ACCEPTED by the real handlers (submit → verify → settle).
+  function acceptedRecordArc(contributionId = 'c-work'): void {
+    expect(submit(state, makeOp('submit_contribution', 'bob', submitOp({ contributionId })))).toBe(0);
+    expect(verify(state, verifyOp('carol', { contributionId, submitter: 'bob', dims: { '2': 1 } }))).toBe(0);
+    expect(settle(state, makeOp('settle_contribution', 'bob', {
+      contributionId, submitter: 'bob', reason: 'the record is real',
+    } as SettleContributionPayload))).toBe(0);
+  }
+
+  // alice's claim recognizing bob, tied to the accepted record.
+  function claimArc(recordId = 'c-work'): void {
+    acceptedRecordArc(recordId);
+    expect(submit(state, makeOp('submit_contribution', 'alice', claimOp({ recordId })))).toBe(0);
+  }
+
+  // Contracts:
+  // G-A: the GATE — a pass on a C_19 claim whose verify payload's recordId
+  //      holds a NON-accepted record (pending fixture) → -1, NOTHING recorded.
+  // G-B: the verify payload missing recordId on a C_19 claim → -1.
+  // G-C: the happy arc — a named pass credits the RECOGNIZED member's C_19
+  //      tally by match × alphaFor(19) (unset alpha = match; seeded alpha =
+  //      the scaled value); the submitter earns nothing.
+  // G-D: the settle step completes the shape like every schema.
+  it('G-A. the gate: a pass whose recordId points at a NON-accepted record is rejected — nothing recorded', () => {
+    // The tie's record exists but never settled: its status stays PENDING.
+    expect(submit(state, makeOp('submit_contribution', 'bob', submitOp({ contributionId: 'c-work' })))).toBe(0);
+    expect(submit(state, makeOp('submit_contribution', 'alice', claimOp({})))).toBe(0);
+    expect(verify(state, verifyOp('dave', { recordId: 'c-work', recognized: 'bob' }))).toBe(-1);
+    // Nothing mutated: the verifier paid no per-check credit and the verify
+    // never completed.
+    expect(res('dave')).toBe(0);
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-claim', 'verify'))).toBe(0);
+    expect(tally('bob', 19)).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-claim'))).toBe(0);
+  });
+
+  it('G-B. the C_19 pass gate: the verify payload missing recordId is rejected', () => {
+    claimArc();
+    expect(verify(state, verifyOp('dave', { recognized: 'bob' }))).toBe(-1);
+    expect(res('dave')).toBe(0);
+    expect(tally('bob', 19)).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-claim'))).toBe(0);
+  });
+
+  it('G-C. the happy arc (unset alpha): the RECOGNIZED member gains match × 1; the submitter earns nothing on C_19', () => {
+    claimArc();
+    expect(verify(state, verifyOp('dave', { recordId: 'c-work', recognized: 'bob' }))).toBe(0);
+    // The default weight: match 1 × alphaFor(19) = 1 — in register units.
+    expect(tally('bob', 19)).toBe(toRegisterUnits(1));
+    // The claim's own lifecycle advanced to settle, like every schema.
+    expect(state.getRegister(CONTRIB_NAMES.step('c-claim'))).toBe(2);
+    // No $RES moved: the submitter earns nothing on C_19 — no bounty fires
+    // (the verifier's per-check +2 is dave's, separate).
+    // No $RES moved: the submitter earns nothing on C_19 — no bounty fires
+    // (the verifier's per-check +2 is dave's, separate). Balances are read
+    // BEFORE the claim's verify: only the C_19 pass is under test here.
+    const aliceBefore = res('alice');
+    const bobBefore = res('bob');
+    expect(bobBefore).toBe(toRegisterUnits(3)); // bob's own C_2 bounty — unchanged by the claim
+    expect(res('alice')).toBe(aliceBefore);
+    expect(res('bob')).toBe(bobBefore);
+    expect(tally('alice', 19)).toBe(0);
+  });
+
+  it('G-C (scaled). alphaFor(19) seeded to 2: the SAME arc credits the recognized member match × 2', () => {
+    state.setRegister('config:alpha:19', toRegisterUnits(2), 'custodian');
+    claimArc();
+    expect(verify(state, verifyOp('dave', { recordId: 'c-work', recognized: 'bob' }))).toBe(0);
+    expect(tally('bob', 19)).toBe(toRegisterUnits(1 * 2));
+    expect(state.getRegister(CONTRIB_NAMES.step('c-claim'))).toBe(2);
+  });
+
+  it('G-D. the settle step completes the arc like every schema; no money moves', () => {
+    claimArc();
+    expect(verify(state, verifyOp('dave', { recordId: 'c-work', recognized: 'bob' }))).toBe(0);
+    const aliceBefore = res('alice');
+    const bobBefore = res('bob');
+    expect(settle(state, makeOp('settle_contribution', 'alice', {
+      contributionId: 'c-claim', submitter: 'alice', reason: 'the tie is real',
+    } as SettleContributionPayload))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-claim'))).toBe(1);
+    expect(res('alice')).toBe(aliceBefore);
+    expect(res('bob')).toBe(bobBefore);
+    expect(tally('bob', 19)).toBe(toRegisterUnits(1));
+  });
+});

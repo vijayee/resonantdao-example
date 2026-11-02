@@ -63,6 +63,12 @@ export interface ContributionMirrorEntry {
   // This contribution's harm verdict as last verified ('none' when untouched —
   // legacy verify ops carry no harm field).
   harm?: HarmVerdict;
+  // Recognition ties (slice #6a, C_19): stamped from the claim payload at
+  // mirror time. The machine cannot enumerate the tie OR-set, so the verify
+  // flow re-carries both fields on the verify payload (the handler's gate
+  // reads the payload, not the registers). Undefined on every other claim.
+  recognized?: string;  // the member whose work the claim recognizes
+  recordIdTie?: string; // the claim's tied contribution id
 }
 
 export class BrowserDao {
@@ -414,6 +420,10 @@ export class BrowserDao {
           record: payload as ContributionPayload,
           submitter: op.signerId,
           submittedAt: this.getNodeTimeMs(),
+          // C_19 recognition ties (slice #6a): parsed straight off the claim
+          // payload — absent on every other submission.
+          ...(payload.recognized ? { recognized: payload.recognized } : {}),
+          ...(payload.recordId ? { recordIdTie: payload.recordId } : {}),
         });
       }
       return;

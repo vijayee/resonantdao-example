@@ -119,12 +119,15 @@ export interface VerifyContributionPayload {
   // signer when they appear in this list — the deterministic all-parties
   // distinct-actor rule CRABS cannot express handler-side on its own.
   priorVerifiers?: string[];
-  // Harm verdicts ride in payload bytes (same PoC trust class as
-  // dims/submitter; design: docs/superpowers/specs/2026-10-09-harm-adjustments-design.md).
-  // 'reduced' halves the submitter outcome; 'voided' zeroes it; verifiers'
-  // per-check credit is never adjusted.
   harm?: HarmVerdict;      // this check's harm verdict (absent = none)
   priorHarm?: HarmVerdict; // client-attested verdict of the earlier check in this step (all-parties flows)
+  // Recognition ties (slice #6a, C_19): re-carried on the verify payload for
+  // C_19 claims — the machine cannot enumerate the claim's tie OR-set, so the
+  // gate reads the recordId (the tied record must hold the machine's accepted
+  // status) and the tally credit targets recognized. Absent on every other
+  // dimension (same PoC trust class as dims/submitter).
+  recognized?: string; // the member whose work the claim recognizes
+  recordId?: string;   // the claim's tied contribution
 }
 
 export interface SettleContributionPayload {
