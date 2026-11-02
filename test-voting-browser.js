@@ -78,10 +78,12 @@ async function voteOption(page, proposalId, optionLabel) {
 
 // Drive an in-place wizard flow to completion. `choiceValue` selects the
 // flow's FIRST-STEP radio (verify decision / audit fairness); `textValue`
-// fills the first text step encountered. Retries through the flow's own
-// draft-resume path: a failed submit keeps the draft (and the open flow),
-// so a later attempt resumes at the restored step with everything filled.
-async function completeFlow(page, flowId, { choiceValue = null, textValue = '' } = {}) {
+// fills the first text step encountered; `tickMember` ticks the members
+// step's checkbox (the reassign flow's pick — members + review, no text).
+// Retries through the flow's own draft-resume path: a failed submit keeps
+// the draft (and the open flow), so a later attempt resumes at the restored
+// step with everything filled.
+async function completeFlow(page, flowId, { choiceValue = null, textValue = '', tickMember = null } = {}) {
   // Return value intentionally ignored by callers: the UI effect (settle
   // button, pill flip, next spine button) is the assertion.
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -93,11 +95,21 @@ async function completeFlow(page, flowId, { choiceValue = null, textValue = '' }
       // from "already committed", so require the control to exist.
       const choiceControl = choiceValue !== null ? flow.locator(`.wizard-option[value="${choiceValue}"]`) : null;
       const atChoiceStep = choiceControl && (await choiceControl.count()) > 0;
+      const memberControl = tickMember !== null ? flow.locator(`.wizard-member[value="${tickMember}"]`) : null;
+      const atMembersStep = !atChoiceStep && memberControl && (await memberControl.count()) > 0;
       const textareas = flow.locator('textarea');
       if (atChoiceStep) {
         await choiceControl.check();
         await flow.locator('.wizard-next').click();
         await flow.locator('textarea').waitFor({ state: 'visible', timeout: 3000 });
+      }
+      if (atMembersStep) {
+        // The members step is a review-submit flow's last turn here (the
+        // reassign flow has no text step): tick, Next, and wait for the
+        // submit control the review step mounts.
+        await memberControl.check();
+        await flow.locator('.wizard-next').click();
+        await flow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 3000 });
       }
       if ((await textareas.count()) > 0) {
         // Fill only when empty: the on-step answer is uncommitted by
@@ -129,17 +141,35 @@ async function completeFlow(page, flowId, { choiceValue = null, textValue = '' }
   return false;
 }
 
-// Drive /contribute/new's wizard (dim choice → summary → evidence pointer →
-// review submit); the submit's route push lands on the new lifecycle page —
-// waitForURL proves the round-trip succeeded, and the id is parsed from the
-// URL the push landed on. The submitter is left ON the lifecycle page
-// (the helper's caller keeps acting from it).
-async function submitContribution(submitter, dimValue, summary) {
+// Drive /contribute/new's wizard (dim choice → verifier pick → summary →
+// evidence pointer → review submit); the submit's route push lands on the new
+// lifecycle page — waitForURL proves the round-trip succeeded, and the id is
+// parsed from the URL the push landed on. The submitter is left ON the
+// lifecycle page (the helper's caller keeps acting from it).
+//
+// `verifierNames` is the TARGETED verification assignment (slice #4c): the
+// wizard's members step sits between the dim choice and the summary and its
+// pick must be EXACTLY the dim schema's verify requirement count (dim '1' →
+// 2, dim '2' → 1). The pick list offers every reciprocity-clear non-self
+// member — in this e2e's fresh DB the reciprocity sets are still empty at
+// each submission's pick time, so the named members are always offered.
+async function submitContribution(submitter, dimValue, summary, verifierNames) {
+  const needTicked = Number(dimValue) === 1 ? 2 : 1;
+  if (!Array.isArray(verifierNames) || verifierNames.length !== needTicked) {
+    throw new Error(`submitContribution: dim ${dimValue} requires exactly ${needTicked} named verifier(s), got ${JSON.stringify(verifierNames)}`);
+  }
   await nav(submitter.page, '/contribute');
   await submitter.page.click('#new-contribution-btn');
   const flow = submitter.page.locator('.wizard-flow[data-flow-id="contribute-new"]');
   await flow.waitFor({ state: 'visible', timeout: 10000 });
   await flow.locator(`.wizard-option[value="${dimValue}"]`).check();
+  await flow.locator('.wizard-next').click();
+  // The members pick: waiting on the first checkbox proves the step rendered
+  // (options are the store's screened eligible members), then tick exactly
+  // the named set — the count-exact validation gates Next otherwise.
+  await flow.locator('.wizard-member--verifiers').first().waitFor({ state: 'visible', timeout: 10000 });
+  await flow.locator(`.wizard-member[value="${verifierNames[0]}"]`).check();
+  if (needTicked === 2) await flow.locator(`.wizard-member[value="${verifierNames[1]}"]`).check();
   await flow.locator('.wizard-next').click();
   await flow.locator('textarea').fill(summary);
   await flow.locator('.wizard-next').click();
@@ -172,12 +202,13 @@ async function runContributionFlow(user, rowTitle, flowId, { choiceValue = null,
   await completeFlow(user.page, flowId, { choiceValue, textValue });
 }
 
-// One full wizard cycle (single-verifier schema): submit, verify, settle.
-// Every turn plays on the contribution's lifecycle page (/contribute/:id):
-// the submitter lands there on submit (waitForURL in submitContribution);
-// verifiers open it via their feed row.
+// One full wizard cycle (single-verifier schema): submit (TARGETED: the
+// submitter names the cycle's sole verifier at the members step), verify,
+// settle. Every turn plays on the contribution's lifecycle page
+// (/contribute/:id): the submitter lands there on submit (waitForURL in
+// submitContribution); the named verifier opens it via their feed row.
 async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReason, settleNote) {
-  await submitContribution(submitter, dimValue, summary);
+  await submitContribution(submitter, dimValue, summary, [verifier]);
 
   const settleFlow = submitter.page.locator('.wizard-flow[data-flow-id="settle"]');
 
@@ -218,9 +249,10 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
 }
 
 // Phase-3 two-verifier cycle (schema v2: C_1's verify is all-parties, count
-// 2): submit, verify from v1 (whose page then shows the (1/2) progress chip),
-// verify from v2, settle. The settle flow only mounts on the submitter's page
-// once BOTH verifications have applied.
+// 2): submit (TARGETED: the submitter names BOTH cycle verifiers at the
+// members step), verify from v1 (whose page then shows the (1/2) progress
+// chip), verify from v2, settle. The settle flow only mounts on the
+// submitter's page once BOTH verifications have applied.
 //
 // v1's verify wizard is driven with a harm verdict (`harmChoice`, the FIRST
 // decision radio's value — 'yes' by default): 'yes-harm' records a 'reduced'
@@ -228,8 +260,13 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
 // that verdict forward as the payload's priorHarm (the UI reads it out of
 // its mirror), so strongest-wins keeps 'reduced' effective at settle —
 // asserted via the lifecycle page's harm receipt.
-async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyReason, settleNote, harmChoice = 'yes') {
-  await submitContribution(submitter, dimValue, summary);
+//
+// `observer` (optional): a member the submitter did NOT name. While the
+// verify phase is current the cycle proves the protocol's other half on
+// their page (the targeting driver's denial assert below): neither the
+// contribution row nor an attention-band item for this summary.
+async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyReason, settleNote, harmChoice = 'yes', observer = null) {
+  await submitContribution(submitter, dimValue, summary, [v1, v2]);
 
   let halfDone = false;
   for (let attempt = 0; !halfDone && attempt < 15; attempt++) {
@@ -244,6 +281,36 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
     throw new Error(`Verify quorum never showed (1/2). Status bar: ${statusBar || '(empty)'}`);
   }
   console.log('VERIFY PROGRESS: (1/2) after the first verifier');
+
+  // THE PROTOCOL ASSERT (targeted verification, UI leg): mid-verify (the
+  // contribution pending, the verify step current — the only window where
+  // targeting actually gates the surfaces), the UNNAMED member sees neither
+  // the row to open (the participants-only list) nor an attention-band item.
+  // The machine would reject his op anyway (jest-tested N: an unnamed member
+  // verifies → -1). Sampled with retries: an out-of-breath replica lags the
+  // targeting register for a beat — the denial must HOLD once applied, a
+  // momentary lag is not a violation.
+  if (observer) {
+    let denied = false;
+    let lastRows = -1;
+    let lastItems = -1;
+    for (let attempt = 0; !denied && attempt < 15; attempt++) {
+      try {
+        await nav(observer.page, '/contribute');
+        lastRows = await observer.page.locator(`.contribution-row:has-text("${summary}")`).count();
+        await nav(observer.page, '/');
+        lastItems = await observer.page.locator(`#needs-attention .attention__card:has-text("${summary}")`).count();
+        denied = lastRows === 0 && lastItems === 0;
+      } catch (err) {
+        // The demo clock can detach a locator mid-sample — retry below.
+      }
+      if (!denied) await observer.page.waitForTimeout(1000);
+    }
+    if (!denied) {
+      throw new Error(`The unnamed member still sees a contribution he was not named on: rows=${lastRows}, attention items=${lastItems}`);
+    }
+    console.log('TARGETED PROTOCOL: the unnamed member is denied both the row and the band item');
+  }
 
   // The second check's pre-drive proof: v2's lifecycle page renders the
   // verify flow (its head reads 'Verify — "<summary>"') with the (1/2)
@@ -312,15 +379,58 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
   }
 }
 
-// Phase-3 appeal flow: submit → a REJECTING verification (the verify
-// wizard's decision radio answered 'no') → the submitter appeals (lifecycle
-// pill 'appealed') → a fresh member re-verifies accepted → settle. The
-// appealed pill must be visible between the appeal and the settle. Every
-// pill assert reads the lifecycle wizard's head ON the contribution page —
-// and the asserting user stays on that page (submitter throughout; rejecter
-// and re-verifier arrive via their feed rows).
-async function runAppealFlow(submitter, rejecter, reVerifier, dimValue, summary, rejectReason, appealReason, reVerifyReason, settleNote) {
-  await submitContribution(submitter, dimValue, summary);
+// Phase-3 appeal flow under TARGETED verification (slice #4c): submit (the
+// submitter names the verifying-rejecter at the members step) → the
+// submitter's reassign section grows the named set by the remaining slot →
+// a REJECTING verification (the verify wizard's decision radio answered 'no')
+// → the submitter appeals (lifecycle pill 'appealed') → the re-assigned
+// verifier re-verifies accepted → settle. The appealed pill must be visible
+// between the appeal and the settle. Every pill assert reads the lifecycle
+// wizard's head ON the contribution page — and the asserting user stays on
+// that page (submitter throughout; rejecter and re-verifier arrive via their
+// feed rows).
+//
+// Why the reassign rides BEFORE the reject: the appeal rewinds the verify
+// quorum (the done counter resets) and the pre-appeal rejecter is then
+// reciprocity-barred (per-pair once — jest P pinned it), while the landed
+// reassign affordance hides once the appeal has recorded (verify phase
+// current with slots remaining only while pending, not yet appealed). Naming
+// the re-verifier up front, while the contribution is pending with slots
+// remaining, is the machine-legal window (jest G: exactly-remaining growth)
+// and the rewound re-review then rides the named set that survived the
+// appeal (jest P).
+async function runAppealFlow(submitter, rejecter, reVerifier, reassignName, dimValue, summary, rejectReason, appealReason, reVerifyReason, settleNote) {
+  await submitContribution(submitter, dimValue, summary, [rejecter]);
+
+  // The reassign section is mounted on the submitter's own lifecycle page
+  // (she is still on it post-submit): members step (count = the remaining
+  // slot) → review submit. Its landed proof: the added verifier's attention
+  // band lights the pending verify item on HIS page (the reassign's
+  // push-bump refreshed his projection — and proves his set membership
+  // before the reject consumed a slot).
+  let reassigned = false;
+  for (let attempt = 0; !reassigned && attempt < 15; attempt++) {
+    reassigned = await completeFlow(submitter.page, 'reassign', { tickMember: reassignName });
+    if (!reassigned) await submitter.page.waitForTimeout(1000);
+  }
+  if (!reassigned) {
+    const statusBar = await submitter.page.locator('#status').textContent();
+    throw new Error(`The reassign flow never recorded the added verifier. Status bar: ${statusBar || '(empty)'}`);
+  }
+  let bandLit = false;
+  for (let attempt = 0; !bandLit && attempt < 15; attempt++) {
+    try {
+      await nav(reVerifier.page, '/');
+      bandLit = (await reVerifier.page.locator(`#needs-attention .attention__card:has-text("${summary}")`).count()) > 0;
+    } catch (err) {
+      // The demo clock can detach a locator mid-sample — retry below.
+    }
+    if (!bandLit) await reVerifier.page.waitForTimeout(1000);
+  }
+  if (!bandLit) {
+    throw new Error(`The re-assigned verifier's attention band never lit for "${summary}".`);
+  }
+  console.log('REASSIGN: the named set grew — the added verifier sees the verify band item');
 
   let rejected = false;
   for (let attempt = 0; !rejected && attempt < 15; attempt++) {
@@ -448,6 +558,9 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // guard is strictly one check per MEMBER PAIR (per-pair verify-once plus
   // the mutual loop bar) — the flows need 5 checks but three members carry
   // only 3 pairs, so dave (page 4) is structurally required (see the flows).
+  // dave is ALSO the protocol's negative actor: with the flows all naming
+  // their verifiers at submit (targeted verification, slice #4c), dave is
+  // the UNNAMED member of cycle 1 and the deny-assert below reads his page.
   carol = await runUser(carolName);
   console.log('Third page registered:', carolName);
   dave = await runUser(daveName);
@@ -459,36 +572,49 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // salient quadratic vote balance ($RES itself no longer gates votes).
 
   // Cycle 1 (phase-3 two-verifier C_1, HARM path): alice submits a Building
-  // claim; bob checks it (quorum 1/2) answering 'yes-harm' — the reduced
-  // verdict; carol's second check completes the all-parties quorum (2/2) and
-  // carries the prior verdict forward automatically (priorHarm from the
-  // mirror); alice settles, attesting both verifiers. The verified harm
-  // halves the outcome BEFORE payment: alice's bounty is 6 $RES (12 × 0.5,
-  // surfaced by the lifecycle page's harm receipt asserted in the flow), while
-  // each verifier still earns a check credit (2 $RES); alice's C_1 tally is
-  // the halved delta 0.5 (it feeds the salient proposal below and the
-  // published RCT).
+  // claim naming BOTH verifiers at the wizard's members step (bob + carol —
+  // the C_1 verify requirement's exact count 2, a targeted payload); dave,
+  // unnamed, is the denial observer mid-verify (asserted in the flow). bob
+  // checks it (quorum 1/2) answering 'yes-harm' — the reduced verdict; carol's
+  // second check completes the all-parties quorum (2/2) and carries the prior
+  // verdict forward automatically (priorHarm from the mirror); alice settles,
+  // attesting both verifiers. The verified harm halves the outcome BEFORE
+  // payment: alice's bounty is 6 $RES (12 × 0.5, surfaced by the lifecycle
+  // page's harm receipt asserted in the flow), while each verifier still
+  // earns a check credit (2 $RES); alice's C_1 tally is the halved delta 0.5
+  // (it feeds the salient proposal below and the published RCT).
   // The lifecycle pages host every turn — each cycle helper navigates its own
   // actors from the feed (the row link), so no pre-nav runs here.
-  await runTwoVerifierCycle(alice, bob, carol, '1', 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000), 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm');
+  await runTwoVerifierCycle(alice, bob, carol, '1', 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000), 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm', dave);
 
-  // Cycle 2: bob submits a Recording claim; dave verifies (alice is barred —
-  // her pair with bob was consumed when bob checked her C_1); bob settles.
-  // Pays bob the C_2 base credit (3 $RES) and dave a check credit (2 $RES);
-  // bob's settle gives him a C_2 tally of 1.
+  // Cycle 2: bob submits a Recording claim naming dave at the members step
+  // (the C_2 verify requirement's exact count 1); bob's only eligible peer IS
+  // dave — alice is barred for him (bob's pair with alice was consumed when
+  // bob checked her C_1, so the reciprocity screen never offers her); dave
+  // verifies; bob settles. Pays bob the C_2 base credit (3 $RES) and dave a
+  // check credit (2 $RES); bob's settle gives him a C_2 tally of 1.
   await runWizardCycle(bob, dave, '2', 'Wizard-recorded e2e demo ' + Math.floor(Math.random() * 10000), 'the record is attributed and findable', 'accepting the verified outcome');
 
-  // --- Phase-3 appeal flow: reject -> appeal -> re-verify -> settle ---
+  // --- Phase-3 appeal flow (targeted): reassign -> reject -> appeal ->
+  // re-verify -> settle ---
   // Pair ledger so far (one check per pair, mutual bar kills both
   // directions): a-b, a-c (cycle 1), b-d (cycle 2). The appealed submission
-  // belongs to carol (page 3): bob's check REJECTS it (the decision radio
-  // answered 'no' — pair b-c), carol appeals from her page via the appeal
-  // wizard,
-  // dave's re-verification overturns it (pair c-d — fresh), carol settles.
+  // belongs to carol (page 3), naming bob at the members step (the C_2
+  // verify requirement's exact count 1 — bob is the verifier that will
+  // reject, pair b-c). Before the reject — the ONLY landed window where the
+  // named set can grow (the reassign affordance hides once appealed, and the
+  // rewound quorum would otherwise be stuck: the rejecter is reciprocity-
+  // barred post-appeal) — carol names dave through her lifecycle page's
+  // reassign flow (the set grows by exactly the remaining slot, jest G),
+  // proven by dave's attention band lighting the pending verify item. bob's
+  // check then REJECTS it (the decision radio answered 'no' — pair b-c),
+  // carol appeals from her page via the appeal wizard, dave's re-verification
+  // overturns it (pair c-d — fresh, dave named via the reassign; the named
+  // set survives the appeal, jest P), carol settles.
   // (The retired card showed dave's live accuracy stat on the re-verify
   // button's title — one check, upheld once by cycle 2's settlement-attested
   // verifier list; the lifecycle page dropped that surface.)
-  await runAppealFlow(carol, bob, dave, '2', 'Appealed e2e demo ' + Math.floor(Math.random() * 10000), 'the record does not match the claim', 'the evidence was misread — the record stands', 'the appealed re-review finds the record accurate', 'accepting the re-verified outcome');
+  await runAppealFlow(carol, bob, dave, daveName, '2', 'Appealed e2e demo ' + Math.floor(Math.random() * 10000), 'the record does not match the claim', 'the evidence was misread — the record stands', 'the appealed re-review finds the record accurate', 'accepting the re-verified outcome');
 
   // --- Round spine close (phase 2) ---
   // alice (any member — spine policies are 'role:member OR role:custodian')
