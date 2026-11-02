@@ -598,6 +598,7 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   await alice.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
   const resShown = await alice.page.locator('#account-res').textContent();
   console.log('ACCOUNT RES:', (resShown ?? '').trim());
+  if (!/\d/.test(resShown ?? '')) throw new Error(`alice's $RES balance never rendered a number (got '${(resShown ?? '').trim()}')`);
   const ledgerText = await alice.page.locator('#ledger').textContent();
   if (!ledgerText.includes('settled — bounty')) throw new Error('ledger missing the settled bounty line');
   if (!ledgerText.includes(cycle1Summary)) throw new Error('ledger missing the settled contribution line');

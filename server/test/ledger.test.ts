@@ -63,13 +63,16 @@ describe('ledgerLines', () => {
 
   it('zero-amount consequential events never render; unknown contributions degrade to "?"', () => {
     const lines = ledgerLines(
-      [ev('proposal_created', 'alice', 'p-1', 1000), ev('reassign_verifiers', 'bob', 'c-9', 1500), ev('contribution_verified', 'bob', 'c-9', 2000)],
+      [ev('proposal_created', 'alice', 'p-1', 1000), ev('reassign_verifiers', 'bob', 'c-9', 1500), ev('contribution_settled', 'bob', 'c-9', 1800), ev('contribution_verified', 'bob', 'c-9', 2000)],
       [],
       'bob',
     );
-    expect(lines).toHaveLength(1);           // the verified check on an AGED-OUT contribution
+    expect(lines).toHaveLength(2);           // the SETTLED and verified events on an AGED-OUT contribution
     expect(lines[0].sign).toBe('?');
     expect(lines[0].amount).toBeUndefined();
+    expect(lines[0].label).toContain('settled contribution');
+    expect(lines[1].sign).toBe('?');
+    expect(lines[1].amount).toBeUndefined();
   });
 
   it('empty mirror history is an empty ledger', () => {

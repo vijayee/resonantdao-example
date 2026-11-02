@@ -3,7 +3,7 @@
 // mirror as line items — same shared payout math the handlers and receipts
 // use, so the ledger cannot disagree with the machine. Vote spends are NOT
 // listed (the feed carries no vote rows by design — rule D2).
-import { harmFactorFor, paymentFor, DIMENSIONS, HarmVerdict } from '../../../shared/src/contribution';
+import { harmFactorFor, paymentFor, HarmVerdict } from '../../../shared/src/contribution';
 import { RES_CONFIG } from '../../../shared/src/policies';
 import type { FeedEvent } from '../../../shared/src/feed';
 
@@ -19,12 +19,6 @@ export interface LedgerLine {
   label: string;
   amount?: number;            // absent when the data degrades
   sign: '+' | '−' | '?';
-}
-
-function dimLabel(dims: Record<string, number>): string {
-  const k = Object.keys(dims)[0];
-  const def = DIMENSIONS[Number(k)];
-  return def ? `C_${def.index}` : 'C_?';
 }
 
 export function ledgerLines(feedEvents: FeedEvent[], contributions: LedgerContribution[], viewer: string): LedgerLine[] {
