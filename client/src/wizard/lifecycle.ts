@@ -17,7 +17,7 @@ export interface LifecyclePhase {
   doneAt?: number;
   progress?: { done: number; required: number };
   mayAct: boolean;
-  waitingOn?: string;                     // role-based text; never a member name
+  waitingOn?: string;                     // role text (legacy) — or the remaining NAMED verifiers when targeted
   note?: string;                          // verdict/reason summary on done phases
   flow?: never;                           // flows attach PAGE-side; this model can never carry one
 }
@@ -34,6 +34,8 @@ export interface LifecycleModel {
 
 // Role-anchored on purpose: the domain cannot know WHO acts next, so the
 // waiting text names the ROLE that holds the turn — never a member name.
+// EXCEPTION: targeted verification carries the names in the protocol state —
+// there the turn IS determinate and the text names the remaining people.
 const WAITING_TEXT: Record<string, string> = {
   submit: 'awaiting the submitter',
   verify: 'awaiting a verifier',
@@ -54,7 +56,18 @@ function verifyAnnotations(entry: ContributionMirrorEntry, feedEvents: FeedEvent
   return { doneBy: who, doneAt: latest ? latest.at : undefined };
 }
 
-function phaseFor(step: WizardStep, entry: ContributionMirrorEntry, feedEvents: FeedEvent[]): LifecyclePhase {
+// Targeted verification makes the actor DETERMINATE (protocol state!) —
+// waiting names the remaining named verifiers; legacy keeps the role text.
+function waitingText(step: WizardStep, facts: ContributionFacts, entry: ContributionMirrorEntry): string {
+  if (step.stepId === 'verify' && facts.verifiers && facts.verifiers.length > 0) {
+    const verified = entry.verifiers ?? [];
+    const remaining = facts.verifiers.filter((v) => !verified.includes(v));
+    return remaining.length > 0 ? `awaiting ${remaining.join(' & ')}` : 'awaiting a verification';
+  }
+  return WAITING_TEXT[step.stepId] ?? 'awaiting the next step';
+}
+
+function phaseFor(step: WizardStep, facts: ContributionFacts, entry: ContributionMirrorEntry, feedEvents: FeedEvent[]): LifecyclePhase {
   const mayAct = step.state === 'current'
     && Object.values(step.roles).some((r) => r?.mayAct);
   const phase: LifecyclePhase = {
@@ -63,7 +76,7 @@ function phaseFor(step: WizardStep, entry: ContributionMirrorEntry, feedEvents: 
     state: step.state,
     progress: { done: step.progress.done, required: step.progress.required },
     mayAct,
-    waitingOn: step.state === 'current' && !mayAct ? WAITING_TEXT[step.stepId] : undefined,
+    waitingOn: step.state === 'current' && !mayAct ? waitingText(step, facts, entry) : undefined,
     // note rides DONE phases only (the spec scopes the verdict display there;
     // a partial all-parties verify shows its own progress, not the first
     // check's reason).
@@ -102,7 +115,7 @@ export function lifecycleModel(
     outcome: wm.outcome,
     appealed: wm.appealed ?? false,
     readOnly: wm.readOnly,
-    phases: wm.steps.map((s) => phaseFor(s, entry, feedEvents)),
+    phases: wm.steps.map((s) => phaseFor(s, facts, entry, feedEvents)),
   };
 }
 

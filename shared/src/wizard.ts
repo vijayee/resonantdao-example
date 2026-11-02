@@ -7,6 +7,7 @@ export interface ContributionFacts {
   stepIndex: number;            // current step position in schema.steps
   done: Record<string, number>; // stepId -> completed requirements
   submitter: string;
+  verifiers?: string[];         // the NAMED verifier assignment; empty/absent = untargeted (legacy class rule)
 }
 
 export type StepState = 'complete' | 'current' | 'locked';
@@ -34,7 +35,13 @@ export interface WizardModel {
 function actorAllowed(actor: string, facts: ContributionFacts, viewerId: string, viewerIsCustodian: boolean): boolean {
   switch (actor) {
     case 'submitter': return viewerId === facts.submitter;
-    case 'verifier': return viewerId !== facts.submitter;
+    case 'verifier':
+      // Targeted: the named set is the gate (the machine enforces it — the
+      // projection only mirrors the rule). Legacy: class rule (any non-self).
+      if (facts.verifiers !== undefined && facts.verifiers.length > 0) {
+        return facts.verifiers.includes(viewerId);
+      }
+      return viewerId !== facts.submitter;
     case 'custodian': return viewerIsCustodian;
     default: return true; // 'member'
   }

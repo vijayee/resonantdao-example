@@ -49,6 +49,27 @@ describe('lifecycleModel', () => {
     expect(notMine.phases[2].waitingOn).toMatch(/submitter/i);
   });
 
+  it('targeted verify waits on NAMED people; untargeted keeps the role text', () => {
+    // facts carry the targeting — the waiting text names the remaining:
+    const daveLocked = lifecycleModel(schema, { status: 0, stepIndex: 1, done: { submit: 1 }, submitter: 'alice', verifiers: ['bob'] }, entry(), 'dave', false, []);
+    expect(daveLocked.phases[1].mayAct).toBe(false);
+    expect(daveLocked.phases[1].waitingOn).toMatch(/bob/);
+    // a named verifier may act — no waiting text on his view
+    const named = lifecycleModel(schema, { status: 0, stepIndex: 1, done: { submit: 1 }, submitter: 'alice', verifiers: ['bob'] }, entry(), 'bob', false, []);
+    expect(named.phases[1].mayAct).toBe(true);
+    expect(named.phases[1].waitingOn).toBeUndefined();
+    // partially targeted: only the REMAINING names show
+    const partial = lifecycleModel(schema, { status: 0, stepIndex: 1, done: { submit: 1 }, submitter: 'alice', verifiers: ['bob', 'carol'] }, entry({ verifiedBy: 'bob', verifiers: ['bob'] }), 'dave', false, []);
+    expect(partial.phases[1].waitingOn).toMatch(/carol/);
+    expect(partial.phases[1].waitingOn).not.toMatch(/bob/);
+    // untargeted (no verifiers field): the legacy role text stands — visible
+    // only from a viewer who may NOT act (the submitter: no-self bars her).
+    const legacy = lifecycleModel(schema, { status: 0, stepIndex: 1, done: { submit: 1 }, submitter: 'alice' }, entry(), 'alice', false, []);
+    expect(legacy.phases[1].mayAct).toBe(false);
+    expect(legacy.phases[1].waitingOn).toMatch(/verifier/i);
+    expect(legacy.phases[1].waitingOn).not.toMatch(/bob|carol|dave/);
+  });
+
   it('verified step annotates who verified (mirror names) + when (feed event, degrading)', () => {
     const m = lifecycleModel(schema, facts(2, { submit: 1, verify: 1 }), entry({ verifiedBy: 'bob', verifiers: ['bob'] }), 'carol', false, [verifyEvent('bob', 2000)]);
     const ver = m.phases[1];

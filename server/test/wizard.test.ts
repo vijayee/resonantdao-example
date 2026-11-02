@@ -30,6 +30,16 @@ describe('wizardModel', () => {
     expect(m2.steps[2].roles.submitter?.mayAct).toBe(false);
   });
 
+  it('targeted verify: only a NAMED verifier may act; unnamed eligible members locked out', () => {
+    const m = wizardModel(SCHEMAS.get(2)!, { status: 0, stepIndex: 1, done: { submit: 1 }, submitter: 'alice', verifiers: ['bob'] }, 'carol');
+    expect(m.steps[1].roles['verifier']?.mayAct).toBe(false);
+    const named = wizardModel(SCHEMAS.get(2)!, { status: 0, stepIndex: 1, done: { submit: 1 }, submitter: 'alice', verifiers: ['carol'] }, 'carol');
+    expect(named.steps[1].roles['verifier']?.mayAct).toBe(true);
+    // untargeted (no field): the legacy class rule stands
+    const legacy = wizardModel(SCHEMAS.get(2)!, { status: 0, stepIndex: 1, done: { submit: 1 }, submitter: 'alice' }, 'carol');
+    expect(legacy.steps[1].roles['verifier']?.mayAct).toBe(true);
+  });
+
   it('offers verify to anyone except the submitter (no-self)', () => {
     const m = wizardModel(schema, c1Facts(1, { submit: 1 }), 'bob');
     // verify step's actors are verifiers only — no submitter role entry at all
