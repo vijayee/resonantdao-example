@@ -929,7 +929,7 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
       throw new Error(`First salient quadratic vote never landed; tallies ${JSON.stringify(sTallies)}`);
     }
     if (!salientVoteRejected) {
-      throw new Error(`Second salient quadratic vote (cumulative 1+4=5 > balance 4) was not rejected. Tallies: ${JSON.stringify(sTallies)}`);
+      throw new Error(`Second salient quadratic vote (cumulative 1+4=5 > balance 3.5) was not rejected. Tallies: ${JSON.stringify(sTallies)}`);
     }
     if (JSON.stringify(sTallies) !== JSON.stringify(['1', '0', '0'])) {
       throw new Error(`Expected ['1','0','0'] on salient quadratic proposal, got ${JSON.stringify(sTallies)}`);
