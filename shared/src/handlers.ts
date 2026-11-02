@@ -78,6 +78,26 @@ export function makeSubmitContributionHandler(
       if (!verifyStep || payload.verifiers.length !== verifyStep.requirement.count) return -1;
     }
 
+    // C_19 recognition claims (slice #6a): the claim's ties validate here —
+    // the recognized member must be a member ≠ the submitter and the tied
+    // record must already exist. The tie's ACCEPTED status is NOT required at
+    // submit: the verify gate (G-A) machine-checks the record's status so a
+    // claim settles only over proven work.
+    let recognized: string | undefined;
+    let recordTieId: string | undefined;
+    if (payload.dims['19'] !== undefined) {
+      const rec = payload.recognized;
+      const tie = payload.recordId;
+      if (
+        !isNonEmptyString(rec) || rec === op.signerId || !state.setContains(STATE_NAMES.members, rec) ||
+        !isNonEmptyString(tie) || !state.setContains(STATE_NAMES.contributions, tie)
+      ) {
+        return -1;
+      }
+      recognized = rec;
+      recordTieId = tie;
+    }
+
     try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
     // The real CRABS wrapper rejects state.setRegister on an undeclared
     // resource, so declare the status register here before writing to it.
@@ -101,6 +121,15 @@ export function makeSubmitContributionHandler(
         state.setAdd(CONTRIB_NAMES.verifiers(payload.contributionId), v, `submit:${op.signerId}:${v}`);
       }
       state.setRegister(CONTRIB_NAMES.verifierCount(payload.contributionId), payload.verifiers.length, op.signerId);
+    }
+    // C_19's tie stamps (slice #6a): the claim's recognized member + the
+    // linked record — the OR-sets are the permanent record; the verify gate
+    // reads the payload's re-carried recordId (handlers cannot enumerate sets).
+    try { node.addORSet(CONTRIB_NAMES.recognized(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
+    try { node.addORSet(CONTRIB_NAMES.recordTie(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
+    if (recognized !== undefined && recordTieId !== undefined) {
+      state.setAdd(CONTRIB_NAMES.recognized(payload.contributionId), recognized, `submit:rec:${op.signerId}`);
+      state.setAdd(CONTRIB_NAMES.recordTie(payload.contributionId), recordTieId, `submit:tie:${op.signerId}`);
     }
     state.setRegister(CONTRIB_NAMES.status(payload.contributionId), 0, op.signerId);
     state.incrementPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, 'submit'), 1, op.signerId);
