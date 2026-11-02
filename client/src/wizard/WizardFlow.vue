@@ -49,6 +49,24 @@
         />
       </div>
 
+      <!-- Slice #4c: the members picker. Options are the flow's screened
+           eligible list; an empty list is the visible dead-end (the step
+           stays invalid, so Next blocks until the factory offers names). -->
+      <fieldset v-else-if="current.kind === 'members'" class="wizard-fieldset" :id="`wizard-${flow.id}-${current.id}`">
+        <legend>{{ current.title }}</legend>
+        <p v-if="current.options.length === 0" class="muted">No eligible verifiers right now.</p>
+        <label v-for="opt in current.options" :key="opt" class="wizard-choice">
+          <input
+            type="checkbox"
+            :class="`wizard-member wizard-member--${current.id}`"
+            :value="opt"
+            :checked="(answers[currentStepId] ?? '').split(',').includes(opt)"
+            @change="toggleMember(current.id, opt, $event)"
+          />
+          <span>{{ opt }}</span>
+        </label>
+      </fieldset>
+
       <div v-else>
         <ul id="wizard-review" class="muted">
           <li v-for="line in flow.reviewSummary(committedAnswers, filesForReview)" :key="line">{{ line }}</li>
@@ -86,6 +104,15 @@ const files = ref<Record<string, File | null>>({});
 
 function onEvidenceFile(stepId: string, ev: Event): void {
   files.value = { ...files.value, [stepId]: (ev.target as HTMLInputElement).files?.[0] ?? null };
+}
+
+// The members answer serializes as a comma-joined string (answers stay
+// strings): each checkbox toggles one name in the joined list.
+function toggleMember(stepId: string, name: string, ev: Event): void {
+  const picked = new Set((answers.value[stepId] ?? '').split(',').filter(Boolean));
+  const on = (ev.target as HTMLInputElement).checked;
+  if (on) picked.add(name); else picked.delete(name);
+  answers.value = { ...answers.value, [stepId]: [...picked].join(',') };
 }
 
 // Review summary sees the file NAMES (for 'file attached' lines) but never
