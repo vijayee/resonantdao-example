@@ -392,13 +392,12 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
 //
 // Why the reassign rides BEFORE the reject: the appeal rewinds the verify
 // quorum (the done counter resets) and the pre-appeal rejecter is then
-// reciprocity-barred (per-pair once — jest P pinned it), while the landed
-// reassign affordance hides once the appeal has recorded (verify phase
-// current with slots remaining only while pending, not yet appealed). Naming
-// the re-verifier up front, while the contribution is pending with slots
-// remaining, is the machine-legal window (jest G: exactly-remaining growth)
-// and the rewound re-review then rides the named set that survived the
-// appeal (jest P).
+// reciprocity-barred (per-pair once — jest P pinned it), so the extra
+// verifier is named BEFORE the reject — a machine-legal growth window (jest
+// G: exactly-remaining) that leaves the rewound re-review riding the named
+// set that survived the appeal (jest P). Reassign also stays legal THROUGH
+// the appeal window (ae2aa6c: the UI gate is machine parity) — the pre-reject
+// naming just keeps this arc observable from one page turn.
 async function runAppealFlow(submitter, rejecter, reVerifier, reassignName, dimValue, summary, rejectReason, appealReason, reVerifyReason, settleNote) {
   await submitContribution(submitter, dimValue, summary, [rejecter.name]);
 
@@ -601,10 +600,11 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // directions): a-b, a-c (cycle 1), b-d (cycle 2). The appealed submission
   // belongs to carol (page 3), naming bob at the members step (the C_2
   // verify requirement's exact count 1 — bob is the verifier that will
-  // reject, pair b-c). Before the reject — the ONLY landed window where the
-  // named set can grow (the reassign affordance hides once appealed, and the
+  // reject, pair b-c). The named set grows BEFORE the reject here (reassign
+  // also remains machine-legal through the appeal window — ae2aa6c — but
+  // pre-reject naming keeps this arc observable on her page), because the
   // rewound quorum would otherwise be stuck: the rejecter is reciprocity-
-  // barred post-appeal) — carol names dave through her lifecycle page's
+  // barred post-appeal. Carol names dave through her lifecycle page's
   // reassign flow (the set grows by exactly the remaining slot, jest G),
   // proven by dave's attention band lighting the pending verify item. bob's
   // check then REJECTS it (the decision radio answered 'no' — pair b-c),
