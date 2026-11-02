@@ -43,9 +43,11 @@ export function ledgerLines(feedEvents: FeedEvent[], contributions: LedgerContri
       }
       const base = Object.entries(c.dims).reduce((sum, [k, match]) => sum + paymentFor(Number(k), match), 0);
       const amount = c.harm && c.harm !== 'none' ? base * harmFactorFor(c.harm as HarmVerdict) : base;
+      // C_1 pays a bounty, C_2 pays a credit — the money word follows the class.
+      const word = Object.keys(c.dims).some((k) => Number(k) === 1) ? 'bounty' : 'credit';
       lines.push({
         at: e.at,
-        label: `settled ${dimLabel(c.dims)} — bounty — "${c.summary ?? 'contribution'}"${c.harm && c.harm !== 'none' ? ' (harm reduced)' : ''}`,
+        label: `settled — ${word} ${amount} — "${c.summary ?? 'contribution'}"${c.harm && c.harm !== 'none' ? ' (harm reduced)' : ''}`,
         amount,
         sign: '+',
       });
