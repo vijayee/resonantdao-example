@@ -1,12 +1,15 @@
-// Targeted verification (slice #4c) — Task 1: submit names verifiers (state).
-// The submit handler validates the named verifiers (distinct members ≠ the
-// submitter, exactly the schema's verify requirement count) and records them
-// in an OR-set with a numeric count companion; the true submitter lands in an
-// owner set. Legacy payloads without the field keep untargeted behavior.
+// Targeted verification (slice #4c) — Tasks 1-3: submit names verifiers,
+// reassign_verifiers grows the set, and the verify handler admits only named
+// signers. Legacy payloads without the field keep untargeted behavior.
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { makeReassignVerifiersHandler, makeSubmitContributionHandler } from '../../shared/src/handlers';
-import { CONTRIB_NAMES, STATE_NAMES } from '../../shared/src/policies';
-import { ContributionPayload, ReassignVerifiersPayload } from '../../shared/src/types';
+import {
+  makeAppealVerdictHandler,
+  makeReassignVerifiersHandler,
+  makeSubmitContributionHandler,
+  makeVerifyContributionHandler,
+} from '../../shared/src/handlers';
+import { CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
+import { AppealVerdictPayload, ContributionPayload, ReassignVerifiersPayload, VerifyContributionPayload } from '../../shared/src/types';
 import { SCHEMA_VERSION } from '../../shared/src/contribution';
 
 class MockNode {
@@ -112,6 +115,14 @@ const GOOD_REF = { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), med
 
 function reassignOp(signerId: string, payload: ReassignVerifiersPayload): HandlerOperation {
   return makeOp('reassign_verifiers', signerId, payload);
+}
+
+function verifyOp(signer: string, payload: Partial<VerifyContributionPayload>): HandlerOperation {
+  return makeOp('verify_contribution', signer, {
+    contributionId: 'c-1', submitter: 'alice', dims: { '2': 1 }, stepId: 'verify',
+    pass: true, reason: 'checks out', schemaVersion: SCHEMA_VERSION,
+    ...payload,
+  } as VerifyContributionPayload);
 }
 
 function submitOp(payload: Partial<ContributionPayload>): ContributionPayload {
@@ -291,5 +302,83 @@ describe('reassign_verifiers (targeted verification, slice #4c)', () => {
     expect(reassign(state, reassignOp('alice', {
       contributionId: 'c-ghost', verifiers: ['carol'],
     }))).toBe(-1);
+  });
+});
+
+describe('the verify gate honors the named set (targeted verification, slice #4c)', () => {
+  let node: MockNode;
+  let state: MockState;
+  let submit: (state: HandlerState, op: HandlerOperation) => number;
+  let appeal: (state: HandlerState, op: HandlerOperation) => number;
+
+  beforeEach(() => {
+    node = new MockNode();
+    state = new MockState(node);
+    // Members set seeded with add_member semantics (element = username).
+    for (const u of ['alice', 'bob', 'carol', 'dave']) {
+      state.setAdd(STATE_NAMES.members, u, u);
+    }
+    submit = makeSubmitContributionHandler(node, { getTimeMs: () => 1000 });
+    appeal = makeAppealVerdictHandler(node, { getTimeMs: () => 5000 });
+  });
+
+  it('M. a NAMED (unbarred) verifier verifies the targeted contribution', () => {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({ verifiers: ['bob'] })))).toBe(0);
+    const verify = makeVerifyContributionHandler(node, { getTimeMs: () => 2000 });
+    expect(verify(state, verifyOp('bob', { contributionId: 'c-1', submitter: 'alice' }))).toBe(0);
+    // v2 schemas are 3-step: a completed verify ADVANCES to settle (the settle
+    // op finalizes acceptance, status stays 0 here).
+    expect(state.getRegister(CONTRIB_NAMES.step('c-1'))).toBe(2);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(0);
+  });
+
+  it('N. an UNNAMED member (otherwise eligible) is rejected — the protocol core', () => {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({ verifiers: ['bob'] })))).toBe(0);
+    const verify = makeVerifyContributionHandler(node, { getTimeMs: () => 2000 });
+    expect(verify(state, verifyOp('carol', { contributionId: 'c-1', submitter: 'alice' }))).toBe(-1);
+    // Nothing mutated: carol paid no per-check credit and the verify never
+    // completed.
+    expect(state.getRegister(RES_NAMES.balance('carol'))).toBe(0);
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-1', 'verify'))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(0);
+  });
+
+  it('O. an UNTARGETED contribution keeps the legacy class rule (any member but the submitter)', () => {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({})))).toBe(0); // legacy shape → count 0
+    const verify = makeVerifyContributionHandler(node, { getTimeMs: () => 2000 });
+    expect(verify(state, verifyOp('carol', { contributionId: 'c-1', submitter: 'alice' }))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-1'))).toBe(2); // advanced to settle
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(0);
+  });
+
+  it('P. the named set survives an appeal: the same named verifiers re-verify after the rewind', () => {
+    // C_1 (verify count 2): exactly two names; bob rejects (his check completes
+    // and terminates the lifecycle), carol stays pre-pair clear.
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({
+      contributionId: 'c-appeal', dims: { '1': 1 }, verifiers: ['bob', 'carol'],
+    })))).toBe(0);
+    const verify = makeVerifyContributionHandler(node, { getTimeMs: () => 2000 });
+    expect(verify(state, verifyOp('bob', { contributionId: 'c-appeal', submitter: 'alice', dims: { '1': 1 }, pass: false, reason: 'insufficient' }))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-appeal'))).toBe(2);
+    expect(appeal(state, makeOp('appeal_verdict', 'alice', {
+      contributionId: 'c-appeal', submitter: 'alice', reason: 'evidence misread',
+    } as AppealVerdictPayload))).toBe(0);
+
+    // The appeal rewound the lifecycle but left the named set untouched.
+    expect(state.setContains(CONTRIB_NAMES.verifiers('c-appeal'), 'bob')).toBe(true);
+    expect(state.setContains(CONTRIB_NAMES.verifiers('c-appeal'), 'carol')).toBe(true);
+    expect(state.getRegister(CONTRIB_NAMES.verifierCount('c-appeal'))).toBe(2);
+    // The SAME named verifiers re-verify. bob's pre-appeal rejection carries a
+    // per-pair once bar (independent of the targeted gate — pinned by
+    // contribution.test.ts c-app5), so carol (the other name from the SAME
+    // pre-appeal set) completes the re-review; the gate passes her because the
+    // set she was named in survived.
+    expect(verify(state, verifyOp('bob', { contributionId: 'c-appeal', submitter: 'alice', dims: { '1': 1 }, reason: 'changed my mind' }))).toBe(-1);
+    expect(verify(state, verifyOp('carol', { contributionId: 'c-appeal', submitter: 'alice', dims: { '1': 1 }, reason: 're-review ok' }))).toBe(0);
+    // Carols's is the first completed check of the FRESH quorum (the appeal
+    // reset the done counter): done 1 of 2 — the step does not advance yet, and
+    // the status stays STATUS_APPEALED until the settle op finalizes.
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-appeal', 'verify'))).toBe(1);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-appeal'))).toBe(1);
   });
 });

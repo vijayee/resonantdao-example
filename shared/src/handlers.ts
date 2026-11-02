@@ -189,6 +189,19 @@ export function makeVerifyContributionHandler(
       return -1;
     }
 
+    // Targeted verification (slice #4c): when the named set is non-empty, ONLY
+    // a named verifier may act — the set itself carries the targeting and its
+    // numeric companion is the bit (handlers cannot enumerate sets); a 0
+    // count (legacy payloads) keeps the untargeted class rule verbatim. The
+    // declare-first guards match the pattern above: replay may reach the gate
+    // before the submit/reassign declarations are known to this node.
+    try { node.addORSet(CONTRIB_NAMES.verifiers(payload.contributionId)); } catch (err) { /* exists */ }
+    try { node.addRegister(CONTRIB_NAMES.verifierCount(payload.contributionId), 0); } catch (err) { /* exists */ }
+    const targetCount = state.getRegister(CONTRIB_NAMES.verifierCount(payload.contributionId)) ?? 0;
+    if (targetCount > 0 && !state.setContains(CONTRIB_NAMES.verifiers(payload.contributionId), op.signerId)) {
+      return -1; // targeted: an unnamed member may not verify this contribution
+    }
+
     // Reciprocity conflict guard — the last validation tier, all-or-nothing:
     // any barred verifier exits here, before the per-check credit, so a
     // blocked check pays nothing and mutates no guard set.
