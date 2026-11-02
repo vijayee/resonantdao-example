@@ -122,10 +122,12 @@ export interface VerifyContributionPayload {
   harm?: HarmVerdict;      // this check's harm verdict (absent = none)
   priorHarm?: HarmVerdict; // client-attested verdict of the earlier check in this step (all-parties flows)
   // Recognition ties (slice #6a, C_19): re-carried on the verify payload for
-  // C_19 claims — the machine cannot enumerate the claim's tie OR-set, so the
-  // gate reads the recordId (the tied record must hold the machine's accepted
-  // status) and the tally credit targets recognized. Absent on every other
-  // dimension (same PoC trust class as dims/submitter).
+  // C_19 claims — the machine cannot enumerate the claim's tie OR-sets to find
+  // the record id, so the gate reads the recordId (the tied record must hold
+  // the machine's accepted status) and the tally credit targets recognized.
+  // The re-carry itself is pinned against the claim's submit-stamped tie sets
+  // (handlers.ts's gate setContains) — a mismatched payload is a forged tie.
+  // Absent on every other dimension.
   recognized?: string; // the member whose work the claim recognizes
   recordId?: string;   // the claim's tied contribution
 }

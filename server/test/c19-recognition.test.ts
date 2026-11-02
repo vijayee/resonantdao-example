@@ -318,6 +318,39 @@ describe('C_19 verify: the tie gate + the recognized member’s tally credit', (
     expect(state.getRegister(CONTRIB_NAMES.status('c-claim'))).toBe(0);
   });
 
+  // Contracts:
+  // G-E: the PIN — a pass whose payload's recordId is NOT the claim's stamped
+  //      tie (a DIFFERENT accepted record — it clears the status check) → -1,
+  //      nothing recorded. The credit follows the claim's record, not the
+  //      verifier's payload.
+  // G-F: the same pin on the recognized member — a pass renaming the
+  //      credit's recipient (a valid member ≠ the submitter) → -1.
+  it('G-E. the tie pin: a pass naming a DIFFERENT (accepted) record than the claim’s stamp is rejected', () => {
+    claimArc();
+    // A second ACCEPTED record of bob's (verifier alice — carol's pair with
+    // bob was consumed by the first arc): it clears the status check, so this
+    // pass is isolated to the pin, not to the gate's status leg.
+    expect(submit(state, makeOp('submit_contribution', 'bob', submitOp({ contributionId: 'c-other' })))).toBe(0);
+    expect(verify(state, verifyOp('alice', { contributionId: 'c-other', submitter: 'bob', dims: { '2': 1 } }))).toBe(0);
+    expect(settle(state, makeOp('settle_contribution', 'bob', {
+      contributionId: 'c-other', submitter: 'bob', reason: 'the record is real',
+    } as SettleContributionPayload))).toBe(0);
+    expect(verify(state, verifyOp('dave', { recordId: 'c-other', recognized: 'bob' }))).toBe(-1);
+    expect(res('dave')).toBe(0);
+    expect(tally('bob', 19)).toBe(0);
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-claim', 'verify'))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-claim'))).toBe(0);
+  });
+
+  it('G-F. the recognized pin: a pass renaming the credited member is rejected', () => {
+    claimArc();
+    expect(verify(state, verifyOp('dave', { recordId: 'c-work', recognized: 'carol' }))).toBe(-1);
+    expect(res('dave')).toBe(0);
+    expect(tally('carol', 19)).toBe(0);
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-claim', 'verify'))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-claim'))).toBe(0);
+  });
+
   it('G-C. the happy arc (unset alpha): the RECOGNIZED member gains match × 1; the submitter earns nothing on C_19', () => {
     claimArc();
     expect(verify(state, verifyOp('dave', { recordId: 'c-work', recognized: 'bob' }))).toBe(0);

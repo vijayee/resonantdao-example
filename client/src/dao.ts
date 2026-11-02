@@ -64,9 +64,10 @@ export interface ContributionMirrorEntry {
   // legacy verify ops carry no harm field).
   harm?: HarmVerdict;
   // Recognition ties (slice #6a, C_19): stamped from the claim payload at
-  // mirror time. The machine cannot enumerate the tie OR-set, so the verify
-  // flow re-carries both fields on the verify payload (the handler's gate
-  // reads the payload, not the registers). Undefined on every other claim.
+  // mirror time. The machine cannot enumerate the tie OR-sets, so the verify
+  // flow re-carries both fields on the verify payload — the handler's gate
+  // reads the payload AND pins it against the claim's submit-stamped sets.
+  // Undefined on every other claim.
   recognized?: string;  // the member whose work the claim recognizes
   recordIdTie?: string; // the claim's tied contribution id
 }

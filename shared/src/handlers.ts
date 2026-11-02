@@ -246,11 +246,15 @@ export function makeVerifyContributionHandler(
 
     // The dimension gate hook (slice #6a): per-dim predicates the pass path
     // must satisfy before ANY write. C_19: the verify payload RE-CARRIES the
-    // claim's ties (the machine cannot enumerate the claim's tie OR-set — the
-    // record rides the payload, client-attested like dims/submitter): the
-    // tied record must exist AND hold the machine's accepted status, and the
-    // recognized member must be a member ≠ the submitter. A failing gate
-    // exits all-or-nothing: no per-check credit, no guard set, no record.
+    // claim's ties (the machine cannot enumerate the claim's tie OR-sets to
+    // find the record id — the ids ride the payload), but the re-carry is NOT
+    // trusted: the tied record must exist AND hold the machine's accepted
+    // status, the recognized member must be a member ≠ the submitter, and
+    // BOTH must match the claim's submit-stamped tie sets (setContains reads
+    // them — the same machine-pinned read settle/appeal use on the owner set).
+    // A payload naming a different record or a different credited member is a
+    // forged tie. A failing gate exits all-or-nothing: no per-check credit, no
+    // guard set, no record.
     if (payload.dims['19'] !== undefined && payload.pass) {
       const tieId = payload.recordId;
       const rec = payload.recognized;
@@ -261,6 +265,14 @@ export function makeVerifyContributionHandler(
         !isNonEmptyString(rec) ||
         !state.setContains(STATE_NAMES.members, rec) ||
         rec === payload.submitter
+      ) {
+        return -1;
+      }
+      try { node.addORSet(CONTRIB_NAMES.recognized(payload.contributionId)); } catch (err) { /* exists */ }
+      try { node.addORSet(CONTRIB_NAMES.recordTie(payload.contributionId)); } catch (err) { /* exists */ }
+      if (
+        !state.setContains(CONTRIB_NAMES.recognized(payload.contributionId), rec) ||
+        !state.setContains(CONTRIB_NAMES.recordTie(payload.contributionId), tieId)
       ) {
         return -1;
       }
