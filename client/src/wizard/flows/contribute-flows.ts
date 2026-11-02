@@ -1,4 +1,5 @@
-import { HarmVerdict } from '@shared/contribution';
+import { HarmVerdict, schemaForDims } from '@shared/contribution';
+import { RECIP_NAMES } from '@shared/policies';
 import type { ContributionMirrorEntry } from '../../dao';
 import { useDaoStore } from '../../stores/dao';
 import type { FlowDefinition } from '../types';
@@ -92,6 +93,13 @@ export function contributeNewFlow(onSubmitted: (contributionId: string) => void)
           { value: '1', label: 'C_1 Building', desc: 'built something real — bounty 12 $RES' },
         ],
       },
+      {
+        kind: 'members', id: 'verifiers', title: 'Who verifies this?',
+        // Screened at pick: non-self members the projection says may verify.
+        // Reciprocity bars name their reason in the pick list's title attr.
+        options: eligibleVerifierOptions(ds),
+        count: (a) => schemaForDims({ [Number(a.dim ?? '2')]: 1 }).steps.find((s) => s.op === 'verify_contribution')!.requirement.count,
+      },
       { kind: 'text', id: 'summary', title: 'Describe it', placeholder: 'What did you make or record?' },
       { kind: 'evidence', id: 'evidence', title: 'Evidence', pointerPlaceholder: 'URL, commit, record id…' },
       { kind: 'review' },
@@ -99,12 +107,30 @@ export function contributeNewFlow(onSubmitted: (contributionId: string) => void)
     reviewSummary: (a, files) => [
       `Type: ${a.dim}`,
       `Summary: ${(a.summary ?? '').trim()}`,
+      `Verifiers: ${(a.verifiers ?? '').split(',').filter(Boolean).join(', ')}`,
       files?.['evidence'] ? 'Evidence: stored file' : a.evidence ? `Pointer: ${a.evidence}` : 'No evidence yet',
     ],
     submit: async (a, files) => {
-      const id = await ds.submitContribution((a.summary ?? '').trim(), Number(a.dim), files?.['evidence'] ?? null, (a.evidence ?? '').trim());
+      const named = (a.verifiers ?? '').split(',').filter(Boolean);
+      const id = await ds.submitContribution((a.summary ?? '').trim(), Number(a.dim), files?.['evidence'] ?? null, (a.evidence ?? '').trim(), named);
       if (!id) throw new Error('The contribution did not record — check the message below the page.');
       onSubmitted(id);
     },
   };
+}
+
+// Screened eligible-verifier options — shared by the submit picker above and
+// the reassign flow (ContributionPage). Non-self members only; the
+// reciprocity projection bars both halves of the mutual loop (m already
+// verified this submitter, or the submitter already verified m — the verify
+// handler rejects either pair on arrival, so the picker never offers them).
+export function eligibleVerifierOptions(ds: ReturnType<typeof useDaoStore>): string[] {
+  void ds.tick; // reactivity anchor: re-screen when the projection changes
+  const d = ds.dao;
+  const me = ds.username;
+  if (!d || !me) return [];
+  return ds.members
+    .filter((m) => m && m !== me)
+    .filter((m) => !(d.node.setContains(RECIP_NAMES.verifiedBy(m), me) || d.node.setContains(RECIP_NAMES.verifiedBy(me), m)))
+    .sort();
 }

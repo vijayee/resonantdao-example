@@ -24,6 +24,16 @@
           @close="onAppealClose"
         />
       </div>
+      <div v-if="reassignAvailable" class="lc-reassign">
+        <WizardFlow
+          :key="'reassign'"
+          :flow="reassignFlow!"
+          :target-id="entry.record.contributionId"
+          :initial-answers="reassignResume?.answers"
+          :initial-step="reassignResume?.stepIndex"
+          @close="onReassignClose"
+        />
+      </div>
     </Panel>
 
     <Panel number="02" kicker="Evidence">
@@ -47,10 +57,10 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { harmFactorFor, paymentFor } from '@shared/contribution';
 import { useDaoStore, contributionFacts, serverClient } from '../../stores/dao';
-import { appealFlow as appealFlowFactory, settleFlow, verifyFlow } from '../../wizard/flows/contribute-flows';
+import { appealFlow as appealFlowFactory, eligibleVerifierOptions, settleFlow, verifyFlow } from '../../wizard/flows/contribute-flows';
 import { lifecycleModel, isParticipant } from '../../wizard/lifecycle';
 import { loadDraft } from '../../wizard/drafts';
-import type { FlowDefinition } from '../../wizard/types';
+import type { FlowAnswers, FlowDefinition } from '../../wizard/types';
 import type { ContributionMirrorEntry } from '../../dao';
 import LifecycleWizard from '../../wizard/LifecycleWizard.vue';
 import WizardFlow from '../../wizard/WizardFlow.vue';
@@ -111,6 +121,59 @@ function onAppealClose() {
 function onFlowClose() {
   // The flow's phase advances (or fails legibly); tick re-derives everything.
 }
+
+// ---- Reassign (slice #4c): name ADDITIONAL verifiers while verify slots remain.
+
+function onReassignClose() {
+  // The shell already cleared the draft; the tick re-derives the available
+  // gate. (The listener exists so the close event is heard.)
+}
+const reassignResume = computed(() => (ds.username && entry.value ? loadDraft(localStorage, ds.username, 'reassign', entry.value.record.contributionId) : null));
+
+// Submitter-only, verify incomplete (slots remain), targeted contribution
+// (the named register is non-empty — an untargeted legacy flow never
+// reassigns).
+const reassignAvailable = computed(() => {
+  void ds.tick;
+  const e = entry.value; const d = ds.dao;
+  if (!e || !d || !ds.username) return false;
+  if (e.submitter !== ds.username) return false;
+  if (d.getContributionStatus(e.record.contributionId) !== 'pending') return false;
+  if (d.getContributionAppealed(e.record.contributionId)) return false;
+  const named = d.getDefinedVerifiers(e.record.contributionId);
+  if (named.length === 0) return false;
+  const { schema, facts } = contributionFacts(d, e);
+  const verifyStep = schema.steps.find((s) => s.op === 'verify_contribution')!;
+  return facts.done[verifyStep.stepId] < verifyStep.requirement.count;
+});
+
+// The members step's exact count: remaining verify slots (requirement minus
+// done). 0 when the reads are not ready — the gate keeps the section closed.
+function remainingVerifyCount(): number {
+  void ds.tick;
+  const e = entry.value; const d = ds.dao;
+  if (!e || !d) return 0;
+  const { schema, facts } = contributionFacts(d, e);
+  const verifyStep = schema.steps.find((s) => s.op === 'verify_contribution')!;
+  return Math.max(0, verifyStep.requirement.count - (facts.done[verifyStep.stepId] ?? 0));
+}
+
+const reassignFlow = computed(() => {
+  const e = entry.value; if (!e) return null;
+  return {
+    id: 'reassign', title: 'Name additional verifiers',
+    steps: [
+      { kind: 'members' as const, id: 'verifiers', title: 'Who else verifies?',
+        options: eligibleVerifierOptions(ds), count: remainingVerifyCount() },
+      { kind: 'review' as const },
+    ],
+    reviewSummary: (a: FlowAnswers) => [`Adding: ${(a.verifiers ?? '').split(',').filter(Boolean).join(', ')}`],
+    submit: async (a: FlowAnswers) => {
+      const ok = await ds.reassignVerifiers(e.record.contributionId, (a.verifiers ?? '').split(',').filter(Boolean));
+      if (!ok) throw new Error('The reassignment did not record — check the message below the page.');
+    },
+  } as FlowDefinition;
+});
 
 // Participants-only (spec decision 4). The denial branch never mounts the
 // wizard — replica bytes remain the honest caveat documented in the spec.
@@ -173,6 +236,7 @@ async function loadEvidence() {
 <style scoped>
 .lc-denial { padding: var(--space-6); text-align: center; }
 .lc-appeal { margin-top: var(--space-3); }
+.lc-reassign { margin-top: var(--space-3); }
 .lc-harm { color: var(--amber); font-size: .8125rem; }
 .evidence-img { max-width: 100%; border-radius: var(--radius); }
 .evidence-dl { color: var(--jade); font-family: var(--font-mono); font-size: .8125rem; }
