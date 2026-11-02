@@ -27,11 +27,14 @@ machine-checked tie to a verified record ("popularity alone pays nothing").
    gate, machine-enforced). Failures of the GATE reject the op — the wizard shows the reason.
 4. **Credit — THE CONTRIBUTION TOKEN, not $RES** (Victor, 2026-11-02): the RECOGNIZED member is
    the credited party (recognition is of their proven work); the credit increments their C_19
-   DIMENSION TALLY by the match weight (`dimensionDeltaFor(19, match)` — the standing phase-1
-   delta rule; matches every BPMN's "tally updated"), written at final verify alongside the
-   existing tally-write pattern. NO $RES moves (recognition pays in reputation-weight, not
-   money). The recognized member rides the flow as a subject (no turn); tallies + feed pick the
-   credit up automatically; the LEDGER shows no line (it is an earned-MONEY story).
+   DIMENSION TALLY — and **THE WEIGHTING DEFINES THE AMOUNT the contribution produces**
+   (Victor's amendment, same day): the delta is `match ×` the dimension's current calibration
+   weight (the alpha register the settlement cycle's RCT aggregation reads — phase-1's
+   `Calibration_i = 1` simplification lifts for the C_19 credit; the formula's Calibration term
+   comes back per-dimension). Written at final verify alongside the existing tally-write
+   pattern. NO $RES moves (recognition pays in weighted contribution token, not money). The
+   recognized member rides the flow as a subject (no turn); tallies + feed pick the credit up
+   automatically; the LEDGER shows no line (it is an earned-MONEY story).
 5. **Reviewer pick**: single targeted verifier via the #4c members step (screened as always —
    note: the recognizer may name any eligible member INCLUDING the recognized one? The
    recognized member reviewing their own recognition is odd but not barred — the domain rule
@@ -77,5 +80,12 @@ machine-checked tie to a verified record ("popularity alone pays nothing").
 
 ## Amends
 
-- The hardcoded picker list dies (derivation rule); RES_CONFIG gains the entry; the #4c LOW
-  note resolves.
+- **THE GENERAL CALIBRATION RULE is restored in this slice** (Victor, 2026-11-02 — beyond C_19):
+  EVERY dimension tally credit = `match ×` the dimension's current calibration weight (the
+  alpha register the RCT aggregation reads — the same read idiom/defaults, single-sourced):
+  the formula's `Calibration_i` term is machine-wide again, phase-1's `= 1` simplification
+  lifts for tally credits. RCT's own aggregation math already read the weights (unchanged);
+  the TALLY credits re-pin (the standing `dimensionDeltaFor(match)` simplification gains the
+  weight term; the standing tally tests + any e2e tally/RCT asserts re-pin against the live
+  weight register with the aggregation's default weights when unset).
+- The hardcoded picker list dies (derivation rule); the #4c LOW note resolves.
