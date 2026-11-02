@@ -1,4 +1,4 @@
-import { validateStep, FlowStep } from '../../client/src/wizard/types';
+import { validateStep, flowSteps, FlowDefinition, FlowStep } from '../../client/src/wizard/types';
 
 describe('validateStep', () => {
   const choice: FlowStep = { kind: 'choice', id: 'decision', title: 'Decision', options: [] };
@@ -45,5 +45,37 @@ describe('validateStep', () => {
     const evidence: FlowStep = { kind: 'evidence', id: 'evidence', title: 'Evidence', pointerPlaceholder: 'URL, commit, record id…' };
     expect(validateStep(evidence, {})).toBeNull();
     expect(validateStep(evidence, { evidence: 'https://example.com/e1' })).toBeNull();
+  });
+});
+
+describe('flowSteps', () => {
+  const text: FlowStep = { kind: 'text', id: 'reason', title: 'Reason' };
+  const review: FlowStep = { kind: 'review' };
+
+  it('FlowDefinition steps may be a function of the answers (the claim family varies per type)', () => {
+    // A structural test: the fn form compiles + the type is honest. Slice
+    // #6a: the contribute-new flow varies its step LIST by the chosen type —
+    // C_19 gains the recognized-member + record-tie picks; C_1/C_2 walk the
+    // plain 5-step form.
+    const flow: FlowDefinition = {
+      id: 'claim', title: 'Claim',
+      steps: (a) => (a.dim === '19' ? [text, review] : [review]),
+      reviewSummary: () => [],
+      submit: async () => {},
+    };
+    expect(typeof flow.steps).toBe('function');
+    expect(flowSteps(flow, { dim: '19' })).toEqual([text, review]);
+    expect(flowSteps(flow, { dim: '2' })).toEqual([review]);
+  });
+
+  it('FlowDefinition steps may stay a plain list (the static flows unchanged)', () => {
+    const flow: FlowDefinition = {
+      id: 'settle', title: 'Settle',
+      steps: [review],
+      reviewSummary: () => [],
+      submit: async () => {},
+    };
+    expect(Array.isArray(flow.steps)).toBe(true);
+    expect(flowSteps(flow, { dim: '19' })).toEqual([review]);
   });
 });

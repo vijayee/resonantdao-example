@@ -7,7 +7,7 @@
 
     <div class="wizard-flow__rail" aria-hidden="true">
       <span
-        v-for="(s, i) in flow.steps"
+        v-for="(s, i) in allSteps"
         :key="i"
         :class="['wizard-flow__dot', i < stepIndex ? 'wizard-flow__dot--done' : i === stepIndex ? 'wizard-flow__dot--current' : 'wizard-flow__dot--todo']"
       >{{ stepTitle(s) }}</span>
@@ -85,7 +85,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { FlowAnswers, FlowDefinition, stepTitle, validateStep } from './types';
+import { FlowAnswers, FlowDefinition, flowSteps, stepTitle, validateStep } from './types';
 import { saveDraft, clearDraft } from './drafts';
 import { useDaoStore } from '../stores/dao';
 
@@ -123,16 +123,24 @@ const filesForReview = computed(() =>
 // The REAL File objects (unwrapped from ref for the submit handoff).
 const pickedFiles = computed(() => files.value);
 
-const stepIndex = ref(Math.max(0, Math.min(props.initialStep ?? 0, props.flow.steps.length - 1)));
 const initial: FlowAnswers = props.initialAnswers ? { ...props.initialAnswers } : {};
 const answers = ref<FlowAnswers>(initial);
+
+// The step list resolves from the ANSWERS (slice #6a): a fn-form flow varies
+// its steps per chosen type, so the rail, the current step, and the draft's
+// index all read THIS one resolved list — re-resolved as answers change.
+const allSteps = computed(() => flowSteps(props.flow, answers.value));
+
+// The draft's step index clamps against the RESOLVED list's length (a resumed
+// dynamic flow may list fewer steps than the draft recorded).
+const stepIndex = ref(Math.max(0, Math.min(props.initialStep ?? 0, allSteps.value.length - 1)));
 const error = ref<string | null>(null);
 
 // The review step summarizes COMMITTED answers only — the placeholder answer
 // slot for the review step itself must not appear in the summary. The 'review'
 // key is simply never written into an answer; the answers object holds one
 // key per real step.
-const current = computed(() => props.flow.steps[stepIndex.value]);
+const current = computed(() => allSteps.value[stepIndex.value]);
 const currentStepId = computed(() => (current.value.kind === 'review' ? 'review' : current.value.id));
 const committedAnswers = computed(() => {
   const { ['review']: _ignored, ...rest } = answers.value;
