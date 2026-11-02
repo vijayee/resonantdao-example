@@ -27,6 +27,22 @@ describe('contribution registry', () => {
     expect(implemented.sort((a, b) => a - b)).toEqual([1, 2, 18, 19]);
   });
 
+  it('marks pickable only the claimable dims — C_1, C_2, C_19 (C_18 is implemented but NOT pickable)', () => {
+    // implemented = submittable machine rules; pickable = surfaces as a claim
+    // type in the picker. C_18 is implemented (its rule is live) but NOT
+    // pickable — embedded rules surface through the flows they belong to.
+    expect([...DIMENSIONS].filter((d) => d.pickable).map((d) => d.index)).toEqual([1, 2, 19]);
+  });
+
+  it('derives the picker claim list (implemented ∧ schema-wired ∧ pickable) — C_19 present, C_18 absent', () => {
+    // The factory filter is contribute-flows.ts dimensionOptions()'s exact
+    // derivation, asserted against the registry so a registry change that
+    // flips the picker's menu fails here (the store-tick'd derivation runs
+    // in the browser; the registry predicate is what it filters by).
+    const pickerDims = [...DIMENSIONS.filter((d) => d.implemented && SCHEMAS.has(d.index) && d.pickable)].map((d) => d.index);
+    expect(pickerDims).toEqual([1, 2, 19]);
+  });
+
   describe('isValidDims', () => {
     it('accepts a sparse map of valid indices with weights in (0, 1]', () => {
       expect(isValidDims({ '1': 1, '2': 0.5 })).toBe(true);

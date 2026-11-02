@@ -79,9 +79,10 @@ export function appealFlow(entry: ContributionMirrorEntry): FlowDefinition {
 // ---- The derived picker (slice #6a) ----
 
 // The picker derives from the machine's own vocabulary: submittable =
-// implemented ∧ schema-wired (C_19 enters the form without a hand-edit). The
-// descs are client copy (the domain carries names/classes; the selling lines
-// live here).
+// implemented ∧ schema-wired ∧ pickable (C_19 enters the form without a
+// hand-edit; C_18 leaves it by rule — its verify rule is embedded in the
+// claims it verifies). The descs are client copy (the domain carries
+// names/classes; the selling lines live here).
 const DIM_DESCS: Record<number, string> = {
   1: 'built something real — bounty 12 $RES',
   2: 'a durable, findable record — base credit 3 $RES',
@@ -91,7 +92,7 @@ const DIM_DESCS: Record<number, string> = {
 export function dimensionOptions(): Array<{ value: string; label: string; desc: string }> {
   const ds = useDaoStore();
   void ds.tick; // reactivity anchor: re-derive when the machine's vocabulary changes
-  return [...DIMENSIONS.filter((d) => d.implemented && SCHEMAS.has(d.index))]
+  return [...DIMENSIONS.filter((d) => d.implemented && SCHEMAS.has(d.index) && d.pickable)]
     .map((d) => ({ value: String(d.index), label: `${d.code} ${d.name} — ${d.cls}`, desc: DIM_DESCS[d.index] ?? '' }));
 }
 

@@ -12,33 +12,41 @@ export interface DimensionDef {
   name: string;
   cls: string; // ontology class from docs/contribution-economy/diagrams.json
   implemented: boolean; // submittable: a phase-1 RES payment rule, or a wired claim schema (C_19)
+  // pickable: submittable AS ITS OWN CLAIM — surfaces in the picker. Implemented
+  // rules that only exist inside other claims' workflows (C_18's verifying)
+  // stay unpickable — embedded rules surface through the flows they belong to.
+  pickable: boolean;
 }
 
 export const DIMENSION_COUNT = 22 as const;
 
+// pickable (slice #6b): implemented ∧ submittable-as-own-claim. C_18's
+// verifying rule is live but embedded — it surfaces through the claims it
+// verifies, never as its own picker type. Future claim dims enter by
+// declaring themselves pickable here (no hardcoded picker lists anywhere).
 export const DIMENSIONS: DimensionDef[] = [
-  { index: 0,  code: 'C_0',  name: 'Fool',       cls: 'Crossing',    implemented: false },
-  { index: 1,  code: 'C_1',  name: 'Magician',   cls: 'Building',    implemented: true },
-  { index: 2,  code: 'C_2',  name: 'Priestess',  cls: 'Recording',   implemented: true },
-  { index: 3,  code: 'C_3',  name: 'Empress',    cls: 'Nurturing',   implemented: false },
-  { index: 4,  code: 'C_4',  name: 'Emperor',    cls: 'Structuring', implemented: false },
-  { index: 5,  code: 'C_5',  name: 'Hierophant', cls: 'Teaching',    implemented: false },
-  { index: 6,  code: 'C_6',  name: 'Lovers',     cls: 'Joining',     implemented: false },
-  { index: 7,  code: 'C_7',  name: 'Chariot',    cls: 'Driving',     implemented: false },
-  { index: 8,  code: 'C_8',  name: 'Strength',   cls: 'Resolving',   implemented: false },
-  { index: 9,  code: 'C_9',  name: 'Hermit',     cls: 'Discovering', implemented: false },
-  { index: 10, code: 'C_10', name: 'Wheel',      cls: 'Cycling',     implemented: false },
-  { index: 11, code: 'C_11', name: 'Justice',    cls: 'Weighing',    implemented: false },
-  { index: 12, code: 'C_12', name: 'Hanged Man', cls: 'Re-seeing',   implemented: false },
-  { index: 13, code: 'C_13', name: 'Death',      cls: 'Ending',      implemented: false },
-  { index: 14, code: 'C_14', name: 'Temperance', cls: 'Balancing',   implemented: false },
-  { index: 15, code: 'C_15', name: 'Devil',      cls: 'Exposing',    implemented: false },
-  { index: 16, code: 'C_16', name: 'Tower',      cls: 'Responding',  implemented: false },
-  { index: 17, code: 'C_17', name: 'Star',       cls: 'Meaning',     implemented: false },
-  { index: 18, code: 'C_18', name: 'Moon',       cls: 'Verifying',   implemented: true },
-  { index: 19, code: 'C_19', name: 'Sun',        cls: 'Celebrating', implemented: true },
-  { index: 20, code: 'C_20', name: 'Judgement',  cls: 'Reckoning',   implemented: false },
-  { index: 21, code: 'C_21', name: 'World',      cls: 'Integrating', implemented: false },
+  { index: 0,  code: 'C_0',  name: 'Fool',       cls: 'Crossing',    implemented: false, pickable: false },
+  { index: 1,  code: 'C_1',  name: 'Magician',   cls: 'Building',    implemented: true,  pickable: true },
+  { index: 2,  code: 'C_2',  name: 'Priestess',  cls: 'Recording',   implemented: true,  pickable: true },
+  { index: 3,  code: 'C_3',  name: 'Empress',    cls: 'Nurturing',   implemented: false, pickable: false },
+  { index: 4,  code: 'C_4',  name: 'Emperor',    cls: 'Structuring', implemented: false, pickable: false },
+  { index: 5,  code: 'C_5',  name: 'Hierophant', cls: 'Teaching',    implemented: false, pickable: false },
+  { index: 6,  code: 'C_6',  name: 'Lovers',     cls: 'Joining',     implemented: false, pickable: false },
+  { index: 7,  code: 'C_7',  name: 'Chariot',    cls: 'Driving',     implemented: false, pickable: false },
+  { index: 8,  code: 'C_8',  name: 'Strength',   cls: 'Resolving',   implemented: false, pickable: false },
+  { index: 9,  code: 'C_9',  name: 'Hermit',     cls: 'Discovering', implemented: false, pickable: false },
+  { index: 10, code: 'C_10', name: 'Wheel',      cls: 'Cycling',     implemented: false, pickable: false },
+  { index: 11, code: 'C_11', name: 'Justice',    cls: 'Weighing',    implemented: false, pickable: false },
+  { index: 12, code: 'C_12', name: 'Hanged Man', cls: 'Re-seeing',   implemented: false, pickable: false },
+  { index: 13, code: 'C_13', name: 'Death',      cls: 'Ending',      implemented: false, pickable: false },
+  { index: 14, code: 'C_14', name: 'Temperance', cls: 'Balancing',   implemented: false, pickable: false },
+  { index: 15, code: 'C_15', name: 'Devil',      cls: 'Exposing',    implemented: false, pickable: false },
+  { index: 16, code: 'C_16', name: 'Tower',      cls: 'Responding',  implemented: false, pickable: false },
+  { index: 17, code: 'C_17', name: 'Star',       cls: 'Meaning',     implemented: false, pickable: false },
+  { index: 18, code: 'C_18', name: 'Moon',       cls: 'Verifying',   implemented: true,  pickable: false },
+  { index: 19, code: 'C_19', name: 'Sun',        cls: 'Celebrating', implemented: true,  pickable: true },
+  { index: 20, code: 'C_20', name: 'Judgement',  cls: 'Reckoning',   implemented: false, pickable: false },
+  { index: 21, code: 'C_21', name: 'World',      cls: 'Integrating', implemented: false, pickable: false },
 ];
 
 export const CALIBRATION_VERSION = 'v1' as const;
