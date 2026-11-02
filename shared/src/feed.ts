@@ -4,6 +4,7 @@ export type FeedEventType =
   | 'proposal_created' | 'proposal_executed'
   | 'contribution_submitted' | 'contribution_verified'
   | 'contribution_settled' | 'contribution_appealed'
+  | 'verifiers_reassigned'
   | 'election_started' | 'election_finalized'
   | 'round_audited' | 'round_reckoned' | 'round_published';
 
@@ -28,6 +29,7 @@ export interface FeedEvent {
 export const CONSEQUENTIAL_OPS: ReadonlySet<string> = new Set([
   'create_proposal', 'execute',
   'submit_contribution', 'verify_contribution', 'settle_contribution', 'appeal_verdict',
+  'reassign_verifiers',
   'start_election', 'finalize_election',
   'audit_round', 'reckon_round', 'complete_round',
 ]);
@@ -39,6 +41,7 @@ const OP_TO_EVENT: Record<string, FeedEventType> = {
   verify_contribution: 'contribution_verified',
   settle_contribution: 'contribution_settled',
   appeal_verdict: 'contribution_appealed',
+  reassign_verifiers: 'verifiers_reassigned',
   start_election: 'election_started',
   finalize_election: 'election_finalized',
   audit_round: 'round_audited',
@@ -121,6 +124,14 @@ export function feedEventFromOp(
     case 'appeal_verdict':
       return { ...base, summary: `${signerId} appealed — awaiting re-verification`,
         targetId: typeof payload.contributionId === 'string' ? payload.contributionId : undefined };
+    case 'reassign_verifiers': {
+      const names = Array.isArray(payload.verifiers) ? payload.verifiers as string[] : [];
+      return {
+        ...base,
+        summary: `${signerId} named ${names.join(' & ') || 'no-one'} as additional verifier(s)`,
+        targetId: typeof payload.contributionId === 'string' ? payload.contributionId : undefined,
+      };
+    }
     case 'start_election':
       return {
         ...base,

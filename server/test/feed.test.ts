@@ -124,11 +124,21 @@ describe('feed event builder', () => {
     }
   });
 
+  it('maps reassign_verifiers with the named names', () => {
+    const ev = feedEventFromOp(
+      'reassign_verifiers', 'alice',
+      JSON.stringify({ contributionId: 'c-1', verifiers: ['carol', 'dave'] }), 7000, 1, 20,
+    ) as FeedEvent;
+    expect(ev!.type).toBe('verifiers_reassigned');
+    expect(ev!.summary).toBe('alice named carol & dave as additional verifier(s)');
+    expect(ev!.targetId).toBe('c-1');
+  });
+
   it('declares exactly the consequential op set', () => {
     expect([...CONSEQUENTIAL_OPS].sort()).toEqual([
       'appeal_verdict', 'audit_round', 'complete_round', 'create_proposal', 'execute',
-      'finalize_election', 'reckon_round', 'settle_contribution', 'start_election',
-      'submit_contribution', 'verify_contribution',
+      'finalize_election', 'reassign_verifiers', 'reckon_round', 'settle_contribution',
+      'start_election', 'submit_contribution', 'verify_contribution',
     ]);
   });
 });
