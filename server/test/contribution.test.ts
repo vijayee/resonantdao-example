@@ -22,9 +22,9 @@ describe('contribution registry', () => {
     expect(DIMENSIONS[18].name).toBe('Moon');
   });
 
-  it('marks exactly C_1, C_2 and C_18 as implemented for payment', () => {
+  it('marks exactly C_1, C_2, C_18 and C_19 as implemented (payment rules + the C_19 claim schema)', () => {
     const implemented = DIMENSIONS.filter((d) => d.implemented).map((d) => d.index);
-    expect(implemented.sort((a, b) => a - b)).toEqual([1, 2, 18]);
+    expect(implemented.sort((a, b) => a - b)).toEqual([1, 2, 18, 19]);
   });
 
   describe('isValidDims', () => {

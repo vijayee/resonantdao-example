@@ -95,6 +95,9 @@ export const CONTRIB_NAMES = {
   // — FLAGGED 2026-11-01 as a follow-up protocol fix); reassign authenticates
   // against THIS.
   owner: (contributionId: string) => `contrib:${contributionId}:owner`,
+  // C_19's ties (recognition): the recognized member + the linked record.
+  recognized: (contributionId: string) => `contrib:${contributionId}:rec`,
+  recordTie: (contributionId: string) => `contrib:${contributionId}:tie`,
 } as const;
 
 export const ROUND_NAMES = {

@@ -11,7 +11,7 @@ export interface DimensionDef {
   code: string;
   name: string;
   cls: string; // ontology class from docs/contribution-economy/diagrams.json
-  implemented: boolean; // has a phase-1 RES payment rule
+  implemented: boolean; // submittable: a phase-1 RES payment rule, or a wired claim schema (C_19)
 }
 
 export const DIMENSION_COUNT = 22 as const;
@@ -36,7 +36,7 @@ export const DIMENSIONS: DimensionDef[] = [
   { index: 16, code: 'C_16', name: 'Tower',      cls: 'Responding',  implemented: false },
   { index: 17, code: 'C_17', name: 'Star',       cls: 'Meaning',     implemented: false },
   { index: 18, code: 'C_18', name: 'Moon',       cls: 'Verifying',   implemented: true },
-  { index: 19, code: 'C_19', name: 'Sun',        cls: 'Celebrating', implemented: false },
+  { index: 19, code: 'C_19', name: 'Sun',        cls: 'Celebrating', implemented: true },
   { index: 20, code: 'C_20', name: 'Judgement',  cls: 'Reckoning',   implemented: false },
   { index: 21, code: 'C_21', name: 'World',      cls: 'Integrating', implemented: false },
 ];
@@ -203,7 +203,7 @@ export const DEFAULT_SCHEMA: DimensionSchema = {
 };
 
 export const SCHEMAS: Map<number, DimensionSchema> = new Map();
-for (const dimIndex of [1, 2, 18]) {
+for (const dimIndex of [1, 2, 18, 19]) {
   SCHEMAS.set(dimIndex, {
     dimIndex,
     schemaVersion: SCHEMA_VERSION,

@@ -89,6 +89,18 @@ export interface ContributionPayload {
   // schema-requirement.count verifiers. ABSENT (or the field missing) keeps
   // legacy untargeted behavior — any non-submitter member may verify.
   verifiers?: string[];
+  // Recognition ties (slice #6a, C_19): set ONLY on C_19 claims.
+  recognized?: string; // the member whose work is recognized (≠ the submitter)
+  recordId?: string;   // the tied contribution (machine-checked accepted)
+}
+
+// Recognition claims (slice #6a, C_19): a ContributionPayload whose
+// recognition ties are REQUIRED. The schema carries the same base fields —
+// the submit/verify handlers validate the tie fields whenever the dims carry
+// dimension 19; this type narrows them for claim builders and mirrors.
+export interface RecognitionPayload extends ContributionPayload {
+  recognized: string;
+  recordId: string;
 }
 
 export interface VerifyContributionPayload {
