@@ -584,7 +584,27 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // (it feeds the salient proposal below and the published RCT).
   // The lifecycle pages host every turn — each cycle helper navigates its own
   // actors from the feed (the row link), so no pre-nav runs here.
-  await runTwoVerifierCycle(alice, bob, carol, '1', 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000), 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm', dave);
+  const cycle1Summary = 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000);
+  await runTwoVerifierCycle(alice, bob, carol, '1', cycle1Summary, 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm', dave);
+
+  // --- Account page (both a settle and a verify are knowable) ---
+  // alice settled her C_1 claim, so her ledger carries the settle line keyed
+  // off the SETTLE event ('settled — bounty <n> — "<summary>"...' newest-
+  // first, the harm-reduced bounty); bob checked it, so his carries the
+  // verify line ('verification check — "<summary>"'). Amounts jest's job —
+  // here the e2e pins presence.
+  console.log('The account page: balances + earned ledger');
+  await nav(alice.page, '/account');
+  await alice.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
+  const resShown = await alice.page.locator('#account-res').textContent();
+  console.log('ACCOUNT RES:', (resShown ?? '').trim());
+  const ledgerText = await alice.page.locator('#ledger').textContent();
+  if (!ledgerText.includes('settled — bounty')) throw new Error('ledger missing the settled bounty line');
+  if (!ledgerText.includes(cycle1Summary)) throw new Error('ledger missing the settled contribution line');
+  await nav(bob.page, '/account');
+  await bob.page.locator('#ledger').waitFor({ state: 'visible', timeout: 10000 });
+  const bobLedger = await bob.page.locator('#ledger').textContent();
+  if (!bobLedger.includes(`verification check — "${cycle1Summary}"`)) throw new Error('bob missing the verification check line');
 
   // Cycle 2: bob submits a Recording claim naming dave at the members step
   // (the C_2 verify requirement's exact count 1); bob's only eligible peer IS
