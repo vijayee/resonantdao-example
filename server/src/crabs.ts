@@ -66,6 +66,7 @@ export class DaoNode {
     this.node.setPolicy('verify_contribution', POLICIES.verify_contribution);
     this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
     this.node.setPolicy('appeal_verdict', POLICIES.appeal_verdict);
+    this.node.setPolicy('reassign_verifiers', POLICIES.reassign_verifiers);
     this.node.setPolicy('audit_round', POLICIES.audit_round);
     this.node.setPolicy('reckon_round', POLICIES.reckon_round);
     this.node.setPolicy('complete_round', POLICIES.complete_round);

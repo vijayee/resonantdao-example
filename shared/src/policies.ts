@@ -27,6 +27,10 @@ export const POLICIES = {
   verify_contribution: 'role:member OR role:custodian',
   settle_contribution: 'role:member OR role:custodian',
   appeal_verdict: 'role:member OR role:custodian',
+  // reassign_verifiers (slice #4c): the submitter-only gate lives IN the
+  // handler (the owner set); the class policy mirrors the other contribution
+  // ops — an unnamed policy line defaults to admin-only and members refuse.
+  reassign_verifiers: 'role:member OR role:custodian',
   set_rct_alpha: 'role:custodian',
   set_calibration_version: 'role:custodian',
   audit_round: 'role:member OR role:custodian',
