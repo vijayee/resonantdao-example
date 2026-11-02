@@ -56,7 +56,27 @@ export function makeSubmitContributionHandler(
       return -1;
     }
 
+    // Targeted verification (slice #4c): when the payload names verifiers,
+    // they must be pairwise-distinct members ≠ the submitter, exactly the
+    // wired schema's verify requirement count. Absent field = untargeted.
+    if (payload.verifiers !== undefined) {
+      if (
+        !Array.isArray(payload.verifiers) ||
+        payload.verifiers.length === 0 ||
+        new Set(payload.verifiers).size !== payload.verifiers.length ||
+        payload.verifiers.includes(op.signerId) ||
+        payload.verifiers.some((v) => !isNonEmptyString(v) || !state.setContains(STATE_NAMES.members, v))
+      ) {
+        return -1;
+      }
+    }
+
     const schema = schemaForRecord(payload.schemaVersion, payload.dims);
+
+    if (payload.verifiers !== undefined) {
+      const verifyStep = schema.steps.find((s) => s.op === 'verify_contribution');
+      if (!verifyStep || payload.verifiers.length !== verifyStep.requirement.count) return -1;
+    }
 
     try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
     // The real CRABS wrapper rejects state.setRegister on an undeclared
@@ -69,6 +89,18 @@ export function makeSubmitContributionHandler(
     try { node.addRegister(CONTRIB_NAMES.contributionRound(payload.contributionId), round); } catch (err) { /* ignore duplicate */ }
     for (const step of schema.steps) {
       try { node.addPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId)); } catch (err) { /* ignore duplicate */ }
+    }
+    try { node.addORSet(CONTRIB_NAMES.verifiers(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
+    try { node.addORSet(CONTRIB_NAMES.owner(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
+    try { node.addRegister(CONTRIB_NAMES.verifierCount(payload.contributionId), 0); } catch (err) { /* ignore duplicate */ }
+    state.setAdd(CONTRIB_NAMES.owner(payload.contributionId), op.signerId, `submit:owner:${op.signerId}`);
+    const verifyStep = schema.steps.find((s) => s.op === 'verify_contribution')!;
+    try { node.addRegister(CONTRIB_NAMES.verifyCount(payload.contributionId), verifyStep.requirement.count); } catch (err) { /* ignore duplicate */ }
+    if (payload.verifiers !== undefined) {
+      for (const v of payload.verifiers) {
+        state.setAdd(CONTRIB_NAMES.verifiers(payload.contributionId), v, `submit:${op.signerId}:${v}`);
+      }
+      state.setRegister(CONTRIB_NAMES.verifierCount(payload.contributionId), payload.verifiers.length, op.signerId);
     }
     state.setRegister(CONTRIB_NAMES.status(payload.contributionId), 0, op.signerId);
     state.incrementPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, 'submit'), 1, op.signerId);

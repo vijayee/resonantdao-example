@@ -85,6 +85,10 @@ export interface ContributionPayload {
   summary: string;
   evidenceRef: EvidenceRef;
   schemaVersion: string;
+  // Targeted verification (slice #4c): the submitter names exactly
+  // schema-requirement.count verifiers. ABSENT (or the field missing) keeps
+  // legacy untargeted behavior — any non-submitter member may verify.
+  verifiers?: string[];
 }
 
 export interface VerifyContributionPayload {

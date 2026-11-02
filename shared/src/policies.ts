@@ -77,6 +77,20 @@ export const CONTRIB_NAMES = {
   stepDone: (contributionId: string, stepId: string) => `contrib:${contributionId}:d:${stepId}`,
   // Round a contribution belongs to (stamped by the submit handler).
   contributionRound: (contributionId: string) => `contrib:${contributionId}:round`,
+  // The NAMED verifiers (targeted verification): submit records the initial
+  // names; reassign_verifiers grows the set. Empty → untargeted (class rule).
+  verifiers: (contributionId: string) => `contrib:${contributionId}:v`,
+  // Numeric companion: >0 marks the contribution TARGETED (the handler can't
+  // enumerate a set — presence of a >0 count is the targeting bit).
+  verifierCount: (contributionId: string) => `contrib:${contributionId}:vc`,
+  // The verify step's requirement count, stamped by submit (handlers can't
+  // enumerate sets, so reassign reads requirement state from registers).
+  verifyCount: (contributionId: string) => `contrib:${contributionId}:vneed`,
+  // The TRUE submitter, recorded by the machine (single-element OR-set).
+  // Settle/appeal today authenticate only payload-claim === signer (forgeable
+  // — FLAGGED 2026-11-01 as a follow-up protocol fix); reassign authenticates
+  // against THIS.
+  owner: (contributionId: string) => `contrib:${contributionId}:owner`,
 } as const;
 
 export const ROUND_NAMES = {
