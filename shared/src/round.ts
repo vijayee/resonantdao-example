@@ -19,6 +19,10 @@ export const AGGREGATE_ENTRY_LIMIT = 200 as const;
 export interface RoundEntry {
   contributionId: string;
   submitter: string;
+  // The RECIPIENT of the work when the claim is not self-proclaimed (the
+  // entry carries it iff the claim recognized someone else). Absent = the
+  // submitter attributes to themselves.
+  recipient?: string;
   dims: Record<string, number>;
   harm?: HarmVerdict;
 }
@@ -30,7 +34,14 @@ export function isNonEmptyString(value: unknown): value is string {
 export function isValidRoundEntry(entry: unknown): entry is RoundEntry {
   if (!entry || typeof entry !== 'object') return false;
   const e = entry as Partial<RoundEntry>;
-  return isNonEmptyString(e.contributionId) && isNonEmptyString(e.submitter) && isValidDims(e.dims) && isValidHarm(e.harm);
+  // recipient is an OPTIONAL additive field (slice #6b): absent is fine (self-
+  // claim), and when present it must at least be a non-empty string — the
+  // membership/stamp cross-check that gives it authority lives in the
+  // complete_round handler, not here.
+  return (
+    isNonEmptyString(e.contributionId) && isNonEmptyString(e.submitter) && isValidDims(e.dims) && isValidHarm(e.harm) &&
+    (e.recipient === undefined || isNonEmptyString(e.recipient))
+  );
 }
 
 export function encodeSalientMask(dims: number[]): number {
@@ -56,19 +67,26 @@ export function decodeSalientMask(mask: number): number[] {
   return out;
 }
 
-// Aggregate a round's settled contributions into per-submitter totals.
-// The caller decides alpha semantics (default weight handling happens there).
+// RCT attribution (Victor, 2026-11-02): RCT is the contribution token — it
+// defines VOTING POWER and goes to the RECIPIENT of the work, not the filer.
+// Self-proclaimed claims (submit your own work) are the degenerate case —
+// recipient = submitter — legitimate because third parties verify.
+//
+// Aggregate a round's settled contributions into per-member totals keyed by
+// that attribution rule (entry.recipient ?? entry.submitter). The caller
+// decides alpha semantics (default weight handling happens there).
 export function roundRctTotals(
   entries: RoundEntry[],
   alphaFor: (dimIndex: number) => number
 ): Map<string, number> {
   const totals = new Map<string, number>();
   for (const entry of entries) {
-    let sum = totals.get(entry.submitter) ?? 0;
+    const key = entry.recipient ?? entry.submitter;
+    let sum = totals.get(key) ?? 0;
     for (const [dimKey, match] of Object.entries(entry.dims)) {
       sum += alphaFor(Number(dimKey)) * match;
     }
-    totals.set(entry.submitter, sum);
+    totals.set(key, sum);
   }
   return totals;
 }

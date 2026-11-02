@@ -617,7 +617,7 @@ export const useDaoStore = defineStore('dao', () => {
       const entries = d.getContributions()
         .filter((entry) => d.getContributionStatus(entry.record.contributionId) === 'accepted'
           && d.getContributionRound(entry.record.contributionId) === currentRound)
-        .map((entry) => ({ contributionId: entry.record.contributionId, submitter: entry.submitter, dims: entry.record.dims, harm: entry.harm ?? ('none' as const) }));
+        .map((entry) => ({ contributionId: entry.record.contributionId, submitter: entry.submitter, dims: entry.record.dims, harm: entry.harm ?? ('none' as const), ...(entry.recognized ? { recipient: entry.recognized } : {}) }));
       if (entries.length === 0) {
         status.set('Nothing settled to aggregate in this round.', 'error');
         return false;

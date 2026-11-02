@@ -47,6 +47,25 @@ describe('round registry', () => {
     it('returns an empty map for no entries', () => {
       expect(roundRctTotals([], alphaFor).size).toBe(0);
     });
+    it('RCT-A: self-claimed entries (no recipient) attribute to the submitter — every standing number unchanged', () => {
+      const totals = roundRctTotals([
+        { contributionId: 'a', submitter: 'alice', dims: { '1': 1 } },
+        { contributionId: 'b', submitter: 'bob', dims: { '2': 0.5 } },
+      ], alphaFor);
+      expect(totals.get('alice')).toBe(2);
+      expect(totals.get('bob')).toBe(0.5);
+    });
+    it('RCT-B: an entry with recipient=X attributes X\'s total — the RECIPIENT of the work, not the filer', () => {
+      // bob recognizes carol's proven work; carol carries the credit while
+      // alice's self-claim stays hers (a mixed round pins BOTH shapes).
+      const totals = roundRctTotals([
+        { contributionId: 'a', submitter: 'alice', dims: { '1': 1 } },
+        { contributionId: 'b', submitter: 'bob', recipient: 'carol', dims: { '19': 1 } },
+      ], alphaFor);
+      expect(totals.get('carol')).toBe(1);
+      expect(totals.get('alice')).toBe(2 * 1);
+      expect(totals.get('bob')).toBeUndefined(); // the filer of a recipient claim collects nothing
+    });
   });
 
   describe('derivedVoteBalance', () => {
@@ -75,6 +94,10 @@ describe('round registry', () => {
       expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: {} })).toBe(false);
       expect(isValidRoundEntry(null)).toBe(false);
       expect(AGGREGATE_ENTRY_LIMIT).toBe(200);
+    });
+    it('accepts recipient-carrying entries (additive optional field) and rejects a non-string recipient', () => {
+      expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: { '19': 1 }, recipient: 'carol' })).toBe(true);
+      expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: { '19': 1 }, recipient: 7 })).toBe(false);
     });
   });
 });

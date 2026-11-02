@@ -1328,6 +1328,19 @@ export function makeCompleteRoundHandler(
       if (state.getRegister(CONTRIB_NAMES.status(entry.contributionId)) !== 1) {
         return -1;
       }
+      // RCT attribution cross-check (the recipient of the work): an entry
+      // CARRYING a recipient must name a member the claim's own submit-stamped
+      // recognized set contains — the stamps are the authority, so a forged
+      // recipient kills the whole publish op (aggregate-or-nothing, no partial
+      // state). Declare-first per idiom. Entries WITHOUT recipient (self-
+      // claims) never reach the check — an undeclared set on a self-claim
+      // rejects nothing.
+      if (entry.recipient !== undefined) {
+        try { node.addORSet(CONTRIB_NAMES.recognized(entry.contributionId)); } catch (err) { /* exists */ }
+        if (!state.setContains(CONTRIB_NAMES.recognized(entry.contributionId), entry.recipient)) {
+          return -1;
+        }
+      }
     }
 
     // Alpha weights are stored in per-mille register units — divide before
@@ -1344,7 +1357,15 @@ export function makeCompleteRoundHandler(
       const factor = harmFactorFor(entry.harm ?? 'none');
       const dims: Record<string, number> = {};
       for (const [k, v] of Object.entries(entry.dims)) dims[k] = v * factor;
-      return { contributionId: entry.contributionId, submitter: entry.submitter, dims };
+      // The recipient rides through to the aggregation — roundRctTotals keys
+      // the credit off entry.recipient ?? entry.submitter (the attribution
+      // rule; see round.ts).
+      return {
+        contributionId: entry.contributionId,
+        submitter: entry.submitter,
+        dims,
+        ...(entry.recipient !== undefined ? { recipient: entry.recipient } : {}),
+      };
     });
     const totals = roundRctTotals(harmAdjusted, alphaFor);
     for (const [target, amount] of totals) {

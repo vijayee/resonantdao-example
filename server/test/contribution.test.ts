@@ -951,6 +951,81 @@ describe('complete_round', () => {
   });
 });
 
+// RCT attribution (slice #6b): a recipient-carrying entry must name a member
+// the claim's own submit-stamped recognized set contains — the stamps are the
+// authority; a forged recipient kills the whole publish op (aggregate-or-
+// nothing). Fixture: dave's accepted record, then alice's C_19 claim
+// recognizing dave (tie: the record), verified by bob, settled by alice, spine
+// audited + reckoned by closer2 — publishable at stage RECKONED.
+function setupRecognizedSpine(node: MockNode, state: MockState, claimId = 'r-claim', recognizedMember = 'dave') {
+  setupMembers(state, 'alice', 'bob', 'carol', 'dave', 'closer2');
+  // Declare the round registers (wiring) so post-rejection reads are honest:
+  // current=1 exists from the start, not typed by the rejected publish.
+  try { node.addRegister(ROUND_NAMES.current(), 1); } catch { /* in tests the handler creates it */ }
+  try { node.addRegister(ROUND_NAMES.stage(1), 0); } catch { /* ok */ }
+  const verify = makeVerifyContributionHandler(node);
+  const settle = makeSettleContributionHandler(node, { getTimeMs: () => 3000 });
+  // The tie's record: carol's C_2 record, verified by bob, settled by carol.
+  setupSubmitted(state, node, 'carol', 'work-1', { '2': 1 });
+  expect(run(verify, state, makeOp('verify_contribution', 'bob',
+    verifyOp({ contributionId: 'work-1', submitter: 'carol', dims: { '2': 1 }, pass: true, reason: 'the record is real' })))).toBe(0);
+  expect(run(settle, state, makeOp('settle_contribution', 'carol',
+    { contributionId: 'work-1', submitter: 'carol', reason: 'done' } as SettleContributionPayload))).toBe(0);
+  // The claim: alice recognizes dave's proven work.
+  const submit = makeSubmitContributionHandler(node);
+  expect(run(submit, state, makeOp('submit_contribution', 'alice', submitOp({
+    contributionId: claimId,
+    dims: { '19': 1 },
+    summary: 'recognition: dave’s proven work',
+    recognized: recognizedMember,
+    recordId: 'work-1',
+  })))).toBe(0);
+  expect(run(verify, state, makeOp('verify_contribution', 'bob',
+    verifyOp({ contributionId: claimId, submitter: 'alice', dims: { '19': 1 }, pass: true, reason: 'ties check out', recognized: recognizedMember, recordId: 'work-1' })))).toBe(0);
+  expect(run(settle, state, makeOp('settle_contribution', 'alice',
+    { contributionId: claimId, submitter: 'alice', reason: 'done' } as SettleContributionPayload))).toBe(0);
+  try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring */ }
+  const audit = makeAuditRoundHandler(node, { getTimeMs: () => 0 });
+  const reckon = makeReckonRoundHandler(node, { getTimeMs: () => 0 });
+  expect(run(audit, state, makeOp('audit_round', 'closer2', { fair: true, note: 'ok', calibrationVersion: 'v1' } as AuditRoundPayload))).toBe(0);
+  expect(run(reckon, state, makeOp('reckon_round', 'closer2', { note: 'settled' } as ReckonRoundPayload))).toBe(0);
+}
+
+describe('complete_round RCT attribution (the recipient of the work)', () => {
+  it('RCT-C: a recipient NOT in the claim\'s recognized stamps → -1; the whole op rejected, no partial state', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupRecognizedSpine(node, state);
+    const complete = makeCompleteRoundHandler(node);
+    // bob verified the claim but is NOT its recognized member — the stamps
+    // name dave only. The forged entry must reject BEFORE any register write.
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r-claim', submitter: 'alice', dims: { '19': 1 }, recipient: 'bob' }],
+    } as CompleteRoundPayload))).toBe(-1);
+    expect(logical(state, RCT_NAMES.balance('bob'))).toBeUndefined();
+    expect(logical(state, RCT_NAMES.balance('dave'))).toBeUndefined();
+    expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(2); // still reckonable — retriable
+    expect(state.getRegister(ROUND_NAMES.current())).toBe(1); // the round did not advance
+  });
+
+  it('RCT-D: the recipient matching the stamps → 0; the RCT register balances credit the recognized member', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupRecognizedSpine(node, state);
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r-claim', submitter: 'alice', dims: { '19': 1 }, recipient: 'dave' }],
+    } as CompleteRoundPayload))).toBe(0);
+    // alpha(19) unset → default 1 × match 1 — credited to dave, the recognized
+    // WORK's owner, not alice the filer (who collects nothing).
+    expect(logical(state, RCT_NAMES.balance('dave'))).toBe(1);
+    expect(logical(state, RCT_NAMES.balance('alice'))).toBeUndefined();
+    const records = state.allSetElements(ROUND_NAMES.explanations(1));
+    const publishRecord = JSON.parse(records.find((e) => e.includes('"stepId":"complete"')) ?? '{}');
+    expect(publishRecord.totals['dave']).toBe(1);
+  });
+});
+
 // complete_round mirrors the verified harm: entries scale their dims by the
 // harm factor BEFORE aggregation, so the published RCT matches the adjusted
 // balances/tallies the verify handler wrote.
