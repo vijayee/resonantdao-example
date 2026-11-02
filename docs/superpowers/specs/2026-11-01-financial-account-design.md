@@ -37,7 +37,7 @@ export interface LedgerLine {
 
 export function ledgerLines(
   feedEvents: FeedEvent[],
-  entries: ContributionMirrorEntry[],
+  contributions: LedgerContribution[],   // structural: {contributionId, dims, harm?}
   viewer: string,
 ): LedgerLine[];
 ```
@@ -48,10 +48,9 @@ type/actor/targetId/at for contribution ops). Cases:
 - **Settlement payouts** (`contribution_settled` rows): the SUBMITTER's income = the
   contribution's dims' base payment (`paymentFor`) scaled by `harmFactorFor(entry.harm)` — the
   SHARED functions (single-source: handlers, receipts, ledger all read the same math). Amount
-  present; label names the contribution summary + its dimension class. The line renders for
-  the viewer when `actor === viewer` (settlement op's signer) or the target's submitter ===
-  viewer; for OTHER members the row is not a line (their settlement isn't your income — D2's
-  spirit extended by the earned-only rule).
+  present; label names the contribution summary + its dimension class. The line renders when
+  the settle row's `actor === viewer` (post-retrofit the settle signer IS the machine-recorded
+  owner); other members' settlements are never your income (the earned-only rule).
 - **Verification credits** (`contribution_verified` rows w/ `actor === viewer`): +2 $RES
   (`RES_CONFIG.verificationCheckCredit`); label names the checked contribution + who submitted.
 - **Harm receipts**: part of the settle line (the scaled amount + the harm annotation in the
