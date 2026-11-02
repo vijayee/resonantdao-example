@@ -305,7 +305,11 @@ export function makeVerifyContributionHandler(
         if (paymentFor(dimIndex, match) <= 0) {
           continue;
         }
-        const delta = dimensionDeltaFor(dimIndex, match) * harmFactor;
+        // The calibration term (slice #6a's general rule): the dimension's
+        // live weight scales every tally credit — the same register the RCT
+        // aggregation reads; default weight 1 (the :1251 idiom).
+        const alphaFor = (i: number) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1;
+        const delta = dimensionDeltaFor(dimIndex, match) * alphaFor(dimIndex) * harmFactor;
         if (delta <= 0) {
           continue;
         }

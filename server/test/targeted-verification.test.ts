@@ -9,9 +9,9 @@ import {
   makeSubmitContributionHandler,
   makeVerifyContributionHandler,
 } from '../../shared/src/handlers';
-import { CHECK_NAMES, CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
+import { CALIBRATIONS, CHECK_NAMES, CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
 import { AppealVerdictPayload, ContributionPayload, ReassignVerifiersPayload, SettleContributionPayload, VerifyContributionPayload } from '../../shared/src/types';
-import { SCHEMA_VERSION, STATUS_ACCEPTED, STATUS_APPEALED, STATUS_PENDING, STATUS_REJECTED } from '../../shared/src/contribution';
+import { SCHEMA_VERSION, STATUS_ACCEPTED, STATUS_APPEALED, STATUS_PENDING, STATUS_REJECTED, toRegisterUnits } from '../../shared/src/contribution';
 
 class MockNode {
   orSets = new Set<string>();
@@ -466,5 +466,70 @@ describe('settle/appeal authenticate against the machine-recorded owner (owner-a
     expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(STATUS_APPEALED);
     expect(state.getRegister(CONTRIB_NAMES.appealed('c-1'))).toBe(1);
     expect(state.getRegister(CONTRIB_NAMES.step('c-1'))).toBe(1);
+  });
+});
+
+describe('the general calibration rule — every tally credit weights (slice #6a)', () => {
+  let node: MockNode;
+  let state: MockState;
+  let submit: (state: HandlerState, op: HandlerOperation) => number;
+  let verify: (state: HandlerState, op: HandlerOperation) => number;
+
+  // Contracts:
+  // CAL-A: with NO alpha register set (the default), a verified C_2 tally
+  //        credit = match × 1 — the standing numbers are UNCHANGED (the
+  //        re-pin is a no-op against defaults). Assert dimBalance(alice, 2)
+  //        equals the pre-slice value for the same arc.
+  // CAL-B: with the custodian alpha C_2 set to 2 (CALIBRATIONS.alpha(2) →
+  //        seed via state.setRegister + toRegisterUnits like the settle
+  //        handler's own alpha seeds), the SAME arc's tally credit = match × 2.
+  // CAL-C: an UNSET dim's alpha (e.g. C_1 untouched) stays 1 — only seeded
+  //        dims scale (the || 1 default, machine-wide).
+  let tally: (username: string, dimIndex: number) => number;
+
+  beforeEach(() => {
+    node = new MockNode();
+    state = new MockState(node);
+    // Members set seeded with add_member semantics (element = username).
+    for (const u of ['alice', 'bob', 'carol', 'dave']) {
+      state.setAdd(STATE_NAMES.members, u, u);
+    }
+    submit = makeSubmitContributionHandler(node, { getTimeMs: () => 1000 });
+    verify = makeVerifyContributionHandler(node, { getTimeMs: () => 2000 });
+    tally = (username, dimIndex) => state.getRegister(CONTRIB_NAMES.dimensionBalance(username, dimIndex));
+  });
+
+  it('CAL-A. no alpha register set: a verified C_2 credit keeps the standing number (match × 1 — the re-pin is a no-op)', () => {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({})))).toBe(0);
+    expect(verify(state, verifyOp('bob', { contributionId: 'c-1', submitter: 'alice' }))).toBe(0);
+    // The pre-slice value for this exact arc: dimensionDeltaFor(2, 1) × harm
+    // factor 1 → match 1 in logical units → 1000 register units.
+    expect(tally('alice', 2)).toBe(toRegisterUnits(1));
+  });
+
+  it('CAL-B. the custodian alpha C_2 = 2: the SAME arc credits match × alpha × harm', () => {
+    // Seed like the calibration handler itself writes alpha (setRegister +
+    // toRegisterUnits); the credit must read the dimension's live weight.
+    state.setRegister(CALIBRATIONS.alpha(2), toRegisterUnits(2), 'custodian');
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({})))).toBe(0);
+    expect(verify(state, verifyOp('bob', { contributionId: 'c-1', submitter: 'alice' }))).toBe(0);
+    expect(tally('alice', 2)).toBe(toRegisterUnits(1 * 2));
+  });
+
+  it('CAL-C. only seeded dims scale: an UNSET dim\'s alpha stays 1 (the || 1 default, machine-wide)', () => {
+    // alpha(2) seeded to 2; alpha(1) left untouched. One mixed-dims claim —
+    // C_1's wired schema resolves (two named verifiers, all-parties) so BOTH
+  // dims' credits fire in the same final tally pass: dim 1 stays at match × 1
+    // while dim 2 scales to match × 2.
+    state.setRegister(CALIBRATIONS.alpha(2), toRegisterUnits(2), 'custodian');
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({
+      contributionId: 'c-mix', dims: { '1': 1, '2': 1 }, verifiers: ['bob', 'carol'],
+    })))).toBe(0);
+    expect(verify(state, verifyOp('bob', { contributionId: 'c-mix', submitter: 'alice', dims: { '1': 1, '2': 1 } }))).toBe(0);
+    expect(verify(state, verifyOp('carol', {
+      contributionId: 'c-mix', submitter: 'alice', dims: { '1': 1, '2': 1 }, priorVerifiers: ['bob'],
+    }))).toBe(0);
+    expect(tally('alice', 1)).toBe(toRegisterUnits(1 * 1)); // unset alpha(1) → weight 1
+    expect(tally('alice', 2)).toBe(toRegisterUnits(1 * 2)); // seeded alpha(2) → weight 2
   });
 });
