@@ -17,6 +17,7 @@ import {
   ExecutePayload,
   FinalizeElectionPayload,
   ProposalPayload,
+  ReassignVerifiersPayload,
   ReckonRoundPayload,
   RemoveMemberPayload,
   SetCalibrationVersionPayload,
@@ -227,6 +228,12 @@ export class BrowserDao {
 
   async appealVerdict(userId: string, payload: AppealVerdictPayload): Promise<Uint8Array> {
     return this.signAndSerialize('appeal_verdict', userId, JSON.stringify(payload));
+  }
+
+  // Targeted verification (slice #4c): the submitter grows the named set with
+  // replacement verifiers (the op is handler-gated submitter-only).
+  async reassignVerifiers(userId: string, payload: ReassignVerifiersPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('reassign_verifiers', userId, JSON.stringify(payload));
   }
 
   async auditRound(userId: string, payload: AuditRoundPayload): Promise<Uint8Array> {
@@ -583,6 +590,18 @@ export class BrowserDao {
 
   getContributionAppealed(contributionId: string): boolean {
     return (this.node.getRegister(CONTRIB_NAMES.appealed(contributionId)) || 0) === 1;
+  }
+
+  // The NAMED verifier assignment (targeted verification, slice #4c): the
+  // known members filtered against the contribution's verifiers OR-set.
+  // [] when untargeted — the count register is the targeting marker (>0 =
+  // targeted; legacy submissions leave it at 0/absent).
+  getDefinedVerifiers(contributionId: string): string[] {
+    const count = this.node.getRegister(CONTRIB_NAMES.verifierCount(contributionId)) || 0;
+    if (count <= 0) return [];
+    return this.node
+      .getSetElements(STATE_NAMES.members)
+      .filter((m: string) => this.node.setContains(CONTRIB_NAMES.verifiers(contributionId), m));
   }
 
   getContributionStepDone(contributionId: string, stepId: string): number {

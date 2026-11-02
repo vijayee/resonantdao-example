@@ -1,7 +1,7 @@
 import { ref, shallowRef, computed } from 'vue';
 import { defineStore } from 'pinia';
 import {
-  ProposalPayload, VotePayload, StartElectionPayload, VerifyContributionPayload,
+  ProposalPayload, ReassignVerifiersPayload, VotePayload, StartElectionPayload, VerifyContributionPayload,
   ServerMessage,
 } from '@shared/types';
 import {
@@ -32,6 +32,10 @@ export function contributionFacts(d: BrowserDao, entry: ContributionMirrorEntry)
       s.stepId, d.getContributionStepDone(entry.record.contributionId, s.stepId),
     ])),
     submitter: entry.submitter,
+    // The NAMED assignment — targeting state (empty = untargeted legacy).
+    ...(d.getDefinedVerifiers(entry.record.contributionId).length > 0
+      ? { verifiers: d.getDefinedVerifiers(entry.record.contributionId) }
+      : {}),
   };
   return { schema, facts };
 }
@@ -343,7 +347,10 @@ export const useDaoStore = defineStore('dao', () => {
 
   // ---- contribution ops ----
 
-  async function submitContribution(summary: string, dim: number, evidenceFile: File | null, evidenceText: string): Promise<string | null> {
+  // The 5th param defaults to [] so untargeted (legacy) call sites —
+  // contribute-flows.ts until Task 8 wires the members picker, and the e2e —
+  // keep compiling with byte-identical untargeted payloads.
+  async function submitContribution(summary: string, dim: number, evidenceFile: File | null, evidenceText: string, verifiers: string[] = []): Promise<string | null> {
     if (!dao.value || submitting.value) return null;
     submitting.value = true;
     try {
@@ -373,6 +380,9 @@ export const useDaoStore = defineStore('dao', () => {
         summary,
         evidenceRef,
         schemaVersion: SCHEMA_VERSION,
+        // Targeted verification (slice #4c): when names are picked, the
+        // payload carries them (count-exact validation lives in the handler).
+        ...(verifiers.length > 0 ? { verifiers } : {}),
       };
       const bytes = await dao.value.submitContribution(username.value, payload);
       await serverClient.submitOp(bytesToBase64(bytes));
@@ -492,6 +502,30 @@ export const useDaoStore = defineStore('dao', () => {
       return true;
     } catch (err) {
       status.set(`Appeal error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+      return false;
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  // Targeted verification (slice #4c): the SUBMITTER adds replacement names
+  // to the verifiers set while verification still has open slots. The names
+  // are the NEW ones only — the handler grows, never rewrites, the set.
+  async function reassignVerifiers(contributionId: string, verifiers: string[]): Promise<boolean> {
+    const d = dao.value;
+    if (!d || submitting.value) return false;
+    submitting.value = true;
+    try {
+      const payload: ReassignVerifiersPayload = { contributionId, verifiers };
+      const bytes = await d.reassignVerifiers(username.value, payload);
+      await serverClient.submitOp(bytesToBase64(bytes));
+      await safeExecuteRemote(bytes);
+      status.set('Additional verifiers named.', 'success');
+      bump();
+      return true;
+    } catch (err) {
+      status.set(`Reassign error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
       return false;
     } finally {
@@ -657,7 +691,7 @@ export const useDaoStore = defineStore('dao', () => {
     bootstrap, teardown, replayLog,
     createProposal, vote, execute,
     startElection, castBallot, finalizeElection, castRunoffVote,
-    submitContribution, verifyContribution, settleContribution, appealContribution,
+    submitContribution, verifyContribution, settleContribution, appealContribution, reassignVerifiers,
     auditRound, reckonRound, completeRound, setRctAlpha, setCalibrationVersion,
     removeMember,
     evidenceSummary,

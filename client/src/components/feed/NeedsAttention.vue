@@ -60,6 +60,11 @@ const items = computed<Item[]>(() => {
         s.stepId, d.getContributionStepDone(entry.record.contributionId, s.stepId),
       ])),
       submitter: entry.submitter,
+      // Targeted contributions light the verify band ONLY for named verifiers
+      // (empty = untargeted legacy — the class rule stands).
+      ...(d.getDefinedVerifiers(entry.record.contributionId).length > 0
+        ? { verifiers: d.getDefinedVerifiers(entry.record.contributionId) }
+        : {}),
     };
     const model = wizardModel(schema, facts, me, ds.custodians.includes(me));
     const step = model.steps[model.currentStepIndex];
