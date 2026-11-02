@@ -1,5 +1,5 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, AppealVerdictPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, CompleteRoundPayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
+import { AddMemberPayload, AppealVerdictPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, CompleteRoundPayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReassignVerifiersPayload, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
   CALIBRATIONS, CHECK_NAMES, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RECIP_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RCT_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
@@ -466,6 +466,55 @@ export function makeAppealVerdictHandler(
       at: nowMs,
     };
     state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(explanation), `appeal:${op.signerId}`);
+    return 0;
+  };
+}
+
+// Lifecycle op 'reassign_verifiers' (targeted verification, slice #4c): the
+// SUBMITTER adds replacement verifiers to the named set while verification
+// still has open slots. Authenticated against the machine's owner set (the
+// payload-claim pattern settle/appeal use is the flagged forgeable gap; this
+// op does better). Grow-only — a reassignment never shrinks the assignment.
+export function makeReassignVerifiersHandler(
+  node: { addORSet(name: string): void; addRegister(name: string, initial?: number): void },
+  config: { getTimeMs?: () => number } = {}
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: ReassignVerifiersPayload = JSON.parse(op.payload || '{}');
+    if (!isNonEmptyString(payload.contributionId) || !Array.isArray(payload.verifiers)) return -1;
+    try { node.addORSet(CONTRIB_NAMES.verifiers(payload.contributionId)); } catch (err) { /* replay idempotence */ }
+    try { node.addRegister(CONTRIB_NAMES.verifierCount(payload.contributionId), 0); } catch (err) { /* replay idempotence */ }
+    // Targeted only: an untargeted contribution (count 0/absent) reassigns nothing.
+    const targetCount = state.getRegister(CONTRIB_NAMES.verifierCount(payload.contributionId)) ?? 0;
+    if (targetCount <= 0) return -1;
+    const status = state.getRegister(CONTRIB_NAMES.status(payload.contributionId));
+    if (status === undefined || (status !== STATUS_PENDING && status !== STATUS_APPEALED)) return -1;
+    // Owner/verifyCount OR-set+registers are declared by submit at Task 1; the
+    // defensive declares are replay idempotence.
+    try { node.addORSet(CONTRIB_NAMES.owner(payload.contributionId)); } catch (err) { /* replay idempotence */ }
+    if (!state.setContains(CONTRIB_NAMES.owner(payload.contributionId), op.signerId)) return -1;
+    // ...only while verification has remaining slots — requirement state
+    // lives in registers (handlers cannot enumerate sets):
+    const need = state.getRegister(CONTRIB_NAMES.verifyCount(payload.contributionId)) ?? 0;
+    if (need <= 0) return -1;
+    const done = state.getPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, 'verify')) || 0;
+    const remaining = need - done;
+    if (remaining <= 0) return -1;
+    if (payload.verifiers.length !== remaining) return -1;
+    if (
+      new Set(payload.verifiers).size !== payload.verifiers.length ||
+      payload.verifiers.includes(op.signerId) ||
+      payload.verifiers.some((v) => !isNonEmptyString(v) || !state.setContains(STATE_NAMES.members, v))
+    ) return -1;
+    // Grow-only: a name already in the set must not be re-added (setAdd would
+    // silently drop it, silently shrinking the remaining count).
+    for (const v of payload.verifiers) {
+      if (state.setContains(CONTRIB_NAMES.verifiers(payload.contributionId), v)) return -1;
+    }
+    for (const v of payload.verifiers) {
+      state.setAdd(CONTRIB_NAMES.verifiers(payload.contributionId), v, `reassign:${op.signerId}:${v}`);
+    }
+    state.setRegister(CONTRIB_NAMES.verifierCount(payload.contributionId), targetCount + payload.verifiers.length, op.signerId);
     return 0;
   };
 }

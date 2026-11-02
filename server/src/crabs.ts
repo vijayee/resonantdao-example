@@ -14,6 +14,7 @@ import {
   makeCreateProposalHandler,
   makeExecuteHandler,
   makeFinalizeElectionHandler,
+  makeReassignVerifiersHandler,
   makeReckonRoundHandler,
   makeRemoveMemberHandler,
   makeSetCalibrationVersionHandler,
@@ -83,6 +84,7 @@ export class DaoNode {
     this.node.registerHandlerJs('verify_contribution', makeVerifyContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('appeal_verdict', makeAppealVerdictHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('reassign_verifiers', makeReassignVerifiersHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
     this.node.registerHandlerJs('sync_roles', () => 0); // admin-signed; roles applied out-of-band
     this.node.registerHandlerJs('audit_round', makeAuditRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));

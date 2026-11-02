@@ -128,6 +128,14 @@ export interface AppealVerdictPayload {
   reason: string;
 }
 
+// Targeted verification (slice #4c): op 'reassign_verifiers'. The SUBMITTER
+// adds replacement verifiers to the named set while verification still has
+// open slots. The new names only — the existing set is grown, never rewritten.
+export interface ReassignVerifiersPayload {
+  contributionId: string;
+  verifiers: string[]; // the NEW names only — added to the existing set
+}
+
 export interface SetRctAlphaPayload {
   weights: Record<string, number>; // sparse: dimension index -> alpha in (0, 10]
   version: string;                 // alpha version label, recorded in the explanation record

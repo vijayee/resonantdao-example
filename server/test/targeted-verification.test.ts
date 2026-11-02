@@ -4,9 +4,9 @@
 // in an OR-set with a numeric count companion; the true submitter lands in an
 // owner set. Legacy payloads without the field keep untargeted behavior.
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { makeSubmitContributionHandler } from '../../shared/src/handlers';
+import { makeReassignVerifiersHandler, makeSubmitContributionHandler } from '../../shared/src/handlers';
 import { CONTRIB_NAMES, STATE_NAMES } from '../../shared/src/policies';
-import { ContributionPayload } from '../../shared/src/types';
+import { ContributionPayload, ReassignVerifiersPayload } from '../../shared/src/types';
 import { SCHEMA_VERSION } from '../../shared/src/contribution';
 
 class MockNode {
@@ -110,6 +110,10 @@ function makeOp(type: string, signerId: string, payload: object): HandlerOperati
 
 const GOOD_REF = { hash: 'a'.repeat(64), uri: 'content://' + 'b'.repeat(64), mediaType: 'text/plain', size: 3 };
 
+function reassignOp(signerId: string, payload: ReassignVerifiersPayload): HandlerOperation {
+  return makeOp('reassign_verifiers', signerId, payload);
+}
+
 function submitOp(payload: Partial<ContributionPayload>): ContributionPayload {
   return {
     contributionId: 'c-1',
@@ -184,5 +188,108 @@ describe('submit names verifiers (targeted verification, slice #4c)', () => {
     // The verify requirement is still stamped (C_2 → 1) but no count means
     // untargeted until the register is > 0.
     expect(state.getRegister(CONTRIB_NAMES.verifyCount('c-1'))).toBe(1);
+  });
+});
+
+describe('reassign_verifiers (targeted verification, slice #4c)', () => {
+  let node: MockNode;
+  let state: MockState;
+  let submit: (state: HandlerState, op: HandlerOperation) => number;
+  let reassign: (state: HandlerState, op: HandlerOperation) => number;
+
+  beforeEach(() => {
+    node = new MockNode();
+    state = new MockState(node);
+    // Members set seeded with add_member semantics (element = username).
+    for (const u of ['alice', 'bob', 'carol', 'dave']) {
+      state.setAdd(STATE_NAMES.members, u, u);
+    }
+    submit = makeSubmitContributionHandler(node, { getTimeMs: () => 1000 });
+    reassign = makeReassignVerifiersHandler(node, { getTimeMs: () => 1000 });
+  });
+
+  it('G. submitter reassign while verify incomplete: the set grows by exactly-remaining, the count follows', () => {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({ verifiers: ['bob'] })))).toBe(0);
+    // C_2: need 1, done 0 → remaining 1; naming exactly carol is exact.
+    const res = reassign(state, reassignOp('alice', {
+      contributionId: 'c-1', verifiers: ['carol'],
+    }));
+    expect(res).toBe(0);
+    expect(state.setContains(CONTRIB_NAMES.verifiers('c-1'), 'bob')).toBe(true);
+    expect(state.setContains(CONTRIB_NAMES.verifiers('c-1'), 'carol')).toBe(true);
+    expect(state.getRegister(CONTRIB_NAMES.verifierCount('c-1'))).toBe(2);
+  });
+
+  it('H. reassign NOT by the submitter is rejected (owner set is the gate)', () => {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({ verifiers: ['bob'] })))).toBe(0);
+    const res = reassign(state, reassignOp('bob', {
+      contributionId: 'c-1', verifiers: ['carol'],
+    }));
+    expect(res).toBe(-1);
+    // Nothing changed.
+    expect(state.setContains(CONTRIB_NAMES.verifiers('c-1'), 'carol')).toBe(false);
+    expect(state.getRegister(CONTRIB_NAMES.verifierCount('c-1'))).toBe(1);
+  });
+
+  it('I. reassign with the wrong remaining count (naming 2 or 0 when 1 remains) is rejected', () => {
+    // C_1: need 2; one check already done → remaining 1.
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({
+      contributionId: 'c-heavy', dims: { '1': 1 }, verifiers: ['bob', 'carol'],
+    })))).toBe(0);
+    state.incrementPNCounter(CONTRIB_NAMES.stepDone('c-heavy', 'verify'), 1);
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-heavy', verifiers: ['dave', 'ghost'],
+    }))).toBe(-1);
+    const before = state.getRegister(CONTRIB_NAMES.verifierCount('c-heavy'));
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-heavy', verifiers: [],
+    }))).toBe(-1);
+    expect(state.getRegister(CONTRIB_NAMES.verifierCount('c-heavy'))).toBe(before);
+  });
+
+  it('J. reassign naming a non-member / self / duplicate / already-named verifier is rejected', () => {
+    // C_1 with 2 slots open: the duplicate/self gates need remaining ≥ 2.
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({
+      contributionId: 'c-heavy', dims: { '1': 1 }, verifiers: ['bob', 'carol'],
+    })))).toBe(0);
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-heavy', verifiers: ['ghost'],
+    }))).toBe(-1);
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-heavy', verifiers: ['dave', 'dave'],
+    }))).toBe(-1);
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-heavy', verifiers: ['alice', 'dave'],
+    }))).toBe(-1);
+    // Grow-only: a name already in the set must not be re-added.
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-heavy', verifiers: ['bob', 'dave'],
+    }))).toBe(-1);
+    // Nothing landed.
+    expect(state.setContains(CONTRIB_NAMES.verifiers('c-heavy'), 'dave')).toBe(false);
+    expect(state.getRegister(CONTRIB_NAMES.verifierCount('c-heavy'))).toBe(2);
+  });
+
+  it('K. reassign after the verify step COMPLETED is rejected', () => {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({ verifiers: ['bob'] })))).toBe(0);
+    state.incrementPNCounter(CONTRIB_NAMES.stepDone('c-1', 'verify'), 1);
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-1', verifiers: ['carol'],
+    }))).toBe(-1);
+    expect(state.setContains(CONTRIB_NAMES.verifiers('c-1'), 'carol')).toBe(false);
+  });
+
+  it('L. reassign on an UNTARGETED contribution is rejected (count register 0)', () => {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({})))).toBe(0);
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-1', verifiers: ['carol'],
+    }))).toBe(-1);
+    expect(state.setContains(CONTRIB_NAMES.verifiers('c-1'), 'carol')).toBe(false);
+  });
+
+  it('reassign on an unknown contribution (no registers at all) is rejected', () => {
+    expect(reassign(state, reassignOp('alice', {
+      contributionId: 'c-ghost', verifiers: ['carol'],
+    }))).toBe(-1);
   });
 });
