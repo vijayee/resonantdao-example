@@ -350,7 +350,7 @@ export function makeVerifyContributionHandler(
 // Future multi-step schemas will pass dims like verify does to locate the
 // settle step in the schema instead of pinning the register index.
 export function makeSettleContributionHandler(
-  node: { addRegister(name: string, initial?: number): void },
+  node: { addRegister(name: string, initial?: number): void; addORSet(name: string): void },
   config: { getTimeMs?: () => number } = {}
 ) {
   return (state: HandlerState, op: HandlerOperation): number => {
@@ -364,6 +364,12 @@ export function makeSettleContributionHandler(
     }
     if (payload.submitter !== op.signerId) {
       return -1; // settlement is the submitter's final acknowledgment
+    }
+    // Ownership is machine state, not the payload claim (slice #4c's flag):
+    // the owner set records the TRUE submitter at submit time.
+    try { node.addORSet(CONTRIB_NAMES.owner(payload.contributionId)); } catch (err) { /* replay idempotence */ }
+    if (!state.setContains(CONTRIB_NAMES.owner(payload.contributionId), op.signerId)) {
+      return -1;
     }
     if (!state.setContains(STATE_NAMES.contributions, payload.contributionId)) {
       return -1;
@@ -436,6 +442,12 @@ export function makeAppealVerdictHandler(
     }
     if (payload.submitter !== op.signerId) {
       return -1; // appeals are the submitter's alone
+    }
+    // Ownership is machine state, not the payload claim (slice #4c's flag):
+    // the owner set records the TRUE submitter at submit time.
+    try { node.addORSet(CONTRIB_NAMES.owner(payload.contributionId)); } catch (err) { /* replay idempotence */ }
+    if (!state.setContains(CONTRIB_NAMES.owner(payload.contributionId), op.signerId)) {
+      return -1;
     }
     if (!state.setContains(STATE_NAMES.contributions, payload.contributionId)) {
       return -1;

@@ -5,12 +5,13 @@ import { HandlerState, HandlerOperation } from 'crabs-wasm';
 import {
   makeAppealVerdictHandler,
   makeReassignVerifiersHandler,
+  makeSettleContributionHandler,
   makeSubmitContributionHandler,
   makeVerifyContributionHandler,
 } from '../../shared/src/handlers';
-import { CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
-import { AppealVerdictPayload, ContributionPayload, ReassignVerifiersPayload, VerifyContributionPayload } from '../../shared/src/types';
-import { SCHEMA_VERSION } from '../../shared/src/contribution';
+import { CHECK_NAMES, CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
+import { AppealVerdictPayload, ContributionPayload, ReassignVerifiersPayload, SettleContributionPayload, VerifyContributionPayload } from '../../shared/src/types';
+import { SCHEMA_VERSION, STATUS_ACCEPTED, STATUS_APPEALED, STATUS_PENDING, STATUS_REJECTED } from '../../shared/src/contribution';
 
 class MockNode {
   orSets = new Set<string>();
@@ -380,5 +381,90 @@ describe('the verify gate honors the named set (targeted verification, slice #4c
     // the status stays STATUS_APPEALED until the settle op finalizes.
     expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-appeal', 'verify'))).toBe(1);
     expect(state.getRegister(CONTRIB_NAMES.step('c-appeal'))).toBe(1);
+  });
+});
+
+describe('settle/appeal authenticate against the machine-recorded owner (owner-auth retrofit)', () => {
+  let node: MockNode;
+  let state: MockState;
+  let submit: (state: HandlerState, op: HandlerOperation) => number;
+  let settle: (state: HandlerState, op: HandlerOperation) => number;
+  let appeal: (state: HandlerState, op: HandlerOperation) => number;
+  let verify: (state: HandlerState, op: HandlerOperation) => number;
+
+  beforeEach(() => {
+    node = new MockNode();
+    state = new MockState(node);
+    // Members set seeded with add_member semantics (element = username).
+    for (const u of ['alice', 'bob', 'carol', 'dave']) {
+      state.setAdd(STATE_NAMES.members, u, u);
+    }
+    submit = makeSubmitContributionHandler(node, { getTimeMs: () => 1000 });
+    verify = makeVerifyContributionHandler(node, { getTimeMs: () => 2000 });
+    settle = makeSettleContributionHandler(node, { getTimeMs: () => 4000 });
+    appeal = makeAppealVerdictHandler(node, { getTimeMs: () => 5000 });
+  });
+
+  const settleOp = (signerId: string, contributionId = 'c-1') =>
+    makeOp('settle_contribution', signerId, {
+      contributionId, submitter: signerId, reason: 'looks good',
+    } as SettleContributionPayload);
+  const appealOp = (signerId: string, contributionId = 'c-1') =>
+    makeOp('appeal_verdict', signerId, {
+      contributionId, submitter: signerId, reason: 'evidence misread',
+    } as AppealVerdictPayload);
+
+  // Arc helpers — real handlers only (no register surgery), so every arc is
+  // owner-stamped by the live submit handler.
+  // Submit + a completed untargeted verify → the contribution sits at the
+  // settle step (2), status PENDING.
+  function verifiedArc(contributionId = 'c-1'): void {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({ contributionId })))).toBe(0);
+    expect(verify(state, verifyOp('carol', { contributionId, submitter: 'alice' }))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.step(contributionId))).toBe(2);
+    expect(state.getRegister(CONTRIB_NAMES.status(contributionId))).toBe(STATUS_PENDING);
+  }
+
+  // Submit + a rejecting untargeted verify → the lifecycle is terminal REJECTED.
+  function rejectedArc(contributionId = 'c-1'): void {
+    expect(submit(state, makeOp('submit_contribution', 'alice', submitOp({ contributionId })))).toBe(0);
+    expect(verify(state, verifyOp('carol', { contributionId, submitter: 'alice', pass: false, reason: 'insufficient' }))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status(contributionId))).toBe(STATUS_REJECTED);
+  }
+
+  it('Q. settle by the TRUE owner (alice on alice\'s submission) finalizes as accepted', () => {
+    verifiedArc();
+    expect(settle(state, settleOp('alice'))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(STATUS_ACCEPTED);
+  });
+
+  it('R. settle FORGED (bob claims submitter=bob on ALICE\'s contribution) is refused by the owner set', () => {
+    // Untargeted legacy shape is fine — the gate is unconditional. The
+    // payload-claim check passed this before; the owner set is what refuses it.
+    verifiedArc();
+    expect(settle(state, settleOp('bob'))).toBe(-1);
+    // Nothing mutated: the lifecycle never finalized and the forger collected
+    // no upheld credit (bob completed nothing — the arc's check was carol's).
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(STATUS_PENDING);
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-1', 'verify'))).toBe(1);
+    expect(state.getRegister(CHECK_NAMES.upheld('bob'))).toBe(0);
+  });
+
+  it('S. appeal FORGED the same way (bob on alice\'s rejected contribution) is refused by the owner set', () => {
+    rejectedArc();
+    expect(appeal(state, appealOp('bob'))).toBe(-1);
+    // Nothing mutated: the once-guard never fired and the lifecycle stays
+    // terminal.
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(STATUS_REJECTED);
+    expect(state.getRegister(CONTRIB_NAMES.appealed('c-1'))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-1'))).toBe(1);
+  });
+
+  it('T. appeal by the TRUE owner after a rejection re-opens the lifecycle (the legal arc)', () => {
+    rejectedArc();
+    expect(appeal(state, appealOp('alice'))).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-1'))).toBe(STATUS_APPEALED);
+    expect(state.getRegister(CONTRIB_NAMES.appealed('c-1'))).toBe(1);
+    expect(state.getRegister(CONTRIB_NAMES.step('c-1'))).toBe(1);
   });
 });
