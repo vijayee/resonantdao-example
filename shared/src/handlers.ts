@@ -198,6 +198,16 @@ export function makeVerifyContributionHandler(
     ) {
       return -1;
     }
+    // Owner pin: the payload's `submitter` claim is a re-carry, not the
+    // truth — it must satisfy the machine's submit-stamped owner set (the
+    // stamps are the referee, the same read settle/appeal/reassign do on
+    // theirs). A forged submitter dies here, before ANY write: no per-check
+    // credit, no accuracy accrual, no reciprocity record, no stepDone, no
+    // tally. Declare-first per the real-wasm idiom.
+    try { node.addORSet(CONTRIB_NAMES.owner(payload.contributionId)); } catch (err) { /* replay idempotence */ }
+    if (!state.setContains(CONTRIB_NAMES.owner(payload.contributionId), payload.submitter)) {
+      return -1;
+    }
 
     const statusReg = CONTRIB_NAMES.status(payload.contributionId);
     const stepReg = CONTRIB_NAMES.step(payload.contributionId);
@@ -1308,6 +1318,14 @@ export function makeCompleteRoundHandler(
     }
     for (const entry of payload.entries) {
       if (!isValidRoundEntry(entry)) {
+        return -1;
+      }
+      // Owed-fields pin: a 19-dim entry never defaults its owed field
+      // silently — recognition's credited member is REQUIRED in the published
+      // aggregate, so a 19-entry without a recipient kills the whole publish
+      // op (aggregate-or-nothing, per-ENTRY: the entries list carries dims).
+      // Non-19 self-claims keep the legacy recipientless shape.
+      if (entry.dims['19'] !== undefined && entry.recipient === undefined) {
         return -1;
       }
     }

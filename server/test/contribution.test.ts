@@ -1026,6 +1026,62 @@ describe('complete_round RCT attribution (the recipient of the work)', () => {
   });
 });
 
+// The owed-fields pin: no owed field may default silently — a 19-dim entry
+// published without a recipient is rejected (aggregate-or-nothing), while the
+// legacy non-19 self-claim keeps its recipientless shape.
+describe('complete_round owed pin (a 19-entry requires its recipient)', () => {
+  // Contracts:
+  // PIN-A: a 19-dim entry WITHOUT a recipient → -1; no partial state (the
+  //        same aggregate-or-nothing shape as RCT-C — no RCT register typed,
+  //        stage still reckonable, the round did not advance).
+  // PIN-B: the recipient present + matching the stamped recognized set → 0;
+  //        the RCT register holds the SCALED units (coherent with the
+  //        per-mille encoding).
+  // PIN-D: the LEGACY negative space — a non-19, recipientless self-entry
+  //        publishes exactly as before (the spread applies on 19 only).
+  it('PIN-A: a 19-dim entry WITHOUT a recipient → -1; no partial state', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupRecognizedSpine(node, state);
+    const complete = makeCompleteRoundHandler(node);
+    // The stamps name dave (claimed + verified + settled through the real
+    // handlers) but the entry omits the recipient — the owed credit must not
+    // silently default to the filer.
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r-claim', submitter: 'alice', dims: { '19': 1 } }],
+    } as CompleteRoundPayload))).toBe(-1);
+    expect(logical(state, RCT_NAMES.balance('alice'))).toBeUndefined();
+    expect(logical(state, RCT_NAMES.balance('dave'))).toBeUndefined();
+    expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(2); // still reckonable — retriable
+    expect(state.getRegister(ROUND_NAMES.current())).toBe(1); // the round did not advance
+  });
+
+  it('PIN-B: the recipient present + matching the stamps → 0; units coherent', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupRecognizedSpine(node, state);
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r-claim', submitter: 'alice', dims: { '19': 1 }, recipient: 'dave' }],
+    } as CompleteRoundPayload))).toBe(0);
+    // Register units are per-mille: match 1 × alpha(19) unset → 1 × REG_SCALE.
+    expect(state.getRegister(RCT_NAMES.balance('dave'))).toBe(REG_SCALE);
+    expect(logical(state, RCT_NAMES.balance('dave'))).toBe(1);
+  });
+
+  it('PIN-D: the legacy negative space — a non-19 recipientless entry publishes unchanged', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupSpineReady(node, state); // 'r1-a' = alice's C_1 record, stamps intact, stage RECKONED
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'closer2', {
+      entries: [{ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } }],
+    } as CompleteRoundPayload))).toBe(0);
+    // alpha(1) unset → default 1 — credited to the filer as before.
+    expect(logical(state, RCT_NAMES.balance('alice'))).toBe(1);
+  });
+});
+
 // complete_round mirrors the verified harm: entries scale their dims by the
 // harm factor BEFORE aggregation, so the published RCT matches the adjusted
 // balances/tallies the verify handler wrote.

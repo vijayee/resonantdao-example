@@ -15,7 +15,7 @@ import {
   makeSubmitContributionHandler,
   makeVerifyContributionHandler,
 } from '../../shared/src/handlers';
-import { CONTRIB_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
+import { CHECK_NAMES, CONTRIB_NAMES, RECIP_NAMES, RES_NAMES, STATE_NAMES } from '../../shared/src/policies';
 import {
   ContributionPayload,
   SettleContributionPayload,
@@ -349,6 +349,32 @@ describe('C_19 verify: the tie gate + the recognized member’s tally credit', (
     expect(tally('carol', 19)).toBe(0);
     expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-claim', 'verify'))).toBe(0);
     expect(state.getRegister(CONTRIB_NAMES.status('c-claim'))).toBe(0);
+  });
+
+  // Contracts:
+  // PIN-C: the owner pin — the verify payload's `submitter` claim is a
+  // re-carry, not the truth: the handler machine-checks it against the
+  // submit-stamped owner set (the stamps are the referee, the same read
+  // settle/appeal/reassign do). A pass whose claim names a DIFFERENT member
+  // → -1 + NOTHING moved (no per-check credit, no accuracy accrual, no
+  // reciprocity guard set, no stepDone, no tally). Asserted BOTH directions:
+  // the forged spread fails with nothing moved; the true owner's spread
+  // passes.
+  it('PIN-C. the owner pin: a pass FORGING the submitter claim is rejected — nothing moved; the true owner’s spread passes', () => {
+    claimArc();
+    // carol is a member and ≠ the signer dave — the forgery dies ONLY at the
+    // owner stamp, not at any membership/self-verify tier.
+    expect(verify(state, verifyOp('dave', { recordId: 'c-work', recognized: 'bob', submitter: 'carol' }))).toBe(-1);
+    expect(res('dave')).toBe(0); // no per-check credit
+    expect(state.getRegister(CHECK_NAMES.total('dave'))).toBe(0); // no accuracy accrual
+    expect(state.setContains(RECIP_NAMES.verifiedBy('carol'), 'dave')).toBe(false); // no reciprocity record
+    expect(state.getPNCounter(CONTRIB_NAMES.stepDone('c-claim', 'verify'))).toBe(0);
+    expect(tally('carol', 19)).toBe(0);
+    expect(tally('bob', 19)).toBe(0);
+    expect(state.getRegister(CONTRIB_NAMES.status('c-claim'))).toBe(0);
+    // The true owner's spread (alice stamped the claim's owner set) passes.
+    expect(verify(state, verifyOp('dave', { recordId: 'c-work', recognized: 'bob' }))).toBe(0);
+    expect(tally('bob', 19)).toBe(toRegisterUnits(1));
   });
 
   it('G-C. the happy arc (unset alpha): the RECOGNIZED member gains match × 1; the submitter earns nothing on C_19', () => {
