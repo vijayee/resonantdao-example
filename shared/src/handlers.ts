@@ -1348,9 +1348,10 @@ export function makeCompleteRoundHandler(
     const alphaFor = (i: number) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1;
     // Harm mirror: each entry's verified verdict scales its dims BEFORE
     // aggregation (reduced = 0.5, voided = 0 — a voided entry contributes
-    // nothing per-submitter but still counts toward the record's entryCount),
-    // so the published RCT matches the adjusted tallies the verify handler
-    // wrote. roundRctTotals sums per submitter, so the factor must be applied
+    // nothing per-attributed-member but still counts toward the record's
+    // entryCount), so the published RCT matches the adjusted tallies the
+    // verify handler wrote. roundRctTotals keys each entry's credit off
+    // entry.recipient ?? entry.submitter, so the factor must be applied
     // per ENTRY here — not after the sum. Entry harm was already gated by
     // isValidRoundEntry above.
     const harmAdjusted = payload.entries.map((entry) => {
