@@ -266,7 +266,7 @@ async function runWizardCycle(submitter, verifier, dimValue, summary, verifyReas
 // their page (the targeting driver's denial assert below): neither the
 // contribution row nor an attention-band item for this summary.
 async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyReason, settleNote, harmChoice = 'yes', observer = null) {
-  await submitContribution(submitter, dimValue, summary, [v1.name, v2.name]);
+  const contributionId = await submitContribution(submitter, dimValue, summary, [v1.name, v2.name]);
 
   let halfDone = false;
   for (let attempt = 0; !halfDone && attempt < 15; attempt++) {
@@ -377,6 +377,10 @@ async function runTwoVerifierCycle(submitter, v1, v2, dimValue, summary, verifyR
       throw new Error(`Expected the settled contribution page's harm receipt, got '${receiptText}'`);
     }
   }
+
+  // The settled id is the caller's handle on the accepted claim (the
+  // recognition arc ties to the submitter's own accepted record).
+  return contributionId;
 }
 
 // Phase-3 appeal flow under TARGETED verification (slice #4c): submit (the
@@ -585,7 +589,7 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // The lifecycle pages host every turn — each cycle helper navigates its own
   // actors from the feed (the row link), so no pre-nav runs here.
   const cycle1Summary = 'Wizard-built e2e demo ' + Math.floor(Math.random() * 10000);
-  await runTwoVerifierCycle(alice, bob, carol, '1', cycle1Summary, 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm', dave);
+  const cycle1Id = await runTwoVerifierCycle(alice, bob, carol, '1', cycle1Summary, 'built and matches the claim', 'accepting the two-verifier outcome', 'yes-harm', dave);
 
   // --- Account page (both a settle and a verify are knowable) ---
   // alice settled her C_1 claim, so her ledger carries the settle line keyed
@@ -689,6 +693,101 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   if (JSON.stringify(qTallies) !== JSON.stringify(['1', '0', '0'])) {
     throw new Error(`Expected ['1','0','0'] on base-only quadratic proposal, got ${JSON.stringify(qTallies)}`);
   }
+
+  // --- C_19 recognition claim (slice #6a) ---
+  // Round 2 is open (the spine closed round 1), so a settled recognition claim
+  // here cannot touch the round-1 aggregation asserts already made. The
+  // contribute-new flow's steps are a function of the answers: a C_19 claim
+  // gains the two tie picks between the dim choice and the verifier pick.
+  // alice recognizes bob's work: the recognized pick is bob (members minus
+  // self, count 1), the record tie pick is one of ALICE'S OWN ACCEPTED
+  // contributions (the landed record picker screens the tie to the viewer's
+  // accepted records — cycle 1's settled C_1, its id carried through from the
+  // cycle helper), and the reviewer is dave (the only reciprocity-clear
+  // non-self member left for alice: bob's and carol's pairs were consumed by
+  // cycle 1's checks, so the screened pick list offers dave alone).
+  console.log('Recognition: alice recognizes bob’s work, tied to her settled record');
+  const claimSummary = 'Recognition e2e demo ' + Math.floor(Math.random() * 10000);
+  await nav(alice.page, '/contribute');
+  await alice.page.click('#new-contribution-btn');
+  const claimFlow = alice.page.locator('.wizard-flow[data-flow-id="contribute-new"]');
+  await claimFlow.waitFor({ state: 'visible', timeout: 10000 });
+  // The DERIVED picker carries C_19 (implemented ∧ schema-wired).
+  await claimFlow.locator('.wizard-option[value="19"]').check();
+  await claimFlow.locator('.wizard-next').click();
+  // The recognized pick (count 1): bob — the sorted non-self members.
+  await claimFlow.locator('.wizard-member--recognized').first().waitFor({ state: 'visible', timeout: 10000 });
+  await claimFlow.locator(`.wizard-member--recognized[value="${bob.name}"]`).check();
+  await claimFlow.locator('.wizard-next').click();
+  // The record tie pick (count 1): the options are the viewer's OWN accepted
+  // contribution ids (raw uuids — the pick prints the raw id, the review maps
+  // the summary); the single settled cycle-1 C_1's id.
+  await claimFlow.locator('.wizard-member--record').first().waitFor({ state: 'visible', timeout: 10000 });
+  await claimFlow.locator(`.wizard-member--record[value="${cycle1Id}"]`).check();
+  await claimFlow.locator('.wizard-next').click();
+  await claimFlow.locator('.wizard-member--verifiers').first().waitFor({ state: 'visible', timeout: 10000 });
+  await claimFlow.locator(`.wizard-member--verifiers[value="${dave.name}"]`).check();
+  await claimFlow.locator('.wizard-next').click();
+  await claimFlow.locator('textarea').fill(claimSummary);
+  await claimFlow.locator('.wizard-next').click();
+  await claimFlow.locator('.wizard-evidence-pointer').fill('https://example.com/evidence/recognition');
+  await claimFlow.locator('.wizard-next').click();
+  // The review state carries the claim's shape: the recognized member (the
+  // review line) and the tie mapped to its summary from the mirror.
+  await claimFlow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 10000 });
+  const claimReview = (await claimFlow.locator('#wizard-review').textContent()) ?? '';
+  if (!claimReview.includes(`Recognized: ${bob.name}`)) throw new Error(`Claim review missing the recognized line: ${claimReview}`);
+  if (!claimReview.includes(`Tied record: "${cycle1Summary}"`)) throw new Error(`Claim review missing the tied-record line: ${claimReview}`);
+  await claimFlow.locator('.wizard-submit').click();
+  await alice.page.waitForURL(/\/contribute\/[0-9a-f-]{36}$/, { timeout: 30000 });
+  console.log('Submitted recognition claim:', alice.page.url().split('/contribute/')[1]);
+
+  // dave's named check: the machine's dim gate walks the verify payload's
+  // re-carried tie (a pass on a claim whose tie is not an ACCEPTED record
+  // returns -1 — the landed record picker never offers a bogus tie, so the
+  // gate's negative legs stay jest's G-A/G-B) and, on the pass, credits the
+  // RECOGNIZED member's C_19 tally. The settle flow mounting on alice's page
+  // is the round-trip's proof (the established cycle mechanic).
+  const claimSettleFlow = alice.page.locator('.wizard-flow[data-flow-id="settle"]');
+  let claimChecked = false;
+  for (let attempt = 0; !claimChecked && attempt < 15; attempt++) {
+    await runContributionFlow(dave, claimSummary, 'verify', { choiceValue: 'yes', textValue: 'the recognized record is accepted' });
+    claimChecked = await claimSettleFlow
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!claimChecked) {
+    const statusBar = await dave.page.locator('#status').textContent();
+    throw new Error(`The recognition claim's verify never recorded. Status bar: ${statusBar || '(empty)'}`);
+  }
+
+  // The claim settles like every schema (alice stays on the lifecycle page).
+  let claimSettled = false;
+  for (let attempt = 0; !claimSettled && attempt < 15; attempt++) {
+    await completeFlow(alice.page, 'settle', { textValue: 'accepting the recognition' });
+    claimSettled = await alice.page
+      .locator('.lc-pill--accepted')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!claimSettled) {
+    const statusBar = await alice.page.locator('#status').textContent();
+    throw new Error(`The recognition claim's pill never flipped to accepted. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('CONTRIBUTION STATUS PILL: accepted (recognition claim)');
+
+  // The tally increment is BOB's (the recognized member — alice earns nothing
+  // on C_19): his /account page's dimension tallies show the C_19 chip.
+  await nav(bob.page, '/account');
+  let claimTally = '';
+  let tallySeen = false;
+  for (let attempt = 0; !tallySeen && attempt < 15; attempt++) {
+    claimTally = (await bob.page.locator('#dim-tallies').textContent()) ?? '';
+    tallySeen = claimTally.includes('C_19');
+    if (!tallySeen) await bob.page.waitForTimeout(1000);
+  }
+  if (!tallySeen) throw new Error(`bob's C_19 tally missing from #dim-tallies; '${claimTally}'`);
+  console.log('RECOGNITION TALLY:', (claimTally.match(/C_19\s+\S+\s+—\s+[\d.]+/) || ['C_19 chip present'])[0]);
 
   // --- Custodian election flow ---
   // carol and dave registered (live pages) back in the contribution flows;
