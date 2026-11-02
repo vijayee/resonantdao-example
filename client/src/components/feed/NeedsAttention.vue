@@ -62,8 +62,8 @@ const items = computed<Item[]>(() => {
       submitter: entry.submitter,
       // Targeted contributions light the verify band ONLY for named verifiers
       // (empty = untargeted legacy — the class rule stands).
-      ...(d.getDefinedVerifiers(entry.record.contributionId).length > 0
-        ? { verifiers: d.getDefinedVerifiers(entry.record.contributionId) }
+      ...(d.getDefinedVerifiers(entry.record.contributionId, ds.members).length > 0
+        ? { verifiers: d.getDefinedVerifiers(entry.record.contributionId, ds.members) }
         : {}),
     };
     const model = wizardModel(schema, facts, me, ds.custodians.includes(me));

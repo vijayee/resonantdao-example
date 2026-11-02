@@ -140,6 +140,7 @@ export class BrowserDao {
     this.node.setPolicy('verify_contribution', POLICIES.verify_contribution);
     this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
     this.node.setPolicy('appeal_verdict', POLICIES.appeal_verdict);
+    this.node.setPolicy('reassign_verifiers', POLICIES.reassign_verifiers);
     this.node.setPolicy('audit_round', POLICIES.audit_round);
     this.node.setPolicy('reckon_round', POLICIES.reckon_round);
     this.node.setPolicy('complete_round', POLICIES.complete_round);
@@ -596,12 +597,16 @@ export class BrowserDao {
   // known members filtered against the contribution's verifiers OR-set.
   // [] when untargeted — the count register is the targeting marker (>0 =
   // targeted; legacy submissions leave it at 0/absent).
-  getDefinedVerifiers(contributionId: string): string[] {
+  //
+  // The member list is the traversal universe: the browser wasm exposes no
+  // AM-level set enumeration (only the handler-side set readers), so the
+  // client cannot list an OR-set — the server-pushed member list (the same
+  // list the wizard's steps offer) filtered by setContains is the plan-
+  // specified read (Task 7's knownMembers sketch).
+  getDefinedVerifiers(contributionId: string, members: string[]): string[] {
     const count = this.node.getRegister(CONTRIB_NAMES.verifierCount(contributionId)) || 0;
     if (count <= 0) return [];
-    return this.node
-      .getSetElements(STATE_NAMES.members)
-      .filter((m: string) => this.node.setContains(CONTRIB_NAMES.verifiers(contributionId), m));
+    return members.filter((m) => m && this.node.setContains(CONTRIB_NAMES.verifiers(contributionId), m));
   }
 
   getContributionStepDone(contributionId: string, stepId: string): number {

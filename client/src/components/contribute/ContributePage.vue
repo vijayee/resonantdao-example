@@ -51,7 +51,7 @@ const visibleEntries = computed(() => {
   if (!d || !ds.username) return [];
   const isCust = (ds.custodians ?? []).includes(ds.username);
   return entries.value.filter((e) => {
-    const { schema, facts } = contributionFacts(d, e);
+    const { schema, facts } = contributionFacts(d, e, ds.members);
     return isParticipant(e, ds.username, isCust, schema, facts);
   });
 });

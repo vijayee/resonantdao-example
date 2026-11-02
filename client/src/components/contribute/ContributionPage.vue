@@ -83,7 +83,7 @@ const composed = computed(() => {
   void ds.tick;
   const entry = located.value;
   if (!entry || !ds.dao || !ds.username) return null;
-  const { schema, facts } = contributionFacts(ds.dao, entry);
+  const { schema, facts } = contributionFacts(ds.dao, entry, ds.members);
   const model = lifecycleModel(schema, facts, entry, ds.username, (ds.custodians ?? []).includes(ds.username), ds.feedEvents());
   // Attach the CURRENT phase's form (page-side duty; never in the pure model).
   const current = model.phases.find((p) => p.state === 'current' && p.mayAct);
@@ -144,9 +144,9 @@ const reassignAvailable = computed(() => {
   // getContributionStatus maps BOTH the pending and appealed registers to
   // 'pending' — the machine's legal reassign states are exactly this set.
   if (d.getContributionStatus(e.record.contributionId) !== 'pending') return false;
-  const named = d.getDefinedVerifiers(e.record.contributionId);
+  const named = d.getDefinedVerifiers(e.record.contributionId, ds.members);
   if (named.length === 0) return false;
-  const { schema, facts } = contributionFacts(d, e);
+  const { schema, facts } = contributionFacts(d, e, ds.members);
   const verifyStep = schema.steps.find((s) => s.op === 'verify_contribution')!;
   return facts.done[verifyStep.stepId] < verifyStep.requirement.count;
 });
@@ -157,7 +157,7 @@ function remainingVerifyCount(): number {
   void ds.tick;
   const e = entry.value; const d = ds.dao;
   if (!e || !d) return 0;
-  const { schema, facts } = contributionFacts(d, e);
+  const { schema, facts } = contributionFacts(d, e, ds.members);
   const verifyStep = schema.steps.find((s) => s.op === 'verify_contribution')!;
   return Math.max(0, verifyStep.requirement.count - (facts.done[verifyStep.stepId] ?? 0));
 }
@@ -186,7 +186,7 @@ const denial = computed(() => {
   const e = located.value;
   if (!ds.dao || !ds.username) return 'Loading…';
   if (!e) return 'Unknown contribution.';
-  const { schema, facts } = contributionFacts(ds.dao, e);
+  const { schema, facts } = contributionFacts(ds.dao, e, ds.members);
   return isParticipant(e, ds.username, (ds.custodians ?? []).includes(ds.username), schema, facts)
     ? null
     : "You're not part of this contribution.";

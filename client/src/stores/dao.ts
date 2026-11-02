@@ -18,8 +18,10 @@ export const serverClient = new ServerClient();
 
 // Per-entry fact assembly for the contribution wizards (extracted from the
 // retired contribution card's computed). Takes the dao as a param — it must
-// not read store refs from module scope.
-export function contributionFacts(d: BrowserDao, entry: ContributionMirrorEntry): { schema: ReturnType<typeof schemaForDims>; facts: ContributionFacts } {
+// not read store refs from module scope. `members` is the store's known
+// member list (the browser wasm cannot enumerate an OR-set — getDefined-
+// Verifiers filters it against the verifiers set).
+export function contributionFacts(d: BrowserDao, entry: ContributionMirrorEntry, members: string[]): { schema: ReturnType<typeof schemaForDims>; facts: ContributionFacts } {
   const status = d.getContributionStatus(entry.record.contributionId);
   const schema = schemaForDims(entry.record.dims);
   const appealed = status === 'pending' && d.getContributionAppealed(entry.record.contributionId);
@@ -33,8 +35,8 @@ export function contributionFacts(d: BrowserDao, entry: ContributionMirrorEntry)
     ])),
     submitter: entry.submitter,
     // The NAMED assignment — targeting state (empty = untargeted legacy).
-    ...(d.getDefinedVerifiers(entry.record.contributionId).length > 0
-      ? { verifiers: d.getDefinedVerifiers(entry.record.contributionId) }
+    ...(d.getDefinedVerifiers(entry.record.contributionId, members).length > 0
+      ? { verifiers: d.getDefinedVerifiers(entry.record.contributionId, members) }
       : {}),
   };
   return { schema, facts };
