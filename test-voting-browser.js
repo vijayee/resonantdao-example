@@ -1,7 +1,9 @@
 const { chromium } = require('playwright');
 
 const PASSWORD = 'TestPassword123!';
-const BASE_URL = 'http://localhost:9000/';
+// The dev server's port is the default; a parallel audit run points elsewhere
+// (PORT env on the server side) without touching the file.
+const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:9000/';
 
 // SPA navigation between feature routes — never page.goto: a reload would
 // drop the in-memory wallet state the flows rely on. Auth redirects every
@@ -777,17 +779,25 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   console.log('CONTRIBUTION STATUS PILL: accepted (recognition claim)');
 
   // The tally increment is BOB's (the recognized member — alice earns nothing
-  // on C_19): his /account page's dimension tallies show the C_19 chip.
+  // on C_19): his /account page's dimension tallies show the C_19 chip. The
+  // pin reads the CHIP'S OWN element — a container-level textContent would run
+  // across adjacent span boundaries ('1' + '20 dimensions untouched' prints as
+  // '120', the artifact a container regex once showed), and presence alone
+  // would miss a units-scale regression (a raw per-mille read instead of the
+  // /1000 display). True value: match 1 × alpha 1 (the unset alpha default).
   await nav(bob.page, '/account');
-  let claimTally = '';
+  const tallyChip = bob.page.locator('#dim-tallies .tally:has-text("C_19")');
   let tallySeen = false;
   for (let attempt = 0; !tallySeen && attempt < 15; attempt++) {
-    claimTally = (await bob.page.locator('#dim-tallies').textContent()) ?? '';
-    tallySeen = claimTally.includes('C_19');
+    tallySeen = (await tallyChip.count()) > 0;
     if (!tallySeen) await bob.page.waitForTimeout(1000);
   }
-  if (!tallySeen) throw new Error(`bob's C_19 tally missing from #dim-tallies; '${claimTally}'`);
-  console.log('RECOGNITION TALLY:', (claimTally.match(/C_19\s+\S+\s+—\s+[\d.]+/) || ['C_19 chip present'])[0]);
+  if (!tallySeen) throw new Error(`bob's C_19 tally missing from #dim-tallies`);
+  const claimTally = (await tallyChip.textContent()).trim();
+  console.log('RECOGNITION TALLY:', claimTally);
+  if (claimTally !== 'C_19 Celebrating — 1') {
+    throw new Error(`bob's C_19 tally should read 'C_19 Celebrating — 1' (match 1 x the unset alpha default 1), got '${claimTally}'`);
+  }
 
   // --- Custodian election flow ---
   // carol and dave registered (live pages) back in the contribution flows;
