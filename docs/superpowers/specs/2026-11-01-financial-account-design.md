@@ -57,6 +57,12 @@ type/actor/targetId/at for contribution ops). Cases:
   label) — no separate line.
 - **Degrade gracefully**: rows whose amount math lacks its inputs (e.g. harm unknown because the
   mirror entry aged out) render with `amount: undefined, sign: '?'` — honest, not invented.
+  Documented reporting choices (review of 2026-11-01): the ledger is also bounded by the FEED's
+  own 200-event cap (older earned lines simply vanish — a recent story, not a full statement);
+  and the settle line's clock reads the SETTLE event's time while the machine credits the
+  submitter at the FINAL VERIFY — the line appears when settled, the balance moves earlier
+  (accepted-but-unsettled work shows balance without a line). A future re-key onto the
+  final-verify event would align them; pinned as a decision, not a defect.
 - Zero-amount consequential events (proposal/election/reassign lifecycle rows) never render.
 
 ### Page (`client/src/components/account/AccountPage.vue`)
