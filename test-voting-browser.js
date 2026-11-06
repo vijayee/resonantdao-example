@@ -853,10 +853,10 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // each page's settle-flow locator there (the settling turn's mount is the
   // verify round-trip's proof, the established mechanic).
   const claimASummary = 'Oriented e2e demo A ' + Math.floor(Math.random() * 10000);
-  await submitContribution(bob, '2', claimASummary, [eveName]);
+  const claimAId = await submitContribution(bob, '2', claimASummary, [eveName]);
   const settleFlowA = bob.page.locator('.wizard-flow[data-flow-id="settle"]');
   const claimBSummary = 'Oriented e2e demo B ' + Math.floor(Math.random() * 10000);
-  await submitContribution(bob, '2', claimBSummary, [frankName]);
+  const claimBId = await submitContribution(bob, '2', claimBSummary, [frankName]);
   const settleFlowB = bob.page.locator('.wizard-flow[data-flow-id="settle"]');
 
   // The declare: alice's /custodians Orientation panel drives its mini flow
@@ -990,6 +990,137 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
     throw new Error(`alice's C_17 tally must stay 'C_17 Meaning — 1' after the second verify, got '${finalChip}' (sampled '${afterSecondTally}')`);
   }
   console.log('ONCE-REGISTER: the second proven step paid nothing — the chip holds at 1');
+
+  // --- C_5 teaching claim (slice #6e) ---
+  // Rides the claim-family arcs (recognition → orientation): it MUST come
+  // after the orientation arc, because its reviewer needs a fresh reciprocity
+  // pair with alice — every base-cast pair (bob, carol, dave) is consumed by
+  // the earlier flows, and eve has only ever verified bob. Round 2 is still
+  // open (the spine closed round 1 and round 2 is never published in this
+  // script), so the claim's contributions cannot touch any published-aggregate
+  // assert downstream.
+  //
+  // alice claims she taught bob: the taught pick is bob (members minus self),
+  // the record tie pick is a record AUTHORED BY BOB (slice #6e's sharpened
+  // tie — the picker screens the chosen taught member's ACCEPTED records: bob's
+  // settled oriented claim A; the still-UNSETTLED claim B and ALICE'S cycle-1
+  // record are screened out — asserted), the reviewer is eve (alice's fresh
+  // pair). Eve's named check rides the re-carried taught/record tie (the
+  // machine pins both against the claim's stamps AND the tied record's owner
+  // set — negative legs jest's G-5-A/B/C) and, on the pass, credits the
+  // FILER's C_5 tally (the teacher's demonstrated-teaching dimension — the
+  // per-dim credit target that differs from C_19's recognized recipient).
+  console.log('Teaching: alice claims she taught bob — the tie is bob’s proven record');
+  const teachSummary = 'Teaching e2e demo ' + Math.floor(Math.random() * 10000);
+  await nav(alice.page, '/contribute');
+  await alice.page.click('#new-contribution-btn');
+  const teachFlow = alice.page.locator('.wizard-flow[data-flow-id="contribute-new"]');
+  await teachFlow.waitFor({ state: 'visible', timeout: 10000 });
+  // The DERIVED picker carries C_5 (implemented ∧ schema-wired ∧ pickable).
+  await teachFlow.locator('.wizard-option[value="5"]').check();
+  await teachFlow.locator('.wizard-next').click();
+  // The taught pick (count 1): bob — the sorted non-self members.
+  await teachFlow.locator('.wizard-member--taught').first().waitFor({ state: 'visible', timeout: 10000 });
+  await teachFlow.locator(`.wizard-member--taught[value="${bobName}"]`).check();
+  await teachFlow.locator('.wizard-next').click();
+  // The record tie pick (count 1): the options are the CHOSEN taught member's
+  // accepted records — bob's settled oriented claim A among them. The screen's
+  // two negative asserts: alice's own accepted cycle-1 record and bob's
+  // UNSETTLED claim B are never offered on a claim teaching bob.
+  const recordPick = teachFlow.locator('.wizard-member--record').first();
+  await recordPick.waitFor({ state: 'visible', timeout: 10000 });
+  const taughtScreen = teachFlow.locator(`.wizard-member--record[value="${claimAId}"]`);
+  let taughtRecordOffered = false;
+  for (let attempt = 0; !taughtRecordOffered && attempt < 10; attempt++) {
+    taughtRecordOffered = (await taughtScreen.count()) > 0;
+    if (!taughtRecordOffered) await alice.page.waitForTimeout(1000);
+  }
+  if (!taughtRecordOffered) {
+    throw new Error(`The teaching claim's record pick never offered the taught member's accepted record (${claimAId})`);
+  }
+  const wrongOwnerOffered = await teachFlow.locator(`.wizard-member--record[value="${cycle1Id}"]`).count();
+  if (wrongOwnerOffered !== 0) {
+    throw new Error(`The tie pick offered alice's own record on a claim teaching bob — the owner screen never landed`);
+  }
+  const unsettledOffered = await teachFlow.locator(`.wizard-member--record[value="${claimBId}"]`).count();
+  if (unsettledOffered !== 0) {
+    throw new Error(`The tie pick offered bob's UNSETTLED claim B — the accepted-only screen never landed`);
+  }
+  await taughtScreen.check();
+  await teachFlow.locator('.wizard-next').click();
+  await teachFlow.locator('.wizard-member--verifiers').first().waitFor({ state: 'visible', timeout: 10000 });
+  await teachFlow.locator(`.wizard-member--verifiers[value="${eveName}"]`).check();
+  await teachFlow.locator('.wizard-next').click();
+  await teachFlow.locator('textarea').fill(teachSummary);
+  await teachFlow.locator('.wizard-next').click();
+  await teachFlow.locator('.wizard-evidence-pointer').fill('https://example.com/evidence/teaching');
+  await teachFlow.locator('.wizard-next').click();
+  // The review state carries the claim's shape: the taught member by name and
+  // the tie mapped to its summary from the mirror.
+  await teachFlow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 10000 });
+  const teachReview = (await teachFlow.locator('#wizard-review').textContent()) ?? '';
+  if (!teachReview.includes(`Taught: ${bobName}`)) throw new Error(`Teaching claim review missing the taught line: ${teachReview}`);
+  if (!teachReview.includes(`Tied record: "${claimASummary}"`)) throw new Error(`Teaching claim review missing the tied-record line: ${teachReview}`);
+  await teachFlow.locator('.wizard-submit').click();
+  await alice.page.waitForURL(/\/contribute\/[0-9a-f-]{36}$/, { timeout: 30000 });
+  console.log('Submitted teaching claim:', alice.page.url().split('/contribute/')[1]);
+
+  // eve's named check → the settle flow mounts on alice's page (the
+  // established round-trip proof), retrying through the demo clock.
+  const teachSettleFlow = alice.page.locator('.wizard-flow[data-flow-id="settle"]');
+  let teachChecked = false;
+  for (let attempt = 0; !teachChecked && attempt < 15; attempt++) {
+    await runContributionFlow(eve, teachSummary, 'verify', { choiceValue: 'yes', textValue: 'the student’s record demonstrates the teaching' });
+    teachChecked = await teachSettleFlow
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+    if (!teachChecked) await eve.page.waitForTimeout(1000);
+  }
+  if (!teachChecked) {
+    const statusBar = await eve.page.locator('#status').textContent();
+    throw new Error(`The teaching claim's verify never recorded. Status bar: ${statusBar || '(empty)'}`);
+  }
+
+  // The claim settles like every schema (alice stays on the lifecycle page).
+  let teachSettled = false;
+  for (let attempt = 0; !teachSettled && attempt < 15; attempt++) {
+    await completeFlow(alice.page, 'settle', { textValue: 'accepting the teaching claim' });
+    teachSettled = await alice.page
+      .locator('.lc-pill--accepted')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+    if (!teachSettled) await alice.page.waitForTimeout(1000);
+  }
+  if (!teachSettled) {
+    const statusBar = await alice.page.locator('#status').textContent();
+    throw new Error(`The teaching claim's pill never flipped to accepted. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('CONTRIBUTION STATUS PILL: accepted (teaching claim)');
+
+  // The tally increment is ALICE's (the FILER — the teacher's
+  // demonstrated-teaching tally; bob earns nothing on her claim). The pin
+  // reads the chip's OWN element, EXACT text (match 1 × the unset alpha
+  // default 1, the established standard; the container textContent would run
+  // across span boundaries).
+  await nav(alice.page, '/account');
+  const teachChip = alice.page.locator('#dim-tallies .tally:has-text("C_5")');
+  let teachTallySeen = false;
+  for (let attempt = 0; !teachTallySeen && attempt < 15; attempt++) {
+    teachTallySeen = (await teachChip.count()) > 0;
+    if (!teachTallySeen) await alice.page.waitForTimeout(1000);
+  }
+  if (!teachTallySeen) throw new Error(`alice's C_5 tally missing from #dim-tallies after the teaching claim`);
+  const teachTally = (await teachChip.textContent()).trim();
+  console.log('TEACHING TALLY:', teachTally);
+  if (teachTally !== 'C_5 Teaching — 1') {
+    throw new Error(`alice's C_5 tally should read 'C_5 Teaching — 1' (match 1 x the unset alpha default 1), got '${teachTally}'`);
+  }
+  // The STUDENT earned nothing: bob carries no C_5 chip.
+  await nav(bob.page, '/account');
+  await bob.page.locator('#ledger').waitFor({ state: 'visible', timeout: 10000 });
+  if ((await bob.page.locator('#dim-tallies .tally:has-text("C_5")').count()) !== 0) {
+    throw new Error(`bob (the student) carries a C_5 chip — the filer's tally was misattributed`);
+  }
 
 
   // --- Custodian election flow ---
