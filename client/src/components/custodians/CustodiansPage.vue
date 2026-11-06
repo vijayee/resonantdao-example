@@ -64,7 +64,7 @@
             @close="onOrientationClosed"
           />
         </template>
-        <p v-else class="muted">No eligible orientees right now — every other member is already oriented.</p>
+        <p v-else class="muted">{{ orientationDeadEnd }}</p>
       </div>
     </Panel>
   </div>
@@ -118,6 +118,14 @@ const orientationOptions = computed(() => {
   void ds.tick;
   if (!ds.dao || !ds.username) return [];
   return ds.dao.eligibleOrientees(ds.members);
+});
+// The visible dead-end: distinguish "the DAO is young" from "everyone is
+// already oriented" — an honest line for each.
+const orientationDeadEnd = computed(() => {
+  void ds.tick;
+  const others = ds.members.filter((m) => m !== ds.username).length;
+  if (others === 0) return 'No other members yet — orientees appear here as members join.';
+  return 'No eligible orientees right now — every other member is already oriented.';
 });
 const orientationFlow = computed<FlowDefinition>(() => ({
   id: 'orientation',
