@@ -101,6 +101,11 @@ export const CONTRIB_NAMES = {
   // C_19's ties (recognition): the recognized member + the linked record.
   recognized: (contributionId: string) => `contrib:${contributionId}:rec`,
   recordTie: (contributionId: string) => `contrib:${contributionId}:tie`,
+  // C_5's tie (teaching, slice #6e): the TAUGHT member. The linked record
+  // reuses `recordTie`; the tie itself must be the student's work — the
+  // verify gate reads the tied record's OWNER set and requires the taught
+  // name in it (the owner sets are the machine's authorship stamps).
+  taught: (contributionId: string) => `contrib:${contributionId}:taught`,
   // C_17 Star (slice #6d): the orientation registry. `oriented(orientee)` is
   // the per-orientee once-register (0→1 — the FIRST orientation wins; the
   // panel reads it per candidate), `orientedBy(orientee)` holds the winning

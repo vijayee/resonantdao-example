@@ -1,8 +1,9 @@
 // Contribution economy registry — mirrors docs/contribution-economy/README.md
 // and docs/superpowers/specs/2026-09-16-contribution-economy-workflows-design.md.
 // Phase 1 implements payment rules only for C_1 (building), C_2 (recording)
-// and C_18 (verifying); other dimensions classify actions into the 22-vector
-// but pay nothing.
+// and C_18 (verifying); the wired claim dims (C_19 recognition, C_5 teaching)
+// pay through the claim handlers' tallies; every other dimension classifies
+// actions into the 22-vector and pays nothing.
 
 import { RES_CONFIG } from './policies';
 
@@ -11,7 +12,9 @@ export interface DimensionDef {
   code: string;
   name: string;
   cls: string; // ontology class from docs/contribution-economy/diagrams.json
-  implemented: boolean; // submittable: a phase-1 RES payment rule, or a wired claim schema (C_19)
+  // submittable: a phase-1 RES payment rule, or a wired claim schema
+  // (C_19 recognition, C_5 teaching).
+  implemented: boolean;
   // pickable: submittable AS ITS OWN CLAIM — surfaces in the picker. Implemented
   // rules that only exist inside other claims' workflows (C_18's verifying)
   // stay unpickable — embedded rules surface through the flows they belong to.
@@ -24,13 +27,16 @@ export const DIMENSION_COUNT = 22 as const;
 // verifying rule is live but embedded — it surfaces through the claims it
 // verifies, never as its own picker type. Future claim dims enter by
 // declaring themselves pickable here (no hardcoded picker lists anywhere).
+// The claim schemas: C_1 (building's two-verifier v2), C_2 (recording),
+// C_18 (verifying — embedded only), C_19 (recognition, slice #6a) and C_5
+// (teaching, slice #6e — the claim-gate map's first other-shape).
 export const DIMENSIONS: DimensionDef[] = [
   { index: 0,  code: 'C_0',  name: 'Fool',       cls: 'Crossing',    implemented: false, pickable: false },
   { index: 1,  code: 'C_1',  name: 'Magician',   cls: 'Building',    implemented: true,  pickable: true },
   { index: 2,  code: 'C_2',  name: 'Priestess',  cls: 'Recording',   implemented: true,  pickable: true },
   { index: 3,  code: 'C_3',  name: 'Empress',    cls: 'Nurturing',   implemented: false, pickable: false },
   { index: 4,  code: 'C_4',  name: 'Emperor',    cls: 'Structuring', implemented: false, pickable: false },
-  { index: 5,  code: 'C_5',  name: 'Hierophant', cls: 'Teaching',    implemented: false, pickable: false },
+  { index: 5,  code: 'C_5',  name: 'Hierophant', cls: 'Teaching',    implemented: true,  pickable: true },
   { index: 6,  code: 'C_6',  name: 'Lovers',     cls: 'Joining',     implemented: false, pickable: false },
   { index: 7,  code: 'C_7',  name: 'Chariot',    cls: 'Driving',     implemented: false, pickable: false },
   { index: 8,  code: 'C_8',  name: 'Strength',   cls: 'Resolving',   implemented: false, pickable: false },
@@ -211,7 +217,7 @@ export const DEFAULT_SCHEMA: DimensionSchema = {
 };
 
 export const SCHEMAS: Map<number, DimensionSchema> = new Map();
-for (const dimIndex of [1, 2, 18, 19]) {
+for (const dimIndex of [1, 2, 5, 18, 19]) {
   SCHEMAS.set(dimIndex, {
     dimIndex,
     schemaVersion: SCHEMA_VERSION,

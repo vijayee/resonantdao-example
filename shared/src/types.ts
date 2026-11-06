@@ -98,6 +98,10 @@ export interface ContributionPayload {
   // Recognition ties (slice #6a, C_19): set ONLY on C_19 claims.
   recognized?: string; // the member whose work is recognized (≠ the submitter)
   recordId?: string;   // the tied contribution (machine-checked accepted)
+  // Teaching tie (slice #6e, C_5): set ONLY on C_5 claims. The TAUGHT member
+  // (≠ the filer, a member) — the tied record must be authored by them (the
+  // machine's owner set pins the author; the verify gate cross-checks it).
+  taught?: string;
 }
 
 // Recognition claims (slice #6a, C_19): a ContributionPayload whose
@@ -136,6 +140,12 @@ export interface VerifyContributionPayload {
   // Absent on every other dimension.
   recognized?: string; // the member whose work the claim recognizes
   recordId?: string;   // the claim's tied contribution
+  // Teaching tie (slice #6e, C_5): re-carried on the verify payload — the C_19
+  // pattern (the machine cannot enumerate the claim's tie OR-sets, so the
+  // recordId + taught names ride the payload), pinned against the claim's
+  // submit-stamped taught/recordTie sets AND the tied record's owner set (the
+  // gate requires the taught name in it). Absent on every other dimension.
+  taught?: string; // the member whose competence the claim demonstrates
   // Orientation (slice #6d, C_17): the submitter's guide, re-carried on the
   // verify payload — the machine cannot enumerate the registry OR-set to FIND
   // the guide, so the name rides the payload and the handler cross-checks it

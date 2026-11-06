@@ -33,6 +33,141 @@ function isValidOptions(value: unknown): value is string[] {
   );
 }
 
+// The minimal node surface the claim gates/credits write through (declare-
+// first: the real CRABS wrapper throws resource_not_found on an undeclared
+// write, so gate reads declare their sets/registers before setContains).
+interface ClaimNode {
+  addORSet(name: string): void;
+  addRegister(name: string, initial?: number): void;
+}
+
+// The claim-gate map (slice #6e): the claim family's per-dim rules in one
+// structure — the substrate's claim-gate seam. Each wired claim DIMENSION
+// keys one entry:
+//   - submitOk: the submit-side tie validation (a valid claim payload).
+//   - tieSets: the OR-set resource names the claim's stamps write (every
+//     submission declares the union of the registry's sets — the pre-#6e
+//     behavior preserved, where recognition's sets declared unconditionally).
+//   - stamp: the tie facts INTO those sets (setAdd at submit, unique tags).
+//   - verifyGate: the pass-path gate — the verify payload RE-CARRIES the tie
+//     fields (the machine cannot enumerate the claim's tie OR-sets to find
+//     the names, so the ids ride the payload), and the re-carry is NOT
+//     trusted: it must satisfy the machine's submit-stamped tie sets and the
+//     claim's real predicates. A forged re-carry dies all-or-nothing (no
+//     per-check credit, no guard set, no record).
+//   - credit/creditDim: the tally credit at the step's final completion — the
+//     recipients DIFFER per claim (C_19 credits the RECOGNIZED member; C_5
+//     credits the FILER). The calibration term scales both like every tally.
+// C_19's inline blocks (slice #6a) refactored INTO this map — behavior
+// identical for C_19 (its contracts stay byte-green). The next claim types
+// (C_15's corroboration etc.) design onto this map, not around it.
+interface ClaimRule {
+  submitOk(state: HandlerState, payload: ContributionPayload, signerId: string): boolean;
+  tieSets(contributionId: string): string[];
+  stamp(state: HandlerState, payload: ContributionPayload, signerId: string): void;
+  verifyGate(node: ClaimNode, state: HandlerState, payload: VerifyContributionPayload): boolean;
+  creditTarget(payload: VerifyContributionPayload): string | undefined;
+  creditDim: number;
+}
+
+const CLAIM_RULES: Record<number, ClaimRule> = {
+  // C_19 Recognition (slice #6a): the tied record must simply be ACCEPTED (any
+  // member's work); the credited party is the RECOGNIZED member — the filer
+  // earns nothing on their own recognition claim.
+  19: {
+    submitOk: (state, payload, signerId) => {
+      const rec = payload.recognized;
+      const tie = payload.recordId;
+      return (
+        isNonEmptyString(rec) && rec !== signerId && state.setContains(STATE_NAMES.members, rec) &&
+        isNonEmptyString(tie) && state.setContains(STATE_NAMES.contributions, tie)
+      );
+    },
+    tieSets: (contributionId) => [CONTRIB_NAMES.recognized(contributionId), CONTRIB_NAMES.recordTie(contributionId)],
+    stamp: (state, payload, signerId) => {
+      state.setAdd(CONTRIB_NAMES.recognized(payload.contributionId), payload.recognized as string, `submit:rec:${signerId}`);
+      state.setAdd(CONTRIB_NAMES.recordTie(payload.contributionId), payload.recordId as string, `submit:tie:${signerId}`);
+    },
+    verifyGate: (node, state, payload) => {
+      const tieId = payload.recordId;
+      const rec = payload.recognized;
+      if (
+        !isNonEmptyString(tieId) ||
+        !state.setContains(STATE_NAMES.contributions, tieId) ||
+        state.getRegister(CONTRIB_NAMES.status(tieId)) !== STATUS_ACCEPTED ||
+        !isNonEmptyString(rec) ||
+        !state.setContains(STATE_NAMES.members, rec) ||
+        rec === payload.submitter
+      ) {
+        return false;
+      }
+      // Declare-first per the real-wasm idiom (the submit stamps may not be
+      // known to a lagging replica yet; re-declare is a safe
+      // duplicate_operation).
+      try { node.addORSet(CONTRIB_NAMES.recognized(payload.contributionId)); } catch (err) { /* exists */ }
+      try { node.addORSet(CONTRIB_NAMES.recordTie(payload.contributionId)); } catch (err) { /* exists */ }
+      return (
+        state.setContains(CONTRIB_NAMES.recognized(payload.contributionId), rec) &&
+        state.setContains(CONTRIB_NAMES.recordTie(payload.contributionId), tieId)
+      );
+    },
+    creditTarget: (payload) => {
+      const rec = payload.recognized;
+      return rec && rec !== payload.submitter ? rec : undefined;
+    },
+    creditDim: 19,
+  },
+  // C_5 Teaching (slice #6e): the tie SHARPENS on the owner set — the linked
+  // record must be ACCEPTED AND authored by the TAUGHT member (the
+  // demonstration's proven work belongs to the student). The credit is the
+  // FILER's C_5 tally: the teacher's demonstrated-teaching dimension — a
+  // self-claim of their own teaching, third-party verified. No $RES movement
+  // (money stays tied to building/recording; the classification dim pays no
+  // bounty, the credit below is the tally's sole write).
+  5: {
+    submitOk: (state, payload, signerId) => {
+      const taught = payload.taught;
+      const tie = payload.recordId;
+      return (
+        isNonEmptyString(taught) && taught !== signerId && state.setContains(STATE_NAMES.members, taught) &&
+        isNonEmptyString(tie) && state.setContains(STATE_NAMES.contributions, tie)
+      );
+    },
+    tieSets: (contributionId) => [CONTRIB_NAMES.taught(contributionId), CONTRIB_NAMES.recordTie(contributionId)],
+    stamp: (state, payload, signerId) => {
+      state.setAdd(CONTRIB_NAMES.taught(payload.contributionId), payload.taught as string, `submit:taught:${signerId}`);
+      state.setAdd(CONTRIB_NAMES.recordTie(payload.contributionId), payload.recordId as string, `submit:tie:${signerId}`);
+    },
+    verifyGate: (node, state, payload) => {
+      const tieId = payload.recordId;
+      const taught = payload.taught;
+      if (
+        !isNonEmptyString(tieId) ||
+        !state.setContains(STATE_NAMES.contributions, tieId) ||
+        state.getRegister(CONTRIB_NAMES.status(tieId)) !== STATUS_ACCEPTED ||
+        !isNonEmptyString(taught) ||
+        !state.setContains(STATE_NAMES.members, taught) ||
+        taught === payload.submitter
+      ) {
+        return false;
+      }
+      // Declare-first per the real-wasm idiom — the tied record's owner set
+      // is the pin this gate reads (the tie must be the STUDENT's accepted
+      // work, and the owner sets are the machine's authorship stamps).
+      try { node.addORSet(CONTRIB_NAMES.owner(tieId)); } catch (err) { /* exists */ }
+      try { node.addORSet(CONTRIB_NAMES.taught(payload.contributionId)); } catch (err) { /* exists */ }
+      try { node.addORSet(CONTRIB_NAMES.recordTie(payload.contributionId)); } catch (err) { /* exists */ }
+      return (
+        state.setContains(CONTRIB_NAMES.taught(payload.contributionId), taught) &&
+        state.setContains(CONTRIB_NAMES.recordTie(payload.contributionId), tieId) &&
+        state.setContains(CONTRIB_NAMES.owner(tieId), taught)
+      );
+    },
+    creditTarget: (payload) => payload.submitter,
+    creditDim: 5,
+  },
+};
+
 // Every schema starts with a submit step whose op is 'submit_contribution',
 // so a successful submission auto-completes step 0: the lifecycle position
 // register starts at index 1.
@@ -78,24 +213,21 @@ export function makeSubmitContributionHandler(
       if (!verifyStep || payload.verifiers.length !== verifyStep.requirement.count) return -1;
     }
 
-    // C_19 recognition claims (slice #6a): the claim's ties validate here —
-    // the recognized member must be a member ≠ the submitter and the tied
-    // record must already exist. The tie's ACCEPTED status is NOT required at
-    // submit: the verify gate (G-A) machine-checks the record's status so a
-    // claim settles only over proven work.
-    let recognized: string | undefined;
-    let recordTieId: string | undefined;
-    if (payload.dims['19'] !== undefined) {
-      const rec = payload.recognized;
-      const tie = payload.recordId;
-      if (
-        !isNonEmptyString(rec) || rec === op.signerId || !state.setContains(STATE_NAMES.members, rec) ||
-        !isNonEmptyString(tie) || !state.setContains(STATE_NAMES.contributions, tie)
-      ) {
-        return -1;
+    // The claim family (slices #6a/#6e): per-dim tie validation through the
+    // claim-gate map. The tied record's EXISTENCE is required at submit; the
+    // tie's ACCEPTED status / authorship are NOT — the verify gate
+    // machine-checks those, so a claim settles only over proven work. A
+    // payload naming TWO claim rules at once (a dim hybrid) is rejected here —
+    // every claim rides exactly one wired claim schema.
+    let claimRule: ClaimRule | undefined;
+    for (const [dimKey] of Object.entries(payload.dims)) {
+      const rule = CLAIM_RULES[Number(dimKey)];
+      if (rule !== undefined) {
+        if (claimRule !== undefined || !rule.submitOk(state, payload, op.signerId)) {
+          return -1;
+        }
+        claimRule = rule;
       }
-      recognized = rec;
-      recordTieId = tie;
     }
 
     try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
@@ -122,14 +254,19 @@ export function makeSubmitContributionHandler(
       }
       state.setRegister(CONTRIB_NAMES.verifierCount(payload.contributionId), payload.verifiers.length, op.signerId);
     }
-    // C_19's tie stamps (slice #6a): the claim's recognized member + the
-    // linked record — the OR-sets are the permanent record; the verify gate
-    // reads the payload's re-carried recordId (handlers cannot enumerate sets).
-    try { node.addORSet(CONTRIB_NAMES.recognized(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
-    try { node.addORSet(CONTRIB_NAMES.recordTie(payload.contributionId)); } catch (err) { /* ignore duplicate */ }
-    if (recognized !== undefined && recordTieId !== undefined) {
-      state.setAdd(CONTRIB_NAMES.recognized(payload.contributionId), recognized, `submit:rec:${op.signerId}`);
-      state.setAdd(CONTRIB_NAMES.recordTie(payload.contributionId), recordTieId, `submit:tie:${op.signerId}`);
+    // The claim ties' stamps (slices #6a/#6e): every submission declares the
+    // claim registry's tie sets (the pre-#6e behavior — recognition's sets
+    // declared unconditionally — preserved; re-declare is a safe
+    // duplicate_operation), and a claim's rule stamps its tie facts into them.
+    // The OR-sets are the permanent record; the verify gate reads the
+    // payload's re-carried names (handlers cannot enumerate sets).
+    for (const rule of Object.values(CLAIM_RULES)) {
+      for (const name of rule.tieSets(payload.contributionId)) {
+        try { node.addORSet(name); } catch (err) { /* ignore duplicate */ }
+      }
+    }
+    if (claimRule !== undefined) {
+      claimRule.stamp(state, payload, op.signerId);
     }
     state.setRegister(CONTRIB_NAMES.status(payload.contributionId), 0, op.signerId);
     state.incrementPNCounter(CONTRIB_NAMES.stepDone(payload.contributionId, 'submit'), 1, op.signerId);
@@ -254,37 +391,24 @@ export function makeVerifyContributionHandler(
       return -1; // mutual loop bar: the submitter previously verified this verifier
     }
 
-    // The dimension gate hook (slice #6a): per-dim predicates the pass path
-    // must satisfy before ANY write. C_19: the verify payload RE-CARRIES the
-    // claim's ties (the machine cannot enumerate the claim's tie OR-sets to
-    // find the record id — the ids ride the payload), but the re-carry is NOT
-    // trusted: the tied record must exist AND hold the machine's accepted
-    // status, the recognized member must be a member ≠ the submitter, and
-    // BOTH must match the claim's submit-stamped tie sets (setContains reads
-    // them — the same machine-pinned read settle/appeal use on the owner set).
-    // A payload naming a different record or a different credited member is a
-    // forged tie. A failing gate exits all-or-nothing: no per-check credit, no
-    // guard set, no record.
-    if (payload.dims['19'] !== undefined && payload.pass) {
-      const tieId = payload.recordId;
-      const rec = payload.recognized;
-      if (
-        !isNonEmptyString(tieId) ||
-        !state.setContains(STATE_NAMES.contributions, tieId) ||
-        state.getRegister(CONTRIB_NAMES.status(tieId)) !== STATUS_ACCEPTED ||
-        !isNonEmptyString(rec) ||
-        !state.setContains(STATE_NAMES.members, rec) ||
-        rec === payload.submitter
-      ) {
-        return -1;
-      }
-      try { node.addORSet(CONTRIB_NAMES.recognized(payload.contributionId)); } catch (err) { /* exists */ }
-      try { node.addORSet(CONTRIB_NAMES.recordTie(payload.contributionId)); } catch (err) { /* exists */ }
-      if (
-        !state.setContains(CONTRIB_NAMES.recognized(payload.contributionId), rec) ||
-        !state.setContains(CONTRIB_NAMES.recordTie(payload.contributionId), tieId)
-      ) {
-        return -1;
+    // The claim gate hook (slices #6a/#6e): per-dim predicates the pass path
+    // must satisfy before ANY write. The verify payload RE-CARRIES the claim's
+    // tie fields (the machine cannot enumerate the claim's tie OR-sets to
+    // find the names — the ids ride the payload), but the re-carry is NOT
+    // trusted: the claim-gate map's gate pins it against the claim's
+    // submit-stamped tie sets (setContains reads them — the same
+    // machine-pinned read settle/appeal use on the owner set) and runs the
+    // claim's real predicates (C_19: the tied record holds the machine's
+    // accepted status; C_5: the tie is ALSO the taught member's accepted
+    // record — the owner-set pin). A payload naming a different record or a
+    // different credited/taught member is a forged tie. A failing gate exits
+    // all-or-nothing: no per-check credit, no guard set, no record.
+    if (payload.pass) {
+      for (const [dimKey] of Object.entries(payload.dims)) {
+        const rule = CLAIM_RULES[Number(dimKey)];
+        if (rule !== undefined && !rule.verifyGate(node, state, payload)) {
+          return -1;
+        }
       }
     }
 
@@ -415,21 +539,32 @@ export function makeVerifyContributionHandler(
         state.setRegister(tallyReg, (state.getRegister(tallyReg) || 0) + toRegisterUnits(delta), op.signerId);
       }
 
-      // Recognition (slice #6a, C_19): the RECOGNIZED member carries the
-      // credit — the submitter earns nothing on C_19 (no $RES: the bounty
-      // loop above pays nothing for classification dims and the tally loop
-      // skips them; the calibration term scales this credit like every other).
-      if (payload.dims['19'] !== undefined) {
-        const rec = payload.recognized;
-        if (rec && rec !== payload.submitter) {
-          const recTally = CONTRIB_NAMES.dimensionBalance(rec, 19);
-          try { node.addRegister(recTally, 0); } catch (err) { /* ignore duplicate */ }
-          state.setRegister(
-            recTally,
-            (state.getRegister(recTally) || 0) + toRegisterUnits(dimensionDeltaFor(19, payload.dims['19']) * alphaFor(19) * harmFactor),
-            op.signerId
-          );
+      // Recognition (slice #6a, C_19) / teaching (slice #6e, C_5): the
+      // claim's PER-DIM credit — the claim-gate map decides the recipient,
+      // and the targets genuinely differ (C_19 credits the RECOGNIZED member
+      // — the submitter earns nothing on a claim about another's work; C_5
+      // credits the FILER — the teacher's demonstrated-teaching tally, a
+      // self-claim of their own teaching, third-party verified). The general
+      // bounty loop above pays nothing for these classification dims and the
+      // tally loop skips them; this credit is the tally's sole write, scaled
+      // by the calibration term like every other.
+      for (const [dimKey] of Object.entries(payload.dims)) {
+        const rule = CLAIM_RULES[Number(dimKey)];
+        if (rule === undefined) {
+          continue;
         }
+        const creditTo = rule.creditTarget(payload);
+        if (!creditTo) {
+          continue;
+        }
+        const creditTally = CONTRIB_NAMES.dimensionBalance(creditTo, rule.creditDim);
+        try { node.addRegister(creditTally, 0); } catch (err) { /* ignore duplicate */ }
+        state.setRegister(
+          creditTally,
+          (state.getRegister(creditTally) || 0) +
+            toRegisterUnits(dimensionDeltaFor(rule.creditDim, payload.dims[dimKey]) * alphaFor(rule.creditDim) * harmFactor),
+          op.signerId
+        );
       }
 
       // The orientation credit (slice #6d, C_17): the SUBMITTER's guide earns
