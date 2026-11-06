@@ -55,9 +55,10 @@ interface ClaimNode {
 //     trusted: it must satisfy the machine's submit-stamped tie sets and the
 //     claim's real predicates. A forged re-carry dies all-or-nothing (no
 //     per-check credit, no guard set, no record).
-//   - credit/creditDim: the tally credit at the step's final completion — the
-//     recipients DIFFER per claim (C_19 credits the RECOGNIZED member; C_5
-//     credits the FILER). The calibration term scales both like every tally.
+//   - creditTarget/creditDim: the tally credit at the step's final completion
+//     — the recipients DIFFER per claim (C_19 credits the RECOGNIZED member;
+//     C_5 credits the FILER). The calibration term scales both like every
+//     tally.
 // C_19's inline blocks (slice #6a) refactored INTO this map — behavior
 // identical for C_19 (its contracts stay byte-green). The next claim types
 // (C_15's corroboration etc.) design onto this map, not around it.
