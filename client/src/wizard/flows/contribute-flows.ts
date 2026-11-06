@@ -3,6 +3,7 @@ import { RECIP_NAMES } from '@shared/policies';
 import type { ContributionMirrorEntry } from '../../dao';
 import { useDaoStore } from '../../stores/dao';
 import type { FlowAnswers, FlowDefinition } from '../types';
+import { claimTieSteps } from './claim-steps';
 
 // Flow factories close over the dao store + target entry; each returns a
 // plain FlowDefinition the shell renders. Semantics are 1:1 with the removed
@@ -86,6 +87,7 @@ export function appealFlow(entry: ContributionMirrorEntry): FlowDefinition {
 const DIM_DESCS: Record<number, string> = {
   1: 'built something real — bounty 12 $RES',
   2: 'a durable, findable record — base credit 3 $RES',
+  5: 'taught something real — credited on the student’s demonstrated competence',
   19: 'recognize someone’s proven work — credits their C_19 tally (the tie is machine-checked)',
 };
 
@@ -96,35 +98,44 @@ export function dimensionOptions(): Array<{ value: string; label: string; desc: 
     .map((d) => ({ value: String(d.index), label: `${d.code} ${d.name} — ${d.cls}`, desc: DIM_DESCS[d.index] ?? '' }));
 }
 
-// The recognition claim's recognized-member screen (slice #6a): members minus
-// self — recognition is the submitter's act ABOUT someone else's proven work;
-// the machine's only barring is self-recognition (S-B), so the picker mirrors
-// exactly that.
+// The claim family's partner screen (slices #6a/#6e): members minus self —
+// a recognition names someone else's proven work and a teaching claims
+// competence in ANOTHER member; the machines' self-bars (S-B / S-5-B) are the
+// only barrings, so the picker mirrors exactly that.
 export function recognizableMemberOptions(ds: ReturnType<typeof useDaoStore>): string[] {
   void ds.tick;
   return ds.members.filter((m) => m && m !== ds.username).sort();
 }
 
-// The record-tie screen (slice #6a): the viewer's OWN ACCEPTED contributions
-// (via the dao mirror) — the tie must be a contribution whose status register
-// is the machine's accepted, and the recognizer's own accepted records are the
-// pick list. Values are the contribution ids (LOW-cosmetic: the picker prints
-// the raw ids; the review line shows the mapped summary).
-export function ownAcceptedRecordOptions(ds: ReturnType<typeof useDaoStore>): string[] {
+// The claim tie steps' mirror read (slices #6a/#6e): the store's known members,
+// the viewer, and the machine-ACCEPTED contributions (id + submitter) both
+// tie picks screen by — the tie must be a contribution whose status register
+// is the machine's accepted, and the C_19/C_5 rules each further screen
+// ownership inside claimTieSteps (the recognizer's own records / the chosen
+// taught member's records). Values are the contribution ids (LOW-cosmetic:
+// the picker prints the raw ids; the review line shows the mapped summary).
+function claimTieWorld(ds: ReturnType<typeof useDaoStore>) {
   void ds.tick;
   const d = ds.dao;
   const me = ds.username;
-  if (!d || !me) return [];
-  return d.getContributions()
-    .filter((e) => e.submitter === me && d.getContributionStatus(e.record.contributionId) === 'accepted')
-    .map((e) => e.record.contributionId);
+  return {
+    members: [...ds.members],
+    username: me,
+    acceptedContributions: d
+      ? d.getContributions()
+        .filter((e) => d.getContributionStatus(e.record.contributionId) === 'accepted')
+        .map((e) => ({ id: e.record.contributionId, submitter: e.submitter }))
+      : [],
+  };
 }
 
 // The new-contribution wizard: linear flow at /contribute/new. The step list
-// is a function of the answers (slice #6a): C_19's recognition claim gains the
-// two tie picks; C_1/C_2 walk the plain form. The submit success routes to the
-// new lifecycle page — the page supplies onSubmitted (the store returns the
-// id; routing is the page's business, never the factory's).
+// is a function of the answers (slices #6a/#6e): the claim-family types gain
+// the two tie picks (C_19: recognized + own record; C_5: taught + the student's
+// record — the options DYNAMIC per the taught answer); C_1/C_2 walk the plain
+// form. The submit success routes to the new lifecycle page — the page
+// supplies onSubmitted (the store returns the id; routing is the page's
+// business, never the factory's).
 export function contributeNewFlow(onSubmitted: (contributionId: string) => void): FlowDefinition {
   const ds = useDaoStore();
   return {
@@ -135,18 +146,7 @@ export function contributeNewFlow(onSubmitted: (contributionId: string) => void)
         kind: 'choice', id: 'dim', title: 'What kind of contribution?',
         options: dimensionOptions(),
       },
-      ...(Number(a.dim) === 19 ? [
-        {
-          kind: 'members' as const, id: 'recognized', title: 'Whose work is recognized?',
-          options: recognizableMemberOptions(ds),
-          count: 1,
-        },
-        {
-          kind: 'members' as const, id: 'record', title: 'Tie it to a proven record',
-          options: ownAcceptedRecordOptions(ds),
-          count: 1,
-        },
-      ] : []),
+      ...claimTieSteps(Number(a.dim), a, claimTieWorld(ds)),
       {
         kind: 'members', id: 'verifiers', title: 'Who verifies this?',
         // Screened at pick: non-self members the projection says may verify.
@@ -160,34 +160,40 @@ export function contributeNewFlow(onSubmitted: (contributionId: string) => void)
     ],
     reviewSummary: (a, files) => [
       `Type: ${a.dim}`,
-      ...(Number(a.dim) === 19 ? tiesReviewLines(ds, a) : []),
+      ...claimReviewLines(ds, a),
       `Summary: ${(a.summary ?? '').trim()}`,
       `Verifiers: ${(a.verifiers ?? '').split(',').filter(Boolean).join(', ')}`,
       files?.['evidence'] ? 'Evidence: stored file' : a.evidence ? `Pointer: ${a.evidence}` : 'No evidence yet',
     ],
     submit: async (a, files) => {
       const named = (a.verifiers ?? '').split(',').filter(Boolean);
-      // The recognition claim's ties ride (slice #6a) ONLY on a C_19 claim —
+      // The claim's ties ride (slices #6a/#6e) ONLY on a claim type —
       // the 5-arg call (byte-identical payload) for every other type.
-      const ties = Number(a.dim) === 19
+      const dim = Number(a.dim);
+      const ties = dim === 19
         ? { recognized: (a.recognized ?? '').trim(), recordId: (a.record ?? '').trim() }
-        : undefined;
-      const id = await ds.submitContribution((a.summary ?? '').trim(), Number(a.dim), files?.['evidence'] ?? null, (a.evidence ?? '').trim(), named, ties);
+        : dim === 5
+          ? { taught: (a.taught ?? '').trim(), recordId: (a.record ?? '').trim() }
+          : undefined;
+      const id = await ds.submitContribution((a.summary ?? '').trim(), dim, files?.['evidence'] ?? null, (a.evidence ?? '').trim(), named, ties);
       if (!id) throw new Error('The contribution did not record — check the message below the page.');
       onSubmitted(id);
     },
   };
 }
 
-// The review's tie lines (slice #6a): the recognized member by name; the tied
-// record mapped to its summary through the mirror (the raw id rides along so
-// the review stays honest to the submitted payload; unmapped → the raw id).
-// LOW-cosmetic note: the PICK itself shows the raw id — the review is where
-// the summary shows.
-function tiesReviewLines(ds: ReturnType<typeof useDaoStore>, a: FlowAnswers): string[] {
+// The review's tie lines (slices #6a/#6e): the claim's partner by name (the
+// recognized member / the taught member); the tied record mapped to its
+// summary through the mirror (the raw id rides along so the review stays
+// honest to the submitted payload; unmapped → the raw id). LOW-cosmetic note:
+// the PICK itself shows the raw id — the review is where the summary shows.
+function claimReviewLines(ds: ReturnType<typeof useDaoStore>, a: FlowAnswers): string[] {
+  const dim = Number(a.dim);
+  if (dim !== 19 && dim !== 5) return [];
   void ds.tick;
   const lines: string[] = [];
   if (a.recognized) lines.push(`Recognized: ${a.recognized}`);
+  if (a.taught) lines.push(`Taught: ${a.taught}`);
   if (a.record) {
     const tied = (ds.dao?.getContributions() ?? []).find((e) => e.record.contributionId === a.record);
     lines.push(`Tied record: ${tied ? `"${tied.record.summary}" (${a.record})` : a.record}`);

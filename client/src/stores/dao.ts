@@ -352,16 +352,16 @@ export const useDaoStore = defineStore('dao', () => {
   // The 5th param defaults to [] so untargeted (legacy) call sites —
   // contribute-flows.ts until Task 8 wires the members picker, and the e2e —
   // keep compiling with byte-identical untargeted payloads.
-  // The 6th param (slice #6a, C_19): the recognition claim's ties — the
-  // wizard passes them only for dim 19; they ride the submit payload, where
-  // the handler validates them and stamps the registers.
+  // The 6th param (slices #6a/#6e): the claim's ties — the wizard passes them
+  // only for the claim dims (19 recognized / 5 taught); they ride the submit
+  // payload, where the handler validates them and stamps the registers.
   async function submitContribution(
     summary: string,
     dim: number,
     evidenceFile: File | null,
     evidenceText: string,
     verifiers: string[] = [],
-    ties?: { recognized: string; recordId: string }
+    ties?: { recognized?: string; taught?: string; recordId: string }
   ): Promise<string | null> {
     if (!dao.value || submitting.value) return null;
     submitting.value = true;
@@ -395,9 +395,12 @@ export const useDaoStore = defineStore('dao', () => {
         // Targeted verification (slice #4c): when names are picked, the
         // payload carries them (count-exact validation lives in the handler).
         ...(verifiers.length > 0 ? { verifiers } : {}),
-        // Recognition ties (slice #6a, C_19): recognized member + the tied
-        // record — only on a C_19 claim, where the submit handler validates them.
-        ...(Number(dim) === 19 && ties ? { recognized: ties.recognized, recordId: ties.recordId } : {}),
+        // Claim ties (slices #6a/#6e): the claim's partner member + the tied
+        // record — only on a claim dim, where the submit handler validates
+        // them. Per-shape fields: recognized (C_19) / taught (C_5); recordId
+        // is the shared tie.
+        ...(dim === 19 && ties ? { recognized: ties.recognized, recordId: ties.recordId } : {}),
+        ...(dim === 5 && ties ? { taught: ties.taught, recordId: ties.recordId } : {}),
       };
       const bytes = await dao.value.submitContribution(username.value, payload);
       await serverClient.submitOp(bytesToBase64(bytes));
@@ -456,11 +459,15 @@ export const useDaoStore = defineStore('dao', () => {
       harm: input.harm,
       priorVerifiers: prior,
       ...(entry.verifiedBy ? { priorHarm: entry.harm ?? ('none' as HarmVerdict) } : {}),
-      // C_19 recognition ties (slice #6a): re-carried from the claim's mirror
-      // so the handler's gate can machine-check the tie (the machine cannot
-      // enumerate the claim's tie OR-set).
+      // Claim ties (slices #6a/#6e): re-carried from the claim's mirror so the
+      // handler's gate can machine-check the tie (the machine cannot enumerate
+      // the claim's tie OR-set). Per-dim fields ride their shape's re-carry:
+      // recognized on C_19, taught on C_5, both alongside the shared recordId.
       ...(entry.record.dims['19'] !== undefined
         ? { recognized: entry.recognized, recordId: entry.recordIdTie }
+        : {}),
+      ...(entry.record.dims['5'] !== undefined
+        ? { taught: entry.taught, recordId: entry.recordIdTie }
         : {}),
       // The orientation re-carry (slice #6d): absent when the submitter is
       // un-oriented or already proven — the hook is absent with it.

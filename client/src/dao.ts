@@ -71,7 +71,8 @@ export interface ContributionMirrorEntry {
   // reads the payload AND pins it against the claim's submit-stamped sets.
   // Undefined on every other claim.
   recognized?: string;  // the member whose work the claim recognizes
-  recordIdTie?: string; // the claim's tied contribution id
+  taught?: string;      // the member whose competence the claim demonstrates (C_5)
+  recordIdTie?: string; // the claim's tied contribution id (both claim shapes)
 }
 
 export class BrowserDao {
@@ -431,9 +432,10 @@ export class BrowserDao {
           record: payload as ContributionPayload,
           submitter: op.signerId,
           submittedAt: this.getNodeTimeMs(),
-          // C_19 recognition ties (slice #6a): parsed straight off the claim
-          // payload — absent on every other submission.
+          // Claim ties (slices #6a/#6e): parsed straight off the claim
+          // payloads — absent on every other submission.
           ...(payload.recognized ? { recognized: payload.recognized } : {}),
+          ...(payload.taught ? { taught: payload.taught } : {}),
           ...(payload.recordId ? { recordIdTie: payload.recordId } : {}),
         });
       }

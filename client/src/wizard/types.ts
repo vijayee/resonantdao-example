@@ -19,8 +19,9 @@ export interface FlowDefinition {
   id: string;   // draft-key part ('verify' | 'settle' | 'appeal' | 'audit' | 'reckon' | 'publish' | 'contribute-new')
   title: string;
   // Slice #6a: the step list may be a function of the answers — the claim
-  // family varies per chosen type (C_19 gains the recognized + record picks).
-  // The shell resolves the list per render via flowSteps.
+  // family varies per chosen type (C_19 gains the recognized + record picks;
+  // slice #6e's C_5 gains the taught + the student's record picks). The shell
+  // resolves the list per render via flowSteps.
   steps: FlowStep[] | ((answers: FlowAnswers) => FlowStep[]);
   reviewSummary(answers: FlowAnswers, files?: Record<string, string | null>): string[];
   submit(answers: FlowAnswers, files?: Record<string, File | null>): Promise<void>;

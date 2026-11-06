@@ -1,4 +1,5 @@
 import { validateStep, flowSteps, FlowDefinition, FlowStep } from '../../client/src/wizard/types';
+import { claimTieSteps } from '../../client/src/wizard/flows/claim-steps';
 
 describe('validateStep', () => {
   const choice: FlowStep = { kind: 'choice', id: 'decision', title: 'Decision', options: [] };
@@ -77,5 +78,72 @@ describe('flowSteps', () => {
     };
     expect(Array.isArray(flow.steps)).toBe(true);
     expect(flowSteps(flow, { dim: '19' })).toEqual([review]);
+  });
+});
+
+// The claim family's tie steps (slices #6a/#6e): the contribute-new factory's
+// dynamic picks, reduced to a pure function of the dim answer + the mirror's
+// read (the store-read options arrive as plain params, so the derivation is
+// testable without the browser store). Contract per the registry's derivation
+// (contribution.test.ts's picker pin): only the wired claim dims gain steps —
+// plain walks (C_1, C_2) and the embedded rule (C_18) get none.
+describe('claimTieSteps — the claim flows walk their ties per the dim answer', () => {
+  // A members-kind step, assertively narrowed: kind + id are part of the
+  // contract (the shell renders the class from the id), so this helper both
+  // narrows the union and pins the ids.
+  function memberStep(step: FlowStep, id: string): Extract<FlowStep, { kind: 'members' }> {
+    expect(step.kind).toBe('members');
+    expect((step as Extract<FlowStep, { kind: 'members' }>).id).toBe(id);
+    return step as Extract<FlowStep, { kind: 'members' }>;
+  }
+
+  // A structural fake of the store/mirror read: the members list and the
+  // accepted contributions (id + submitter) the tie picks screen by.
+  const world = {
+    members: ['alice', 'bob', 'carol'],
+    username: 'alice',
+    acceptedContributions: [
+      { id: 'r-bob-1', submitter: 'bob' },
+      { id: 'r-bob-2', submitter: 'bob' },
+      { id: 'r-alice-1', submitter: 'alice' },
+      { id: 'r-carol-1', submitter: 'carol' },
+    ],
+  };
+
+  it('C_19 keeps its two picks: the recognized member (non-self) + the recognizer’s OWN accepted records', () => {
+    const steps = claimTieSteps(19, {}, world);
+    expect(steps).toHaveLength(2);
+    const recognized = memberStep(steps[0], 'recognized');
+    const record = memberStep(steps[1], 'record');
+    expect([recognized.options, record.options]).toEqual([['bob', 'carol'], ['r-alice-1']]);
+  });
+
+  it('C_5 gains the taught pick + the DYNAMIC record pick: the TAUGHT member’s accepted records', () => {
+    const steps = claimTieSteps(5, { taught: 'bob' }, world);
+    expect(steps).toHaveLength(2);
+    const taught = memberStep(steps[0], 'taught');
+    const record = memberStep(steps[1], 'record');
+    // The taught screen: members minus the filer (bob, carol); the record
+    // options are the CHOSEN taught member's accepted records only — alice's
+    // and carol's records are never offered on a claim teaching bob.
+    expect([taught.options, record.options]).toEqual([['bob', 'carol'], ['r-bob-1', 'r-bob-2']]);
+  });
+
+  it('the C_5 record options re-read per the chosen taught member — a taught member with no accepted work yields empty options', () => {
+    // carol's record IS offered when carol is taught — a different answer
+    // reads a different list (the derivation is dynamic per the taught pick).
+    const steps = claimTieSteps(5, { taught: 'carol' }, world);
+    expect(memberStep(steps[1], 'record').options).toEqual(['r-carol-1']);
+    // An empty mirror gives the same claim empty options — the members
+    // picker's exact-count gate makes Next unpassable (the machine's -1
+    // mirrors it server-side).
+    const empty = claimTieSteps(5, { taught: 'carol' }, { ...world, acceptedContributions: [] });
+    expect(memberStep(empty[1], 'record').options).toEqual([]);
+  });
+
+  it('plain walks and the embedded rule gain no tie steps', () => {
+    expect(claimTieSteps(1, {}, world)).toEqual([]);
+    expect(claimTieSteps(2, {}, world)).toEqual([]);
+    expect(claimTieSteps(18, {}, world)).toEqual([]);
   });
 });
