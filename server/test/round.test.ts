@@ -122,6 +122,229 @@ describe('harm adjustments (constants + helpers)', () => {
   });
 });
 
+// Spine credits (slice #6c): the settlement spine's closing turns pay their
+// designed contribution-token tallies — C_20 on reckon_round, C_21 on
+// complete_round, weight-scaled per the general calibration rule (match = 1;
+// spine ops carry no harm). These contracts are pinned against the handlers.
+import {
+  makeCompleteRoundHandler, makeReckonRoundHandler,
+} from '../../shared/src/handlers';
+import {
+  CALIBRATIONS, CONTRIB_NAMES, RES_NAMES, RCT_NAMES, ROUND_NAMES, STATE_NAMES,
+} from '../../shared/src/policies';
+import { ReckonRoundPayload, CompleteRoundPayload } from '../../shared/src/types';
+import { REG_SCALE } from '../../shared/src/contribution';
+import { HandlerOperation, HandlerState } from 'crabs-wasm';
+
+// The spine suite's harness mirrors contribution.test.ts's per-file mock (the
+// house convention: each handler suite carries its own). getRegister preserves
+// "unset" (number | undefined) so absence pins stay honest.
+class MockNode {
+  orSets = new Set<string>();
+  registers = new Map<string, number>();
+  pnCounters = new Map<string, number>();
+
+  addORSet(name: string) {
+    if (this.orSets.has(name)) throw new Error('duplicate_operation');
+    this.orSets.add(name);
+  }
+  addRegister(name: string, initial = 0) {
+    if (this.registers.has(name)) throw new Error('duplicate_operation');
+    this.registers.set(name, initial);
+  }
+  addPNCounter(name: string) {
+    if (this.pnCounters.has(name)) throw new Error('duplicate_operation');
+    this.pnCounters.set(name, 0);
+  }
+}
+
+class MockState {
+  private sets = new Map<string, Set<string>>();
+  private registers = new Map<string, number>();
+  private node: MockNode;
+
+  constructor(node: MockNode) {
+    this.node = node;
+  }
+
+  setRegister(name: string, value: number, _nodeId?: string): void {
+    this.registers.set(name, value);
+  }
+  setAdd(name: string, element: string, _tag = element): void {
+    this.ensureSet(name).add(element);
+  }
+  getRegister(name: string): number | undefined {
+    return this.registers.get(name) ?? this.node.registers.get(name);
+  }
+  setContains(name: string, element: string): boolean {
+    return this.sets.has(name) && this.sets.get(name)!.has(element);
+  }
+  allSetElements(name: string): string[] {
+    return Array.from(this.sets.get(name) ?? []);
+  }
+
+  private ensureSet(name: string): Set<string> {
+    let set = this.sets.get(name);
+    if (!set) {
+      set = new Set();
+      this.sets.set(name, set);
+    }
+    return set;
+  }
+}
+
+function makeOp(type: string, signerId: string, payload: object): HandlerOperation {
+  return { type, signerId, nodeId: 'browser', payload: JSON.stringify(payload), resources: [] };
+}
+
+// MockState.getRegister returns number | undefined, so it does not satisfy
+// HandlerState structurally; the handler never observes that difference.
+function run(
+  handler: (state: HandlerState, op: HandlerOperation) => number,
+  state: MockState,
+  op: HandlerOperation
+): number {
+  return handler(state as unknown as HandlerState, op);
+}
+
+// Fractional-bearing registers store Math.round(value × 1000) — reads divide
+// by REG_SCALE to compare in LOGICAL units, preserving "unset".
+function logical(state: MockState, register: string): number | undefined {
+  const value = state.getRegister(register);
+  return value === undefined ? undefined : value / REG_SCALE;
+}
+
+function setupMembers(state: MockState, ...usernames: string[]) {
+  for (const u of usernames) state.setAdd(STATE_NAMES.members, u, u);
+}
+
+// Reckonable round: members wired, calibration register set (the Justice gate)
+// and round 1 parked at STAGE_AUDITED — the state a fair audit leaves behind.
+function setupReckonable(node: MockNode, state: MockState, round = 1) {
+  setupMembers(state, 'alice', 'bob');
+  try { node.addRegister(ROUND_NAMES.current(), round); } catch { /* wiring */ }
+  try { node.addRegister(ROUND_NAMES.stage(round), 0); } catch { /* ok */ }
+  try { node.addRegister(CALIBRATIONS.calibrationVersion(), 1); } catch { /* wiring */ }
+  state.setRegister(ROUND_NAMES.stage(round), STAGE_AUDITED);
+}
+
+// The accepted contribution the publish aggregate validates against (direct
+// register writes — the lifecycle handlers' own arcs are pinned in
+// contribution.test.ts; here only the aggregate's gates matter).
+function setupAcceptedContribution(node: MockNode, state: MockState, round = 1, id = 'r1-a') {
+  state.setAdd(STATE_NAMES.contributions, id, id);
+  state.setRegister(CONTRIB_NAMES.contributionRound(id), round);
+  state.setRegister(CONTRIB_NAMES.status(id), 1);
+}
+
+function setupPublishable(node: MockNode, state: MockState, round = 1) {
+  setupReckonable(node, state, round);
+  setupAcceptedContribution(node, state, round);
+  state.setRegister(ROUND_NAMES.stage(round), STAGE_RECKONED);
+}
+
+describe('spine credits (C_20 on reckon, C_21 on complete)', () => {
+  it('SP-A: reckon_round credits the signer\'s C_20 tally — alpha unset defaults to 1.000', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupReckonable(node, state);
+    const reckon = makeReckonRoundHandler(node);
+    expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 'records are settled' } as ReckonRoundPayload))).toBe(0);
+    expect(logical(state, CONTRIB_NAMES.dimensionBalance('alice', 20))).toBe(1);
+    expect(logical(state, CONTRIB_NAMES.dimensionBalance('bob', 20))).toBeUndefined(); // the signer only
+    // The op's existing effects unchanged; no $RES/RCT movement.
+    expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(STAGE_RECKONED);
+    expect(state.allSetElements(ROUND_NAMES.explanations(1))).toHaveLength(1);
+    expect(logical(state, RES_NAMES.balance('alice'))).toBeUndefined();
+    expect(logical(state, RCT_NAMES.balance('alice'))).toBeUndefined();
+  });
+
+  it('SP-A seeded: alpha(20)=2 scales the C_20 tally to 2.000', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupReckonable(node, state);
+    // Alpha weights store per-mille register units — seed the SCALED value.
+    try { node.addRegister(CALIBRATIONS.alpha(20), 2 * REG_SCALE); } catch { /* wiring */ }
+    const reckon = makeReckonRoundHandler(node);
+    expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 'records are settled' } as ReckonRoundPayload))).toBe(0);
+    expect(logical(state, CONTRIB_NAMES.dimensionBalance('alice', 20))).toBe(2);
+  });
+
+  it('SP-B: complete_round credits the signer\'s C_21 tally — alpha unset defaults to 1.000', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupPublishable(node, state);
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'alice', {
+      entries: [{ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } }],
+    } as CompleteRoundPayload))).toBe(0);
+    expect(logical(state, CONTRIB_NAMES.dimensionBalance('alice', 21))).toBe(1);
+    expect(logical(state, CONTRIB_NAMES.dimensionBalance('bob', 21))).toBeUndefined(); // the signer only
+    expect(logical(state, CONTRIB_NAMES.dimensionBalance('alice', 20))).toBeUndefined(); // each op pays its own dim
+    // Everything standing intact: the RCT credit and the stage registers.
+    expect(logical(state, RCT_NAMES.balance('alice'))).toBe(1); // alpha(1) unset → 1 × match 1
+    expect(state.getRegister(ROUND_NAMES.stage(1))).toBe(STAGE_PUBLISHED);
+    expect(state.getRegister(ROUND_NAMES.current())).toBe(2);
+  });
+
+  it('SP-B seeded: alpha(21)=2 scales the C_21 tally to 2.000', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupPublishable(node, state);
+    try { node.addRegister(CALIBRATIONS.alpha(21), 2 * REG_SCALE); } catch { /* wiring */ }
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(complete, state, makeOp('complete_round', 'alice', {
+      entries: [{ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } }],
+    } as CompleteRoundPayload))).toBe(0);
+    expect(logical(state, CONTRIB_NAMES.dimensionBalance('alice', 21))).toBe(2);
+  });
+
+  it('SP-C: a SECOND legal drive (the appeal-rewound replay) accumulates — no dedupe guard', () => {
+    // Reckon arc: after the first reckoning the appeal rewind returns the
+    // stage to AUDITED; the tally register stands and the re-drive stacks.
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupReckonable(node, state);
+    const reckon = makeReckonRoundHandler(node);
+    expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 'settled' } as ReckonRoundPayload))).toBe(0);
+    state.setRegister(ROUND_NAMES.stage(1), STAGE_AUDITED);
+    expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 're-settled' } as ReckonRoundPayload))).toBe(0);
+    expect(logical(state, CONTRIB_NAMES.dimensionBalance('alice', 20))).toBe(2);
+
+    // Complete arc: the rewind returns current + stage to a publishable state
+    // (the published RCT register stands) and the re-drive stacks both.
+    const node2 = new MockNode();
+    const state2 = new MockState(node2);
+    setupPublishable(node2, state2);
+    const complete = makeCompleteRoundHandler(node2);
+    const entry = [{ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } }];
+    expect(run(complete, state2, makeOp('complete_round', 'alice', { entries: entry } as CompleteRoundPayload))).toBe(0);
+    state2.setRegister(ROUND_NAMES.current(), 1);
+    state2.setRegister(ROUND_NAMES.stage(1), STAGE_RECKONED);
+    expect(run(complete, state2, makeOp('complete_round', 'alice', { entries: entry } as CompleteRoundPayload))).toBe(0);
+    expect(logical(state2, CONTRIB_NAMES.dimensionBalance('alice', 21))).toBe(2);
+    expect(logical(state2, RCT_NAMES.balance('alice'))).toBe(2); // the registers' accumulation behavior, matched
+  });
+
+  it('SP-D: neither op moves a single res: register — the balances stand', () => {
+    const node = new MockNode();
+    const state = new MockState(node);
+    setupReckonable(node, state);
+    setupAcceptedContribution(node, state);
+    try { node.addRegister(RES_NAMES.balance('alice'), 3.5 * REG_SCALE); } catch { /* wiring */ }
+    const beforeAlice = logical(state, RES_NAMES.balance('alice'));
+    const beforeBob = logical(state, RES_NAMES.balance('bob'));
+    const reckon = makeReckonRoundHandler(node);
+    const complete = makeCompleteRoundHandler(node);
+    expect(run(reckon, state, makeOp('reckon_round', 'alice', { note: 'settled' } as ReckonRoundPayload))).toBe(0);
+    expect(run(complete, state, makeOp('complete_round', 'alice', {
+      entries: [{ contributionId: 'r1-a', submitter: 'alice', dims: { '1': 1 } }],
+    } as CompleteRoundPayload))).toBe(0);
+    expect(logical(state, RES_NAMES.balance('alice'))).toBe(beforeAlice);
+    expect(logical(state, RES_NAMES.balance('bob'))).toBe(beforeBob); // unset stays unset
+  });
+});
+
 describe('RoundEntry harm validation', () => {
   it('accepts entries with valid harm; rejects invalid or wrong-typed harm', () => {
     expect(isValidRoundEntry({ contributionId: 'x', submitter: 'a', dims: { '1': 1 }, harm: 'reduced' })).toBe(true);

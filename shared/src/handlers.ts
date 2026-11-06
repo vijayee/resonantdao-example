@@ -1288,6 +1288,15 @@ export function makeReckonRoundHandler(
     const record = { stepId: 'reckon', note: payload.note, at: nowMs };
     state.setAdd(ROUND_NAMES.explanations(round), JSON.stringify(record), `reckon:${op.signerId}`);
     state.setRegister(ROUND_NAMES.stage(round), STAGE_RECKONED, op.signerId);
+
+    // The designed spine credit (slice #6c): the driving member's dimension
+    // tally, weight-scaled (the general calibration rule; match = 1, no harm
+    // on spine ops).
+    const alphaFor = (i: number) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1;
+    const delta = dimensionDeltaFor(20, 1) * alphaFor(20);
+    try { node.addRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, 20), 0); } catch (err) { /* exists */ }
+    const prevTally = state.getRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, 20)) || 0;
+    state.setRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, 20), prevTally + toRegisterUnits(delta), op.signerId);
     return 0;
   };
 }
@@ -1413,6 +1422,15 @@ export function makeCompleteRoundHandler(
     state.setAdd(ROUND_NAMES.explanations(round), JSON.stringify(record), `complete:${op.signerId}`);
     state.setRegister(ROUND_NAMES.stage(round), STAGE_PUBLISHED, op.signerId);
     state.setRegister(ROUND_NAMES.current(), round + 1, op.signerId);
+
+    // The designed spine credit (slice #6c): the driving member's dimension
+    // tally, weight-scaled (the general calibration rule; match = 1, no harm
+    // on spine ops) — the handler's standing alphaFor (declared above) supplies
+    // the weight.
+    const delta = dimensionDeltaFor(21, 1) * alphaFor(21);
+    try { node.addRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, 21), 0); } catch (err) { /* exists */ }
+    const prevTally = state.getRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, 21)) || 0;
+    state.setRegister(CONTRIB_NAMES.dimensionBalance(op.signerId, 21), prevTally + toRegisterUnits(delta), op.signerId);
     return 0;
   };
 }
