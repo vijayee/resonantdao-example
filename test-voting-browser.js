@@ -538,6 +538,8 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   let bob = null;
   let carol = null;
   let dave = null;
+  let eve = null;
+  let frank = null;
   try {
   const aliceName = 'alice_e2e_' + Math.floor(Math.random() * 10000);
   const bobName = 'bob_e2e_' + Math.floor(Math.random() * 10000);
@@ -825,6 +827,162 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
     throw new Error(`bob's C_19 tally should read 'C_19 Celebrating — 1' (match 1 x the unset alpha default 1), got '${claimTally}'`);
   }
 
+  // --- Orientation arc (slice #6d, C_17) ---
+  // alice declares herself bob's guide on /custodians (the once-register
+  // screens the candidates), the declare ALONE pays nothing (alice's C_17
+  // chip stays absent — the attendance-only assert), and the guide's C_17
+  // credit rides the star's FIRST proven work. A verification pair is
+  // one-shot and every pair in the base cast is consumed by the flows above,
+  // so the arc registers TWO fresh members (eve, frank): bob's picker offers
+  // exactly them, he submits a Recording claim naming each, THEN alice
+  // declares (post-declare, pre-verify), eve's completing check credits the
+  // guide (chip 'C_17 Star — 1', EXACT), and frank's completing check adds
+  // nothing (the first-proven stamp holds — frank's mirror no longer rides
+  // the guide's name, and even a raced re-carry dies at the once-register).
+  console.log('Orientation: alice declares bob’s guide; the credit rides his first proven work');
+  const eveName = 'eve_e2e_' + Math.floor(Math.random() * 10000);
+  const frankName = 'frank_e2e_' + Math.floor(Math.random() * 10000);
+  eve = await runUser(eveName);
+  console.log('Fifth page registered:', eveName);
+  frank = await runUser(frankName);
+  console.log('Sixth page registered:', frankName);
+
+  // The star's two claims, each named to a fresh verifier, BOTH submitted
+  // before the declare so the credit's window is provably post-orientation.
+  // submitContribution leaves bob ON each claim's lifecycle page — capture
+  // each page's settle-flow locator there (the settling turn's mount is the
+  // verify round-trip's proof, the established mechanic).
+  const claimASummary = 'Oriented e2e demo A ' + Math.floor(Math.random() * 10000);
+  await submitContribution(bob, '2', claimASummary, [eveName]);
+  const settleFlowA = bob.page.locator('.wizard-flow[data-flow-id="settle"]');
+  const claimBSummary = 'Oriented e2e demo B ' + Math.floor(Math.random() * 10000);
+  await submitContribution(bob, '2', claimBSummary, [frankName]);
+  const settleFlowB = bob.page.locator('.wizard-flow[data-flow-id="settle"]');
+
+  // The declare: alice's /custodians Orientation panel drives its mini flow
+  // (members pick count 1 — the candidates are the members minus self minus
+  // the already-oriented, so bob is offered) → review → submit.
+  await nav(alice.page, '/custodians');
+  const orientationFlow = alice.page.locator('.wizard-flow[data-flow-id="orientation"]');
+  await orientationFlow.waitFor({ state: 'visible', timeout: 10000 });
+  const orienteesScreened = await orientationFlow.locator('.wizard-member').allTextContents();
+  console.log('ORIENTATION CANDIDATES:', orienteesScreened.join(', '));
+  if (!orienteesScreened.some((t) => t.includes(bobName))) {
+    throw new Error(`The orientation panel never offered bob: ${JSON.stringify(orienteesScreened)}`);
+  }
+  let oriented = false;
+  for (let attempt = 0; !oriented && attempt < 10; attempt++) {
+    oriented = await completeFlow(alice.page, 'orientation', { tickMember: bobName });
+    if (!oriented) await alice.page.waitForTimeout(1000);
+  }
+  if (!oriented) {
+    const statusBar = await alice.page.locator('#status').textContent();
+    throw new Error(`The orientation never recorded. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('ORIENTATION DECLARED:', aliceName, '→', bobName);
+
+  // The onboarding trail's feed row: 'X runs orientation for Y'.
+  let feedRowSeen = false;
+  for (let attempt = 0; !feedRowSeen && attempt < 15; attempt++) {
+    await nav(alice.page, '/');
+    feedRowSeen = (await alice.page.locator(`.event-row:has-text("runs orientation for ${bobName}")`).count()) > 0;
+    if (!feedRowSeen) await alice.page.waitForTimeout(1000);
+  }
+  if (!feedRowSeen) throw new Error(`The feed never showed alice's orientation row for bob`);
+  console.log('FEED ROW: runs orientation for', bobName);
+
+  // ATTENDANCE-ONLY: the declare alone moves no tallies — alice's C_17 chip
+  // must be absent (element-scoped) BEFORE any of the star's work verifies.
+  await nav(alice.page, '/account');
+  const c17ChipAbsent = alice.page.locator('#dim-tallies .tally:has-text("C_17")');
+  if ((await c17ChipAbsent.count()) !== 0) {
+    throw new Error(`alice's C_17 chip appeared before bob's first verify: '${await c17ChipAbsent.first().textContent()}'`);
+  }
+  console.log('ATTENDANCE-ONLY: no C_17 chip after the declare alone');
+
+  // The star's FIRST proven work: eve's completing check on claim A — the
+  // payload rides the guide's name (eve's mirror: bob oriented, first-proven
+  // unset) — and the machine credits the GUIDE's C_17 tally. The pin reads
+  // the chip's own element, EXACT text (the established standard). Bob rides
+  // claim A's lifecycle page (the settle mount proves the round-trip).
+  await openContribution(bob, claimASummary);
+  let starVerified = false;
+  for (let attempt = 0; !starVerified && attempt < 15; attempt++) {
+    await runContributionFlow(eve, claimASummary, 'verify', { choiceValue: 'yes', textValue: 'the oriented work checks out' });
+    starVerified = await settleFlowA
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+    if (!starVerified) await eve.page.waitForTimeout(1000);
+  }
+  if (!starVerified) {
+    const statusBar = await eve.page.locator('#status').textContent();
+    throw new Error(`The star's first verify never recorded. Status bar: ${statusBar || '(empty)'}`);
+  }
+  const c17Chip = alice.page.locator('#dim-tallies .tally:has-text("C_17")');
+  let c17Seen = false;
+  for (let attempt = 0; !c17Seen && attempt < 15; attempt++) {
+    c17Seen = (await c17Chip.count()) > 0;
+    if (!c17Seen) await alice.page.waitForTimeout(1000);
+  }
+  if (!c17Seen) throw new Error(`alice's C_17 tally missing from #dim-tallies after bob's first verify`);
+  const creditTally = (await c17Chip.textContent()).trim();
+  console.log('ORIENTATION TALLY:', creditTally);
+  if (creditTally !== 'C_17 Star — 1') {
+    throw new Error(`alice's C_17 tally should read 'C_17 Star — 1' (match 1 x the unset alpha default 1), got '${creditTally}'`);
+  }
+
+  // The star settles claim A; frank's completing check on claim B is the
+  // star's SECOND proven step — the first-proven stamp holds and the chip
+  // stays EXACTLY 'C_17 Star — 1'.
+  let starSettled = false;
+  for (let attempt = 0; !starSettled && attempt < 15; attempt++) {
+    await openContribution(bob, claimASummary);
+    await completeFlow(bob.page, 'settle', { textValue: 'accepting the oriented outcome' });
+    starSettled = await bob.page
+      .locator('.lc-pill--accepted')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+    if (!starSettled) await bob.page.waitForTimeout(1000);
+  }
+  if (!starSettled) {
+    const statusBar = await bob.page.locator('#status').textContent();
+    throw new Error(`Claim A's pill never flipped to accepted. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('CONTRIBUTION STATUS PILL: accepted (oriented claim A)');
+
+  // Bob rides claim B's lifecycle page for the second check's proof.
+  await openContribution(bob, claimBSummary);
+  let secondVerified = false;
+  for (let attempt = 0; !secondVerified && attempt < 15; attempt++) {
+    await runContributionFlow(frank, claimBSummary, 'verify', { choiceValue: 'yes', textValue: 'the oriented work checks out again' });
+    secondVerified = await settleFlowB
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+    if (!secondVerified) await frank.page.waitForTimeout(1000);
+  }
+  if (!secondVerified) {
+    const statusBar = await frank.page.locator('#status').textContent();
+    throw new Error(`The star's second verify never recorded. Status bar: ${statusBar || '(empty)'}`);
+  }
+  // The once-register: the second proven step paid nothing — the chip holds
+  // at EXACTLY 1 (reads after the settle flow's mount settles replication).
+  let afterSecondTally = null;
+  for (let attempt = 0; afterSecondTally === null && attempt < 15; attempt++) {
+    if ((await c17Chip.count()) > 0) {
+      const text = (await c17Chip.textContent()).trim();
+      if (text.startsWith('C_17')) afterSecondTally = text;
+    }
+    if (afterSecondTally === null) await alice.page.waitForTimeout(1000);
+  }
+  await nav(alice.page, '/account');
+  const finalChip = (await c17Chip.textContent()).trim();
+  console.log('ORIENTATION TALLY (after the second verify):', finalChip);
+  if (afterSecondTally !== 'C_17 Star — 1' || finalChip !== 'C_17 Star — 1') {
+    throw new Error(`alice's C_17 tally must stay 'C_17 Star — 1' after the second verify, got '${finalChip}' (sampled '${afterSecondTally}')`);
+  }
+  console.log('ONCE-REGISTER: the second proven step paid nothing — the chip holds at 1');
+
+
   // --- Custodian election flow ---
   // carol and dave registered (live pages) back in the contribution flows;
   // the candidates list is every member set — alphabetical, so alice is
@@ -1059,7 +1217,7 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
     // route-scoped in the SPA, so each read gets a short timeout — a page
     // sitting on a route without that node just reports its route instead of
     // stalling the dump for 30s.
-    for (const [name, u] of [['alice', alice], ['bob', bob], ['carol', carol], ['dave', dave]]) {
+    for (const [name, u] of [['alice', alice], ['bob', bob], ['carol', carol], ['dave', dave], ['eve', eve], ['frank', frank]]) {
       if (!u?.page) continue;
       try {
         console.log(`[${name} status]`, await u.page.locator('#status').textContent({ timeout: 2000 }));
@@ -1072,7 +1230,7 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
     }
     throw err;
   } finally {
-    for (const u of [alice, bob, carol, dave]) {
+    for (const u of [alice, bob, carol, dave, eve, frank]) {
       if (u) { try { await u.browser.close(); } catch (err) { /* already closed */ } }
     }
   }
