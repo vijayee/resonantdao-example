@@ -36,6 +36,9 @@ export const POLICIES = {
   audit_round: 'role:member OR role:custodian',
   reckon_round: 'role:member OR role:custodian',
   complete_round: 'role:member OR role:custodian',
+  // Orientation (slice #6d, C_17): every member may take up the guide's role
+  // for the onboarding trail — the class line mirrors the other member ops.
+  declare_orientation: 'role:member OR role:custodian',
 } as const;
 
 export const STATE_NAMES = {
@@ -98,6 +101,15 @@ export const CONTRIB_NAMES = {
   // C_19's ties (recognition): the recognized member + the linked record.
   recognized: (contributionId: string) => `contrib:${contributionId}:rec`,
   recordTie: (contributionId: string) => `contrib:${contributionId}:tie`,
+  // C_17 Star (slice #6d): the orientation registry. `oriented(orientee)` is
+  // the per-orientee once-register (0→1 — the FIRST orientation wins; the
+  // panel reads it per candidate), `orientedBy(orientee)` holds the winning
+  // guide's name (single-element OR-set), and `firstProven(member)` is the
+  // per-member register stamped at the hook's own write — the member's
+  // oriented work is proven exactly once.
+  oriented: (orientee: string) => `orient:${orientee}`,
+  orientedBy: (orientee: string) => `orient:${orientee}:by`,
+  firstProven: (member: string) => `prove:${member}:first`,
 } as const;
 
 export const ROUND_NAMES = {

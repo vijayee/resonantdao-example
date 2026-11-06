@@ -12,6 +12,7 @@ import {
   makeCastRunoffVoteHandler,
   makeCompleteRoundHandler,
   makeCreateProposalHandler,
+  makeDeclareOrientationHandler,
   makeExecuteHandler,
   makeFinalizeElectionHandler,
   makeReassignVerifiersHandler,
@@ -67,6 +68,7 @@ export class DaoNode {
     this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
     this.node.setPolicy('appeal_verdict', POLICIES.appeal_verdict);
     this.node.setPolicy('reassign_verifiers', POLICIES.reassign_verifiers);
+    this.node.setPolicy('declare_orientation', POLICIES.declare_orientation);
     this.node.setPolicy('audit_round', POLICIES.audit_round);
     this.node.setPolicy('reckon_round', POLICIES.reckon_round);
     this.node.setPolicy('complete_round', POLICIES.complete_round);
@@ -86,6 +88,7 @@ export class DaoNode {
     this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('appeal_verdict', makeAppealVerdictHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('reassign_verifiers', makeReassignVerifiersHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('declare_orientation', makeDeclareOrientationHandler(this.node));
     this.node.registerHandlerJs('remove_member', makeRemoveMemberHandler());
     this.node.registerHandlerJs('sync_roles', () => 0); // admin-signed; roles applied out-of-band
     this.node.registerHandlerJs('audit_round', makeAuditRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));

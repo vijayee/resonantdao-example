@@ -74,6 +74,12 @@ export interface RemoveMemberPayload {
   username: string;
 }
 
+// Orientation (slice #6d, C_17): the GUIDE declares an ORIENTEE. The
+// declare_orientation op's payload — guide-signed (op.signerId is the guide).
+export interface DeclareOrientationPayload {
+  orientee: string;
+}
+
 export interface SyncRolesPayload {
   custodians: string[];
   roleVersions: Record<string, number>; // total custodian-role mutations per user
@@ -130,6 +136,12 @@ export interface VerifyContributionPayload {
   // Absent on every other dimension.
   recognized?: string; // the member whose work the claim recognizes
   recordId?: string;   // the claim's tied contribution
+  // Orientation (slice #6d, C_17): the submitter's guide, re-carried on the
+  // verify payload — the machine cannot enumerate the registry OR-set to FIND
+  // the guide, so the name rides the payload and the handler cross-checks it
+  // against the declare-stamped registry (a mismatched name is a forged
+  // guide: -1). Absent on every other verify — the hook is absent with it.
+  orientedBy?: string; // the submitter's orientation guide (from the registry stamp)
 }
 
 export interface SettleContributionPayload {

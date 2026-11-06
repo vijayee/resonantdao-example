@@ -134,9 +134,18 @@ describe('feed event builder', () => {
     expect(ev!.targetId).toBe('c-1');
   });
 
+  it('maps declare_orientation to the onboarding trail row (the guide runs it for the orientee)', () => {
+    const ev = feedEventFromOp(
+      'declare_orientation', 'alice',
+      JSON.stringify({ orientee: 'bob' }), 11000, 1, 21,
+    ) as FeedEvent;
+    expect(ev!.type).toBe('orientation_declared');
+    expect(ev!.summary).toBe('alice runs orientation for bob');
+  });
+
   it('declares exactly the consequential op set', () => {
     expect([...CONSEQUENTIAL_OPS].sort()).toEqual([
-      'appeal_verdict', 'audit_round', 'complete_round', 'create_proposal', 'execute',
+      'appeal_verdict', 'audit_round', 'complete_round', 'create_proposal', 'declare_orientation', 'execute',
       'finalize_election', 'reassign_verifiers', 'reckon_round', 'settle_contribution',
       'start_election', 'submit_contribution', 'verify_contribution',
     ]);

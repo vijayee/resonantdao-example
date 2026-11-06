@@ -5,6 +5,7 @@ export type FeedEventType =
   | 'contribution_submitted' | 'contribution_verified'
   | 'contribution_settled' | 'contribution_appealed'
   | 'verifiers_reassigned'
+  | 'orientation_declared'
   | 'election_started' | 'election_finalized'
   | 'round_audited' | 'round_reckoned' | 'round_published';
 
@@ -30,6 +31,7 @@ export const CONSEQUENTIAL_OPS: ReadonlySet<string> = new Set([
   'create_proposal', 'execute',
   'submit_contribution', 'verify_contribution', 'settle_contribution', 'appeal_verdict',
   'reassign_verifiers',
+  'declare_orientation',
   'start_election', 'finalize_election',
   'audit_round', 'reckon_round', 'complete_round',
 ]);
@@ -42,6 +44,7 @@ const OP_TO_EVENT: Record<string, FeedEventType> = {
   settle_contribution: 'contribution_settled',
   appeal_verdict: 'contribution_appealed',
   reassign_verifiers: 'verifiers_reassigned',
+  declare_orientation: 'orientation_declared',
   start_election: 'election_started',
   finalize_election: 'election_finalized',
   audit_round: 'round_audited',
@@ -131,6 +134,13 @@ export function feedEventFromOp(
         summary: `${signerId} named ${names.join(' & ') || 'no-one'} as additional verifier(s)`,
         targetId: typeof payload.contributionId === 'string' ? payload.contributionId : undefined,
       };
+    }
+    case 'declare_orientation': {
+      // The orient declaration IS the onboarding trail's visible event (the
+      // BPMN's "Share entry progress with the Fool"): the guide runs it FOR
+      // the orientee.
+      const orientee = typeof payload.orientee === 'string' ? payload.orientee : '';
+      return { ...base, summary: `${signerId} runs orientation for ${orientee}`.trim() };
     }
     case 'start_election':
       return {

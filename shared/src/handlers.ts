@@ -1,5 +1,5 @@
 import { HandlerState, HandlerOperation } from 'crabs-wasm';
-import { AddMemberPayload, AppealVerdictPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, CompleteRoundPayload, ContributionPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReassignVerifiersPayload, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
+import { AddMemberPayload, AppealVerdictPayload, AuditRoundPayload, CastBallotPayload, CastRunoffVotePayload, CompleteRoundPayload, ContributionPayload, DeclareOrientationPayload, ExecutePayload, FinalizeElectionPayload, ProposalPayload, ProposalType, ReassignVerifiersPayload, ReckonRoundPayload, RemoveMemberPayload, SetCalibrationVersionPayload, SetRctAlphaPayload, SettleContributionPayload, StartElectionPayload, VerifyContributionPayload, VotePayload } from './types';
 import {
   CALIBRATIONS, CHECK_NAMES, CONTRIB_NAMES, CUSTODIAN_SEATS, ELECTION_NAMES, RECIP_NAMES, RES_CONFIG, RES_NAMES, ROUND_NAMES, RCT_NAMES, RUNOFF_SUFFIX, runoffId, STATE_NAMES, TIMING, TOKEN_NAMES, VOTE_THRESHOLD,
 } from './policies';
@@ -288,6 +288,27 @@ export function makeVerifyContributionHandler(
       }
     }
 
+    // The orientation gate (slice #6d, C_17): when the payload RE-CARRIES the
+    // submitter's guide (the machine cannot enumerate the registry OR-set to
+    // find the guide — RESOLUTION B as in the recognition ties), the re-carry
+    // is NOT trusted: it must satisfy the machine's declare-stamped registry
+    // (setContains reads the stamps — the same machine-pinned read the owner
+    // pin and the tie gate use). A payload naming a member the registry does
+    // not stamp is a forged guide: -1, before ANY write (no per-check credit,
+    // no accuracy accrual, no reciprocity record, no stepDone, no tally).
+    // When the payload carries no guide name the gate and the hook below are
+    // absent entirely — the un-oriented member's verify is byte-identical to
+    // every pre-#6d arc.
+    if (payload.orientedBy !== undefined) {
+      try { node.addORSet(CONTRIB_NAMES.orientedBy(payload.submitter)); } catch (err) { /* replay idempotence */ }
+      if (
+        !isNonEmptyString(payload.orientedBy) ||
+        !state.setContains(CONTRIB_NAMES.orientedBy(payload.submitter), payload.orientedBy)
+      ) {
+        return -1;
+      }
+    }
+
     // Per-check credit for the ACTOR on every completed verification,
     // pass or reject (C_18 Moon). RES balances are stored in per-mille
     // register units (toRegisterUnits); reads divide by REG_SCALE.
@@ -408,6 +429,30 @@ export function makeVerifyContributionHandler(
             (state.getRegister(recTally) || 0) + toRegisterUnits(dimensionDeltaFor(19, payload.dims['19']) * alphaFor(19) * harmFactor),
             op.signerId
           );
+        }
+      }
+
+      // The orientation credit (slice #6d, C_17): the SUBMITTER's guide earns
+      // the C_17 tally when the guide's orientee's work is FIRST proven — the
+      // completion of this verify step IS that first proven work, and the
+      // once-register (per-member) makes every later completion pay nothing.
+      // The stamp lives HERE, inside the hook's own write — one write site,
+      // not a separate tally pass (the register only ever carries the hook's
+      // 1; an un-oriented member's verify never touches it, per the gate
+      // above). The credited amount follows the recognition pattern verbatim
+      // (match × alphaFor(17) × the verified harm factor, register units).
+      if (payload.orientedBy !== undefined) {
+        const firstReg = CONTRIB_NAMES.firstProven(payload.submitter);
+        try { node.addRegister(firstReg, 0); } catch (err) { /* replay idempotence */ }
+        if ((state.getRegister(firstReg) || 0) !== 1) {
+          const guideTally = CONTRIB_NAMES.dimensionBalance(payload.orientedBy, 17);
+          try { node.addRegister(guideTally, 0); } catch (err) { /* exists */ }
+          state.setRegister(
+            guideTally,
+            (state.getRegister(guideTally) || 0) + toRegisterUnits(dimensionDeltaFor(17, 1) * alphaFor(17) * harmFactor),
+            op.signerId
+          );
+          state.setRegister(firstReg, 1, op.signerId);
         }
       }
 
@@ -634,6 +679,39 @@ export function makeReassignVerifiersHandler(
       state.setAdd(CONTRIB_NAMES.verifiers(payload.contributionId), v, `reassign:${op.signerId}:${v}`);
     }
     state.setRegister(CONTRIB_NAMES.verifierCount(payload.contributionId), targetCount + payload.verifiers.length, op.signerId);
+    return 0;
+  };
+}
+
+// Orientation op 'declare_orientation' (slice #6d, C_17): the GUIDE declares
+// an ORIENTEE — the onboarding trail's visible event. FIRST-WINS: a
+// per-orientee once-register (0→1) makes the SECOND orientation of the same
+// orientee a rejection; the winning guide's name is stamped into the registry
+// OR-set, which the verify handler later cross-checks against the verify
+// payload's re-carried guide name.
+export function makeDeclareOrientationHandler(
+  node: { addORSet(name: string): void; addRegister(name: string, initial?: number): void },
+) {
+  return (state: HandlerState, op: HandlerOperation): number => {
+    const payload: DeclareOrientationPayload = JSON.parse(op.payload || '{}');
+    if (!isNonEmptyString(payload.orientee) || payload.orientee === op.signerId) {
+      return -1; // self-orientation is not onboarding
+    }
+    if (!state.setContains(STATE_NAMES.members, op.signerId) || !state.setContains(STATE_NAMES.members, payload.orientee)) {
+      return -1; // both parties must be members
+    }
+    // Declare-before-write (real wasm throws resource_not_found on undeclared
+    // writes; re-declare is a safe duplicate_operation). The undeclared
+    // once-register reads 0 on every replica, so the first orientation passes
+    // the guard — the same read the appeal handler's once-guard uses.
+    const onceReg = CONTRIB_NAMES.oriented(payload.orientee);
+    try { node.addRegister(onceReg, 0); } catch (err) { /* exists */ }
+    try { node.addORSet(CONTRIB_NAMES.orientedBy(payload.orientee)); } catch (err) { /* exists */ }
+    if ((state.getRegister(onceReg) || 0) === 1) {
+      return -1; // the FIRST orientation of the orientee wins
+    }
+    state.setRegister(onceReg, 1, op.signerId);
+    state.setAdd(CONTRIB_NAMES.orientedBy(payload.orientee), op.signerId, `orient:${op.signerId}`);
     return 0;
   };
 }
