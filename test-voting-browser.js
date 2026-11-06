@@ -836,7 +836,7 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // so the arc registers TWO fresh members (eve, frank): bob's picker offers
   // exactly them, he submits a Recording claim naming each, THEN alice
   // declares (post-declare, pre-verify), eve's completing check credits the
-  // guide (chip 'C_17 Star — 1', EXACT), and frank's completing check adds
+  // guide (chip 'C_17 Meaning — 1', EXACT), and frank's completing check adds
   // nothing (the first-proven stamp holds — frank's mirror no longer rides
   // the guide's name, and even a raced re-carry dies at the once-register).
   console.log('Orientation: alice declares bob’s guide; the credit rides his first proven work');
@@ -865,11 +865,20 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   await nav(alice.page, '/custodians');
   const orientationFlow = alice.page.locator('.wizard-flow[data-flow-id="orientation"]');
   await orientationFlow.waitFor({ state: 'visible', timeout: 10000 });
-  const orienteesScreened = await orientationFlow.locator('.wizard-member').allTextContents();
-  console.log('ORIENTATION CANDIDATES:', orienteesScreened.join(', '));
-  if (!orienteesScreened.some((t) => t.includes(bobName))) {
-    throw new Error(`The orientation panel never offered bob: ${JSON.stringify(orienteesScreened)}`);
+  // The candidates are checkboxes (inputs carry no text): screen by the
+  // checkbox VALUES — bob offered, and the once-register screens everyone
+  // already oriented.
+  const bobCandidate = orientationFlow.locator(`.wizard-member[value="${bobName}"]`);
+  let bobOffered = false;
+  for (let attempt = 0; !bobOffered && attempt < 10; attempt++) {
+    bobOffered = (await bobCandidate.count()) > 0;
+    if (!bobOffered) await alice.page.waitForTimeout(1000);
   }
+  if (!bobOffered) {
+    throw new Error(`The orientation panel never offered bob`);
+  }
+  const offeredLabels = await orientationFlow.locator('.wizard-choice .wizard-member + span').allTextContents();
+  console.log('ORIENTATION CANDIDATES:', offeredLabels.length, 'offered —', offeredLabels.join(', '));
   let oriented = false;
   for (let attempt = 0; !oriented && attempt < 10; attempt++) {
     oriented = await completeFlow(alice.page, 'orientation', { tickMember: bobName });
@@ -927,13 +936,13 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   if (!c17Seen) throw new Error(`alice's C_17 tally missing from #dim-tallies after bob's first verify`);
   const creditTally = (await c17Chip.textContent()).trim();
   console.log('ORIENTATION TALLY:', creditTally);
-  if (creditTally !== 'C_17 Star — 1') {
-    throw new Error(`alice's C_17 tally should read 'C_17 Star — 1' (match 1 x the unset alpha default 1), got '${creditTally}'`);
+  if (creditTally !== 'C_17 Meaning — 1') {
+    throw new Error(`alice's C_17 tally should read 'C_17 Meaning — 1' (match 1 x the unset alpha default 1), got '${creditTally}'`);
   }
 
   // The star settles claim A; frank's completing check on claim B is the
   // star's SECOND proven step — the first-proven stamp holds and the chip
-  // stays EXACTLY 'C_17 Star — 1'.
+  // stays EXACTLY 'C_17 Meaning — 1'.
   let starSettled = false;
   for (let attempt = 0; !starSettled && attempt < 15; attempt++) {
     await openContribution(bob, claimASummary);
@@ -977,8 +986,8 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   await nav(alice.page, '/account');
   const finalChip = (await c17Chip.textContent()).trim();
   console.log('ORIENTATION TALLY (after the second verify):', finalChip);
-  if (afterSecondTally !== 'C_17 Star — 1' || finalChip !== 'C_17 Star — 1') {
-    throw new Error(`alice's C_17 tally must stay 'C_17 Star — 1' after the second verify, got '${finalChip}' (sampled '${afterSecondTally}')`);
+  if (afterSecondTally !== 'C_17 Meaning — 1' || finalChip !== 'C_17 Meaning — 1') {
+    throw new Error(`alice's C_17 tally must stay 'C_17 Meaning — 1' after the second verify, got '${finalChip}' (sampled '${afterSecondTally}')`);
   }
   console.log('ONCE-REGISTER: the second proven step paid nothing — the chip holds at 1');
 
