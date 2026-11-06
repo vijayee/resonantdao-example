@@ -439,6 +439,13 @@ export const useDaoStore = defineStore('dao', () => {
       status.set('A written reason is required for every verification.', 'error');
       return false;
     }
+    // C_17 orientation (slice #6d): the submitter's guide's name rides the
+    // verify payload — attached only when the accessor says the submitter is
+    // oriented AND their first-proven register is unset (the handler
+    // cross-checks the name against the declare-stamped registry; a forged
+    // name is -1, and the once-register kills any later re-carry).
+    const guide = d.getOrientationGuide(entry.submitter, members.value);
+    const orientationRide = guide !== null && !d.isFirstProven(entry.submitter);
     const payload: VerifyContributionPayload = {
       contributionId: entry.record.contributionId,
       submitter: entry.submitter,
@@ -455,6 +462,9 @@ export const useDaoStore = defineStore('dao', () => {
       ...(entry.record.dims['19'] !== undefined
         ? { recognized: entry.recognized, recordId: entry.recordIdTie }
         : {}),
+      // The orientation re-carry (slice #6d): absent when the submitter is
+      // un-oriented or already proven — the hook is absent with it.
+      ...(orientationRide ? { orientedBy: guide } : {}),
     };
     submitting.value = true;
     try {
@@ -547,6 +557,33 @@ export const useDaoStore = defineStore('dao', () => {
       return true;
     } catch (err) {
       status.set(`Reassign error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      console.error(err);
+      return false;
+    } finally {
+      submitting.value = false;
+    }
+  }
+
+  // ---- orientation op (slice #6d, C_17) ----
+
+  // The guide's declare from the /custodians Orientation panel: the boolean
+  // contract like every op — the panel's flow throws on false so the draft
+  // survives a failed submit. First-wins lives in the machine: a repeat
+  // declare of an already-oriented member is a rejected op (surfaced as an
+  // error status, the submitting state cleared).
+  async function declareOrientation(orientee: string): Promise<boolean> {
+    const d = dao.value;
+    if (!d || submitting.value || orientee === username.value) return false;
+    submitting.value = true;
+    try {
+      const bytes = await d.declareOrientation(username.value, { orientee });
+      await serverClient.submitOp(bytesToBase64(bytes));
+      await safeExecuteRemote(bytes);
+      status.set(`Orientation declared — you are ${orientee}'s guide.`, 'success');
+      bump();
+      return true;
+    } catch (err) {
+      status.set(`Orientation error: ${err instanceof Error ? err.message : String(err)}`, 'error');
       console.error(err);
       return false;
     } finally {
@@ -713,6 +750,7 @@ export const useDaoStore = defineStore('dao', () => {
     createProposal, vote, execute,
     startElection, castBallot, finalizeElection, castRunoffVote,
     submitContribution, verifyContribution, settleContribution, appealContribution, reassignVerifiers,
+    declareOrientation,
     auditRound, reckonRound, completeRound, setRctAlpha, setCalibrationVersion,
     removeMember,
     evidenceSummary,

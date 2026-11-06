@@ -190,11 +190,13 @@ describe('C_17 orientation: the declare op is first-wins and stamps the registry
     expect(state.getRegister(CONTRIB_NAMES.oriented('bob'))).toBe(0);
   });
 
-  it('O-D. the policy line is the member-or-custodian class and is PAIRED on the server node', () => {
+  it('O-D. the policy line is the member-or-custodian class and is PAIRED on both nodes', () => {
     expect(POLICIES.declare_orientation).toBe('role:member OR role:custodian');
     const serverSrc = readFileSync(join(__dirname, '..', 'src', 'crabs.ts'), 'utf8');
+    const clientSrc = readFileSync(join(__dirname, '..', '..', 'client', 'src', 'dao.ts'), 'utf8');
     const pairing = "this.node.setPolicy('declare_orientation', POLICIES.declare_orientation);";
     expect(serverSrc).toContain(pairing);
+    expect(clientSrc).toContain(pairing);
   });
 });
 

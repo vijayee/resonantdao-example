@@ -53,15 +53,31 @@
       </form>
       <p v-if="!ds.isCustodian" class="muted">Custodian-only controls.</p>
     </Panel>
+
+    <Panel number="05" kicker="Orientation">
+      <div id="orientation" class="orientation">
+        <template v-if="orientationOptions.length > 0">
+          <WizardFlow
+            :key="`orientation-${orientationSeq}`"
+            :flow="orientationFlow"
+            target-id=""
+            @close="onOrientationClosed"
+          />
+        </template>
+        <p v-else class="muted">No eligible orientees right now — every other member is already oriented.</p>
+      </div>
+    </Panel>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useDaoStore } from '../../stores/dao';
 import { useStatusStore } from '../../stores/status';
 import SectionHeading from '../../design/components/SectionHeading.vue';
 import Panel from '../../design/components/Panel.vue';
+import WizardFlow from '../../wizard/WizardFlow.vue';
+import type { FlowAnswers, FlowDefinition } from '../../wizard/types';
 
 const ds = useDaoStore();
 const status = useStatusStore();
@@ -89,6 +105,39 @@ const removable = computed(() => otherMembers.value);
 const resBalance = computed(() => { void ds.tick; return ds.dao && ds.username ? ds.dao.getResBalance(ds.username) : 0; });
 function isSeat(m: string) { return seats.value.includes(m); }
 function rctOf(m: string) { void ds.tick; return ds.dao?.getRctBalance(m) ?? 0; }
+
+// ---- Orientation (slice #6d, C_17): the guide declares; the star waits for
+// ---- first proven work. In-place mini flow (members pick count 1 → review);
+// ---- the once-register screens the candidates, so a member's first guide
+// ---- takes them OUT of every other guide's list.
+
+// Page-level remount key: a CANCELLED flow remounts fresh (the NewContribution
+// hosting); a SUBMITTED one re-derives against the re-tick'ed eligible list.
+const orientationSeq = ref(0);
+const orientationOptions = computed(() => {
+  void ds.tick;
+  if (!ds.dao || !ds.username) return [];
+  return ds.dao.eligibleOrientees(ds.members);
+});
+const orientationFlow = computed<FlowDefinition>(() => ({
+  id: 'orientation',
+  title: 'Run orientation',
+  steps: [
+    {
+      kind: 'members', id: 'orientee', title: 'Who do you orient?',
+      options: orientationOptions.value, count: 1,
+    },
+    { kind: 'review' },
+  ],
+  reviewSummary: (a: FlowAnswers) => [`Guiding: ${(a.orientee ?? '').trim()}`],
+  submit: async (a: FlowAnswers) => {
+    const ok = await ds.declareOrientation((a.orientee ?? '').trim());
+    if (!ok) throw new Error('The orientation did not record — check the message below the page.');
+  },
+}));
+function onOrientationClosed() {
+  orientationSeq.value += 1;
+}
 </script>
 
 <style scoped>
@@ -115,4 +164,5 @@ function rctOf(m: string) { void ds.tick; return ds.dao?.getRctBalance(m) ?? 0; 
 .custodian-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .remove-controls { display: flex; flex-direction: column; gap: var(--space-2); }
 .member-item__tokens { font-family: var(--font-mono); font-size: .78rem; color: var(--amber); white-space: nowrap; }
+.orientation { max-width: 640px; }
 </style>

@@ -14,6 +14,7 @@ import {
   CompleteRoundPayload,
   AppealVerdictPayload,
   ContributionPayload,
+  DeclareOrientationPayload,
   ExecutePayload,
   FinalizeElectionPayload,
   ProposalPayload,
@@ -36,6 +37,7 @@ import {
   makeCastRunoffVoteHandler,
   makeCompleteRoundHandler,
   makeCreateProposalHandler,
+  makeDeclareOrientationHandler,
   makeExecuteHandler,
   makeFinalizeElectionHandler,
   makeReassignVerifiersHandler,
@@ -148,6 +150,7 @@ export class BrowserDao {
     this.node.setPolicy('settle_contribution', POLICIES.settle_contribution);
     this.node.setPolicy('appeal_verdict', POLICIES.appeal_verdict);
     this.node.setPolicy('reassign_verifiers', POLICIES.reassign_verifiers);
+    this.node.setPolicy('declare_orientation', POLICIES.declare_orientation);
     this.node.setPolicy('audit_round', POLICIES.audit_round);
     this.node.setPolicy('reckon_round', POLICIES.reckon_round);
     this.node.setPolicy('complete_round', POLICIES.complete_round);
@@ -164,6 +167,7 @@ export class BrowserDao {
     this.node.registerHandlerJs('settle_contribution', makeSettleContributionHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('appeal_verdict', makeAppealVerdictHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('reassign_verifiers', makeReassignVerifiersHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
+    this.node.registerHandlerJs('declare_orientation', makeDeclareOrientationHandler(this.node));
     this.node.registerHandlerJs('audit_round', makeAuditRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('reckon_round', makeReckonRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
     this.node.registerHandlerJs('complete_round', makeCompleteRoundHandler(this.node, { getTimeMs: () => this.getNodeTimeMs() }));
@@ -242,6 +246,12 @@ export class BrowserDao {
   // replacement verifiers (the op is handler-gated submitter-only).
   async reassignVerifiers(userId: string, payload: ReassignVerifiersPayload): Promise<Uint8Array> {
     return this.signAndSerialize('reassign_verifiers', userId, JSON.stringify(payload));
+  }
+
+  // Orientation (slice #6d, C_17): the guide declares an orientee — the
+  // onboarding trail's visible event; first-wins lives in the handler.
+  async declareOrientation(userId: string, payload: DeclareOrientationPayload): Promise<Uint8Array> {
+    return this.signAndSerialize('declare_orientation', userId, JSON.stringify(payload));
   }
 
   async auditRound(userId: string, payload: AuditRoundPayload): Promise<Uint8Array> {
@@ -622,6 +632,36 @@ export class BrowserDao {
 
   getContributionStepDone(contributionId: string, stepId: string): number {
     return this.node.getPNCounter(CONTRIB_NAMES.stepDone(contributionId, stepId)) || 0;
+  }
+
+  // ---- Orientation (slice #6d, C_17) ----
+
+  // The orientee's WINNING guide (the registry's stamp): the browser wasm
+  // cannot enumerate an OR-set, so the server-pushed member list filtered by
+  // setContains is the read (the same traversal getDefinedVerifiers uses) —
+  // null when the member is not oriented.
+  getOrientationGuide(orientee: string, members: string[]): string | null {
+    for (const m of members) {
+      if (m && this.node.setContains(CONTRIB_NAMES.orientedBy(orientee), m)) return m;
+    }
+    return null;
+  }
+
+  // The first-proven register: TRUE once the member's oriented work has been
+  // proven (the verify hook's own stamp). Its UNSET read is the verify flow's
+  // ride window for the payload's orientedBy ("first-proven-unset" per the
+  // design — an un-oriented member simply never has a guide to ride).
+  isFirstProven(member: string): boolean {
+    return (this.node.getRegister(CONTRIB_NAMES.firstProven(member)) || 0) === 1;
+  }
+
+  // The panel's candidates: members minus self minus each member the
+  // once-register already stamps (the first-wins read per candidate).
+  eligibleOrientees(members: string[]): string[] {
+    return members
+      .filter((m) => m && m !== this.walletUser)
+      .filter((m) => (this.node.getRegister(CONTRIB_NAMES.oriented(m)) || 0) !== 1)
+      .sort();
   }
 
   getCurrentRound(): number {
