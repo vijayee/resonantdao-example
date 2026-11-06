@@ -24,7 +24,7 @@ export interface ClaimTieWorld {
 
 export function claimTieSteps(
   dim: number,
-  answers: { taught?: string } & Record<string, string>,
+  answers: { taught?: string },
   world: ClaimTieWorld
 ): FlowStep[] {
   const nonSelf = world.members.filter((m) => m && m !== world.username).sort();

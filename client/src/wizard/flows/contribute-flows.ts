@@ -98,15 +98,6 @@ export function dimensionOptions(): Array<{ value: string; label: string; desc: 
     .map((d) => ({ value: String(d.index), label: `${d.code} ${d.name} — ${d.cls}`, desc: DIM_DESCS[d.index] ?? '' }));
 }
 
-// The claim family's partner screen (slices #6a/#6e): members minus self —
-// a recognition names someone else's proven work and a teaching claims
-// competence in ANOTHER member; the machines' self-bars (S-B / S-5-B) are the
-// only barrings, so the picker mirrors exactly that.
-export function recognizableMemberOptions(ds: ReturnType<typeof useDaoStore>): string[] {
-  void ds.tick;
-  return ds.members.filter((m) => m && m !== ds.username).sort();
-}
-
 // The claim tie steps' mirror read (slices #6a/#6e): the store's known members,
 // the viewer, and the machine-ACCEPTED contributions (id + submitter) both
 // tie picks screen by — the tie must be a contribution whose status register
