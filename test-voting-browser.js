@@ -662,6 +662,32 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // post-publish aggregation asserts below keep their own waits).
   await runRoundSpineStep(alice, 'publish', null, null, 'Open');
 
+  // --- The spine's tally credits (slice #6c) ---
+  // alice drove the spine (audit → reckon → publish), so the C_20/C_21
+  // credits land on HER tallies: match 1 × the unset-alpha default (1) each
+  // — EXACT chip text, element-scoped. (The container textContent would run
+  // across span boundaries — the artifact the C_19 pin's note records — and
+  // presence alone would miss a units-scale regression, so compare the chip.)
+  console.log('The spine pays its tallies: alice C_20 + C_21');
+  await nav(alice.page, '/account');
+  const c20Chip = alice.page.locator('#dim-tallies .tally:has-text("C_20")');
+  const c21Chip = alice.page.locator('#dim-tallies .tally:has-text("C_21")');
+  let spineTalliesSeen = false;
+  for (let attempt = 0; !spineTalliesSeen && attempt < 15; attempt++) {
+    spineTalliesSeen = (await c20Chip.count()) > 0 && (await c21Chip.count()) > 0;
+    if (!spineTalliesSeen) await alice.page.waitForTimeout(1000);
+  }
+  if (!spineTalliesSeen) throw new Error(`alice's C_20/C_21 tally chips missing from #dim-tallies after the spine`);
+  const c20Tally = (await c20Chip.textContent()).trim();
+  const c21Tally = (await c21Chip.textContent()).trim();
+  console.log('SPINE TALLIES:', c20Tally, '|', c21Tally);
+  if (c20Tally !== 'C_20 Reckoning — 1') {
+    throw new Error(`alice's C_20 tally should read 'C_20 Reckoning — 1' (match 1 x the unset alpha default 1), got '${c20Tally}'`);
+  }
+  if (c21Tally !== 'C_21 Integrating — 1') {
+    throw new Error(`alice's C_21 tally should read 'C_21 Integrating — 1' (match 1 x the unset alpha default 1), got '${c21Tally}'`);
+  }
+
   // --- Quadratic voting (base-only funding since phase 2) ---
   // Without salient dims a quadratic proposal grants the base balance (3), so
   // alice's first vote (cumulative cost 1) counts and her second (cumulative
