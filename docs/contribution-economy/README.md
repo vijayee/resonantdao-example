@@ -6,17 +6,17 @@ Serve this directory with `python3 -m http.server` and open the served `index.ht
 
 ## File index
 
-| File | Diagram | Badge | One-line function |
-| --- | --- | --- | --- |
-| `bpmn/00-master-lifecycle.bpmn` | Master Contribution Lifecycle | `core` | How any action becomes a contribution. The member records what happened, the system scores it across all 22 dimensions, reviewers check it, harm pulls the score down, and at the end of each round the 22 tallies combine into the overall score. |
-| `bpmn/20-interaction-map.bpmn` | Dimension Interaction Map | `core` | How the 22 dimensions feed each other. Records and reviews support everything, handoffs pass evidence between dimensions, and the round's closing steps lead to scoring. |
-| `bpmn/21-aggregation-rct.bpmn` | Overall Score Aggregation | `core` | How 22 tallies become one overall score at the end of each round. Money-driven parts never count toward voting. Members review and re-tune the dimension weights by hand before combining. |
+| File | Diagram | Badge | In the machine | One-line function |
+| --- | --- | --- | --- | --- |
+| `bpmn/00-master-lifecycle.bpmn` | Master Contribution Lifecycle | `core` | **LIVE** | How any action becomes a contribution. The member records what happened, the system scores it across all 22 dimensions, reviewers check it, harm pulls the score down, and at the end of each round the 22 tallies combine into the overall score. |
+| `bpmn/20-interaction-map.bpmn` | Dimension Interaction Map | `core` | **LIVE** | How the 22 dimensions feed each other. Records and reviews support everything, handoffs pass evidence between dimensions, and the round's closing steps lead to scoring. |
+| `bpmn/21-aggregation-rct.bpmn` | Overall Score Aggregation | `core` | **LIVE** | How 22 tallies become one overall score at the end of each round. Money-driven parts never count toward voting. Members review and re-tune the dimension weights by hand before combining. |
 | `bpmn/c00-fool.bpmn` | C_0 Fool — Entry | `specified` | Rewards being first to step into genuinely new territory. The first step itself is recorded but pays nothing — it earns value only once a reviewer confirms it was real. |
-| `bpmn/c01-magician.bpmn` | C_1 Magician — Building | `specified` | Rewards building something real. Payment happens on acceptance and is sized by scope — submitting work alone earns nothing. |
-| `bpmn/c02-priestess.bpmn` | C_2 Priestess — Recording | `specified` | Rewards records that last, are credited to an author, and can be found again. Publishing earns a base credit; every confirmed later use earns a bonus. |
+| `bpmn/c01-magician.bpmn` | C_1 Magician — Building | `specified` | **LIVE** | Rewards building something real. Payment happens on acceptance and is sized by scope — submitting work alone earns nothing. |
+| `bpmn/c02-priestess.bpmn` | C_2 Priestess — Recording | `specified` | **LIVE** | Rewards records that last, are credited to an author, and can be found again. Publishing earns a base credit; every confirmed later use earns a bonus. |
 | `bpmn/c03-empress.bpmn` | C_3 Empress — Nurturing | `specified` | Rewards helping someone else grow. The reward is a share of the mentee's accepted work, capped per mentee and paid once per round. |
 | `bpmn/c04-emperor.bpmn` | C_4 Emperor — Rule Changes | `proposed interpretation` | Rewards rule changes the DAO actually adopts — proposing alone earns no credit. |
-| `bpmn/c05-hierophant.bpmn` | C_5 Hierophant — Teaching | `specified` | Rewards teaching proven by someone actually being able to do the thing — lectures and attendance alone get no credit. |
+| `bpmn/c05-hierophant.bpmn` | C_5 Hierophant — Teaching | `specified` | **LIVE** | Rewards teaching proven by someone actually being able to do the thing — lectures and attendance alone get no credit. |
 | `bpmn/c06-lovers.bpmn` | C_6 Lovers — Joint Builds | `proposed interpretation` | Rewards genuine joint builds, with the shared credit split by proven share of the work. |
 | `bpmn/c07-chariot.bpmn` | C_7 Chariot — Milestones | `proposed interpretation` | Rewards completed milestones, reduced or voided if the work caused proven harm. |
 | `bpmn/c08-strength.bpmn` | C_8 Strength — Resolving | `specified` | Rewards resolving a live dispute. The resolver must be neutral, the credit is sized by severity, and both sides must accept the resolution in writing. |
@@ -28,11 +28,13 @@ Serve this directory with `python3 -m http.server` and open the served `index.ht
 | `bpmn/c14-temperance.bpmn` | C_14 Temperance — Health in Range | `proposed interpretation` | Rewards keeping a health measure in a healthy range, with stall detection to catch quiet stops. |
 | `bpmn/c15-devil.bpmn` | C_15 Devil — Exposing | `specified` | Rewards exposing a skewed incentive. It needs a second person to confirm, earns one of the largest credits, and false claims are penalized. |
 | `bpmn/c16-tower.bpmn` | C_16 Tower — Crisis Response | `specified` | Rewards stabilizing a verified crisis. Spotting one earns nothing, and causing it earns nothing. |
-| `bpmn/c17-star.bpmn` | C_17 Star — Orientation | `proposed interpretation` | Rewards a guide when their new member completes a first proven contribution — running sessions alone gets no credit. |
-| `bpmn/c18-moon.bpmn` | C_18 Moon — Verifying | `specified` | Rewards finishing verification checks in either direction. Accuracy is tracked against chance, and suspicious reviewer patterns rotate reviewers out. |
-| `bpmn/c19-sun.bpmn` | C_19 Sun — Public Recognition | `proposed interpretation` | Rewards public recognition only when it links to a proven record — popularity alone earns nothing. |
-| `bpmn/c20-judgement.bpmn` | C_20 Judgement — Reckoning | `proposed interpretation` | Rewards settling the round's records — human-only during the early phase. Unresolved judgments stay open and settle when evidence arrives. |
-| `bpmn/c21-world.bpmn` | C_21 World — Completion | `proposed interpretation` | Rewards completing the whole round once every part is settled. Incomplete rounds wait. |
+| `bpmn/c17-star.bpmn` | C_17 Star — Orientation | `proposed interpretation` | **LIVE** | Rewards a guide when their new member completes a first proven contribution — running sessions alone gets no credit. |
+| `bpmn/c18-moon.bpmn` | C_18 Moon — Verifying | `specified` | **LIVE** | Rewards finishing verification checks in either direction. Accuracy is tracked against chance, and suspicious reviewer patterns rotate reviewers out. |
+| `bpmn/c19-sun.bpmn` | C_19 Sun — Public Recognition | `proposed interpretation` | **LIVE** | Rewards public recognition only when it links to a proven record — popularity alone earns nothing. |
+| `bpmn/c20-judgement.bpmn` | C_20 Judgement — Reckoning | `proposed interpretation` | **LIVE** | Rewards settling the round's records — human-only during the early phase. Unresolved judgments stay open and settle when evidence arrives. |
+| `bpmn/c21-world.bpmn` | C_21 World — Completion | `proposed interpretation` | **LIVE** | Rewards completing the whole round once every part is settled. Incomplete rounds wait. |
+
+> **In the machine** — the workflow runs in the deployed state machine (the wizard overhaul slices, 2026-10/11). Everything else is design awaiting implementation.
 
 ## Cross-dimension dependencies
 
