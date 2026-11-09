@@ -36,6 +36,8 @@
   .badge.specified { background: var(--ok-soft); color: var(--ok-text); }
   .badge.proposed { background: var(--warn-soft); color: var(--warn-text); }
   .badge.core { background: var(--accent-soft); color: var(--accent); }
+  .badge.live, .chip.live { background: var(--ok-soft); color: var(--ok-text); border: 1px solid var(--ok-text); }
+  .chip.live { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
           padding: 18px 22px; box-shadow: var(--shadow); margin-top: 14px; }
   .desc { color: var(--muted); font-size: 15px; margin: 0; max-width: none; }
@@ -121,7 +123,8 @@ function buildNav(d) {
       const a = document.createElement('a');
       a.href = '#' + item.id;
       a.dataset.sel = item.id;
-      a.innerHTML = esc(item.title) + (item.badge === 'proposed' ? ' <span class="chip">proposed</span>' : '');
+      a.innerHTML = esc(item.title) + (item.badge === 'proposed' ? ' <span class="chip">proposed</span>' : '')
+          + (item.live ? ' <span class="chip live">live</span>' : '');
       nav.appendChild(a);
     }
   }
@@ -162,7 +165,7 @@ function renderDiagram(diag) {
       `<p class="onto-label">Boundary — what makes it this and not a neighbor</p><p>${esc(diag.ontology.boundary)}</p></div>` : '';
 
   main.innerHTML =
-    `<h2>${esc(diag.title)} <span class="badge ${esc(diag.badge)}">${diag.badge === 'proposed' ? 'proposed interpretation' : diag.badge}</span></h2>` +
+    `<h2>${esc(diag.title)} <span class="badge ${esc(diag.badge)}">${diag.badge === 'proposed' ? 'proposed interpretation' : diag.badge}</span>${diag.live ? ' <span class="badge live">live in the machine</span>' : ''}</h2>` +
     (whoBlock
       ? `<div class="meta-row"><div class="card"><p class="desc">${esc(diag.description)}</p></div>${whoBlock}</div>`
       : `<div class="card"><p class="desc">${esc(diag.description)}</p></div>`) +

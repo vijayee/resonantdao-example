@@ -16,6 +16,7 @@
       "file": "bpmn/00-master-lifecycle.bpmn",
       "title": "Master Contribution Lifecycle",
       "badge": "core",
+      "live": true,
       "description": "How any action becomes a contribution. The member records what happened, the system scores it across all 22 dimensions, reviewers check it, harm pulls the score down, and at the end of each round the 22 tallies combine into the overall score.",
       "whoActs": [
         "Software spot-checks are audited at random",
@@ -78,6 +79,7 @@
       "file": "bpmn/20-interaction-map.bpmn",
       "title": "Dimension Interaction Map",
       "badge": "core",
+      "live": true,
       "description": "How the 22 dimensions feed each other. Records and reviews support everything, handoffs pass evidence between dimensions, and the round's closing steps lead to scoring.",
       "whoActs": [],
       "glossary": [
@@ -124,6 +126,7 @@
       "file": "bpmn/21-aggregation-rct.bpmn",
       "title": "Overall Score Aggregation",
       "badge": "core",
+      "live": true,
       "description": "How 22 tallies become one overall score at the end of each round. Money-driven parts never count toward voting. Members review and re-tune the dimension weights by hand before combining.",
       "whoActs": [
         "Members review and version the dimension weights",
@@ -232,6 +235,7 @@
       "file": "bpmn/c01-magician.bpmn",
       "title": "C_1 Magician — Building",
       "badge": "specified",
+      "live": true,
       "description": "Rewards building something real. Payment happens on acceptance and is sized by scope — submitting work alone earns nothing.",
       "whoActs": [
         "Two reviewers check the work",
@@ -270,6 +274,7 @@
       "file": "bpmn/c02-priestess.bpmn",
       "title": "C_2 Priestess — Recording",
       "badge": "specified",
+      "live": true,
       "description": "Rewards records that last, are credited to an author, and can be found again. Publishing earns a base credit; every confirmed later use earns a bonus.",
       "whoActs": [
         "A reviewer confirms each real use of the record"
@@ -369,6 +374,7 @@
       "file": "bpmn/c05-hierophant.bpmn",
       "title": "C_5 Hierophant — Teaching",
       "badge": "specified",
+      "live": true,
       "description": "Rewards teaching proven by someone actually being able to do the thing — lectures and attendance alone get no credit.",
       "whoActs": [
         "A reviewer confirms someone can now do it"
@@ -754,6 +760,7 @@
       "file": "bpmn/c17-star.bpmn",
       "title": "C_17 Star — Orientation",
       "badge": "proposed",
+      "live": true,
       "description": "Rewards a guide when their new member completes a first proven contribution — running sessions alone gets no credit.",
       "whoActs": [
         "A person runs the orientation"
@@ -783,6 +790,7 @@
       "file": "bpmn/c18-moon.bpmn",
       "title": "C_18 Moon — Verifying",
       "badge": "specified",
+      "live": true,
       "description": "Rewards finishing verification checks in either direction. Accuracy is tracked against chance, and suspicious reviewer patterns rotate reviewers out.",
       "whoActs": [
         "A reviewer checks each pending claim",
@@ -817,6 +825,7 @@
       "file": "bpmn/c19-sun.bpmn",
       "title": "C_19 Sun — Public Recognition",
       "badge": "proposed",
+      "live": true,
       "description": "Rewards public recognition only when it links to a proven record — popularity alone earns nothing.",
       "whoActs": [
         "A reviewer checks the record"
@@ -842,6 +851,7 @@
       "file": "bpmn/c20-judgement.bpmn",
       "title": "C_20 Judgement — Reckoning",
       "badge": "proposed",
+      "live": true,
       "description": "Rewards settling the round's records — human-only during the early phase. Unresolved judgments stay open and settle when evidence arrives.",
       "whoActs": [
         "People settle the records"
@@ -875,6 +885,7 @@
       "file": "bpmn/c21-world.bpmn",
       "title": "C_21 World — Completion",
       "badge": "proposed",
+      "live": true,
       "description": "Rewards completing the whole round once every part is settled. Incomplete rounds wait.",
       "whoActs": [
         "A person confirms the round completed"
