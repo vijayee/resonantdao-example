@@ -1,0 +1,2 @@
+# Serve as-is: the site ships prebuilt static HTML (bpmn-js via CDN) — Jekyll
+# processing is unnecessary and its conventions would mangle underscore paths.
