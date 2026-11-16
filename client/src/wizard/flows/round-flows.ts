@@ -40,9 +40,21 @@ export function reckonFlow(round: number): FlowDefinition {
       { kind: 'text', id: 'note', title: 'Reckoning note', placeholder: 'Recorded permanently' },
       { kind: 'review' },
     ],
-    reviewSummary: (a) => [
-      `Reckoning round ${round}.`,
-    ],
+    reviewSummary: (a) => {
+      void ds.tick;
+      const d = ds.dao;
+      if (!d) return [`Reckoning round ${round}.`];
+      const accepted = d.getContributions().filter(
+        (e) => d.getContributionStatus(e.record.contributionId) === 'accepted'
+          && d.getContributionRound(e.record.contributionId) === round,
+      );
+      return [
+        `Reckoning round ${round} — the publish preview currently aggregates ${accepted.length} accepted contribution(s).`,
+        ...(accepted.length === 0
+          ? ['Nothing is accepted yet — pending submissions can still be settled after the reckoning; publish picks them up.']
+          : []),
+      ];
+    },
     submit: async (a) => {
       const ok = await ds.reckonRound({ note: (a.note ?? '').trim() });
       if (!ok) throw new Error('The reckoning did not record — check the message below the page.');
@@ -68,7 +80,7 @@ export function publishFlow(round: number): FlowDefinition {
           && d.getContributionRound(e.record.contributionId) === round,
       );
       const lines = [`Aggregating ${accepted.length} accepted contribution(s) from round ${round}.`];
-      if (accepted.length === 0) lines.push('Nothing settled in this round yet — publish needs at least one accepted contribution.');
+      if (accepted.length === 0) lines.push('Nothing accepted in this round yet — settle the pending submissions from their contribution pages, then come back: publish picks them up.');
       return lines;
     },
     submit: async () => {
