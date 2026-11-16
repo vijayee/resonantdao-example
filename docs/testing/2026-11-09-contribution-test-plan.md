@@ -55,7 +55,7 @@ Weights (`alpha`) default to ×1 per dimension until someone sets them (§11-E).
 
 **2-A Submit a building claim**
 - `alice` → Contribute → **Start a new contribution…**
-- Wizard: pick **C_1 Magician — Building** → Next → **verifier pick**: tick `bob` (C_1 needs exactly 1... C_1 is single-verify) → Next → summary: `built a bridge` → Next → evidence pointer: `https://example.com/bridge` → Next → review shows Type/Summary/Evidence + **Verifiers: bob** → **Confirm & submit**.
+- Wizard: pick **C_1 Magician — Building** → Next → **verifier pick**: tick `bob` (C_1 is single-verify) → Next → summary: `built a bridge` → Next → evidence pointer: `https://example.com/bridge` → Next → review shows Type/Summary/Evidence + **Verifiers: bob** → **Confirm & submit**.
 - **Expect**: you are routed to the contribution's own page (`/contribute/<id>`); the pill reads **pending**; phase rail: ✓ Submission — alice, ○ Verification, ○ Settlement.
 
 **2-B Verify it (the named verifier)**
@@ -96,7 +96,7 @@ Weights (`alpha`) default to ×1 per dimension until someone sets them (§11-E).
 - **Expect**: pill **rejected**; on carol's page an **appeal form** appears (rejected + yours + never appealed).
 - `carol` appeals (reason: `the record is findable`).
 - **Expect**: pill **appealed**; the verify step re-opens.
-- `bob` — wait: bob is reciprocity-barred for this pair post-appeal. **Use reassign**: on carol's page the **reassign flow** (verify slots open) names `dave` → dave sees the claim in his feed band → dave verifies Uphold → carol settles.
+- The verifier is reciprocity-barred for this pair post-appeal, so use **reassign**: on carol's page the **reassign flow** (verify slots open) names `dave` → dave sees the claim in his feed band → dave verifies Uphold → carol settles.
 - **Expect**: pill **accepted** (+1 credit path); the second verify moved nothing extra (bob's earlier +2 stays; dave earns his own +2).
 
 ---
@@ -105,7 +105,7 @@ Weights (`alpha`) default to ×1 per dimension until someone sets them (§11-E).
 
 **5-A Reassign while pending**
 - Any pending contribution with verify slots open: the filer's page shows the **reassign flow**; name an additional verifier.
-- **Expect**: the named member's attention band lights "awaits your verification"; the machine accepted the op (registered in the feed: "<name> runs orientation…" — wait, that's §7; here: "named … as additional verifier(s)" feed row).
+- **Expect**: the named member's attention band lights "awaits your verification"; the machine accepted the op (the feed row reads "named … as additional verifier(s)").
 
 **5-B Verifiers see it in their feed**
 - `dave` → Feed → **Needs your attention** lists the contribution awaiting HIS verification.
@@ -176,7 +176,7 @@ Weights (`alpha`) default to ×1 per dimension until someone sets them (§11-E).
 ## 10. The settlement cycle (C_10 → C_20 → C_21)
 
 - Any member → **Round** → the settlement wizard is always there: stage **Open** → **Audit round…** (Fair + note; a reason is required) → stage **Audited** → **Reckoning** (note required; C_20 credit to the driver) → stage **Reckoned** → **Publish** (the review shows "Aggregating N accepted contribution(s)" and a warning if nothing is settled) → stage **Published** → the next round opens.
-- **Expect**: each stage chip activates in order; the notes are required; the **RCT badge** on a member updates after publish (round 1 with alice's 12-bounty entry and the claims' tally weights → RCT reflects the aggregation, attributed to the RECIPIENT of each piece of work); weights (Custodians → Weights panel, custodian-only in this build) scale future tally credits (set alpha C_1 = 2 → the NEXT C_1 credit is 24 $RES wait — no: the calibration scales TALLIES; C_1's tally = match × alpha — and RCT aggregation weights too).
+- **Expect**: each stage chip activates in order; the notes are required; the **RCT badge** on a member updates after publish (round 1 with alice's 12-bounty entry and the claims' tally weights → RCT reflects the aggregation, attributed to the RECIPIENT of each piece of work); weights (Custodians → Weights panel, custodian-only in this build) scale future tally credits (set alpha C_1 = 2 → the NEXT C_1 tally credit doubles, and the RCT aggregation weights it too — $RES bounties are unchanged by weights).
 
 **10-D Weights**
 - `alice` (first member = custodian in the demo) → Custodians → Weights → set `alpha C_1` = 2, a version label → Set weights.
