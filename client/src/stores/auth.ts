@@ -14,6 +14,49 @@ import { useStatusStore } from './status';
 
 export const useAuthStore = defineStore('auth', () => {
   const status = useStatusStore();
+
+  // The tab's own session (sessionStorage): signing in SURVIVES F5 — the
+  // wallet re-bootstraps from persisted key material without the password —
+  // and dies with the tab (sessionStorage is per-tab). Key material at rest
+  // rides the tab session unencrypted: a demo trade, the same exposure the
+  // in-memory wallet already has while the tab lives.
+  const SESSION_KEY = 'dao-active-session';
+
+  function persistSession(username: string, walletState: WalletState): void {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username, walletState }));
+  }
+
+  // Auto-restore: rebuild the dao from the persisted wallet — the server
+  // re-handshakes (login) so members/keys stay in sync; no password needed.
+  async function restore(): Promise<void> {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return;
+    try {
+      const { username, walletState } = JSON.parse(raw) as { username: string; walletState: WalletState };
+      const loginRes = await serverClient.login(username);
+      if (loginRes.kind !== 'login_ok') {
+        sessionStorage.removeItem(SESSION_KEY);
+        return;
+      }
+      const d = new BrowserDao();
+      await d.init(username, bytesToHex(walletState.signingSeed), walletState.keyVersion);
+      d.setWalletUser(username);
+      wallet.value = walletState;
+      const daoStore = useDaoStore();
+      daoStore.members = loginRes.members.map((m: PublicUser) => m.username);
+      for (const member of loginRes.members) {
+        if (member.username !== username) {
+          d.registerMember(member.username, member.publicKeyHex, member.keyVersion);
+        }
+      }
+      await daoStore.bootstrap(d, username);
+      await daoStore.replayLog();
+    } catch (err) {
+      console.warn('session restore failed — signing in normally:', err);
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+  }
+  void restore();
   // Secret key material — keep it out of deep reactivity proxies; whole-object
   // replacement is the only mutation this needs.
   const wallet = shallowRef<WalletState | null>(null);
@@ -97,6 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
       wallet.value = walletState;
       await daoStore.bootstrap(d, username);
       await daoStore.replayLog();
+      persistSession(username, walletState);
       status.set('Registered and logged in.', 'success');
       return true;
     } catch (err) {
@@ -165,6 +209,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       await daoStore.bootstrap(d, username);
       await daoStore.replayLog();
+      persistSession(username, walletState);
 
       status.set('Logged in.', 'success');
       return true;
@@ -187,6 +232,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     daoStore.teardown();
     wallet.value = null;
+    sessionStorage.removeItem(SESSION_KEY);
     status.set('');
   }
 
