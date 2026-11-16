@@ -209,7 +209,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       await daoStore.bootstrap(d, username);
       await daoStore.replayLog();
-      persistSession(username, walletState);
+      persistSession(username, state);
 
       status.set('Logged in.', 'success');
       return true;
