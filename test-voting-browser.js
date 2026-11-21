@@ -152,11 +152,13 @@ async function completeFlow(page, flowId, { choiceValue = null, textValue = '', 
 // `verifierNames` is the TARGETED verification assignment (slice #4c): the
 // wizard's members step sits between the dim choice and the summary and its
 // pick must be EXACTLY the dim schema's verify requirement count (dim '1' →
-// 2, dim '2' → 1). The pick list offers every reciprocity-clear non-self
-// member — in this e2e's fresh DB the reciprocity sets are still empty at
-// each submission's pick time, so the named members are always offered.
+// 2, dim '2' → 1, dim '15' → 2 — the corroboration quorum the exposure
+// claim's all-parties count-2 schema carries). The pick list offers every
+// reciprocity-clear non-self member — in this e2e's fresh DB the reciprocity
+// sets are still empty at each submission's pick time, so the named members
+// are always offered.
 async function submitContribution(submitter, dimValue, summary, verifierNames) {
-  const needTicked = Number(dimValue) === 1 ? 2 : 1;
+  const needTicked = Number(dimValue) === 1 || Number(dimValue) === 15 ? 2 : 1;
   if (!Array.isArray(verifierNames) || verifierNames.length !== needTicked) {
     throw new Error(`submitContribution: dim ${dimValue} requires exactly ${needTicked} named verifier(s), got ${JSON.stringify(verifierNames)}`);
   }
@@ -540,6 +542,8 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   let dave = null;
   let eve = null;
   let frank = null;
+  let gina = null;
+  let harry = null;
   try {
   const aliceName = 'alice_e2e_' + Math.floor(Math.random() * 10000);
   const bobName = 'bob_e2e_' + Math.floor(Math.random() * 10000);
@@ -1122,6 +1126,140 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
     throw new Error(`bob (the student) carries a C_5 chip — the filer's tally was misattributed`);
   }
 
+  // --- C_15 exposure claims (slice #6f) ---
+  // The claim family's corroboration shape: the filer names TWO corroborators
+  // at the wizard's verifiers pick (the C_15 schema's all-parties count-2 —
+  // submitContribution's exact-tick rule covers dim '15'), the flow gains NO
+  // tie picks between the dim choice and the verifiers pick (claimTieSteps(15)
+  // is empty — pinned jest-side), and the penalty gateway pays the mirror
+  // image when the claim's verification completes with a REJECT.
+  //
+  // WHY two fresh members (gina, harry): reciprocity is strictly one check
+  // per member pair in BOTH directions, and every base-cast pair with alice
+  // is already consumed by the flows above (bob, carol, dave, eve all checked
+  // alice's work — the same constraint that forced eve and frank's
+  // registration for the orientation arc). gina and harry verify no one
+  // before their corroborations, so alice's pick list offers them. They sort
+  // after every member the ballot sections below assert on, so the
+  // custodian-election asserts are untouched.
+  console.log('Exposure: gina and harry registered as the fresh corroboration pool');
+  const ginaName = 'gina_e2e_' + Math.floor(Math.random() * 10000);
+  const harryName = 'harry_e2e_' + Math.floor(Math.random() * 10000);
+  gina = await runUser(ginaName);
+  console.log('Seventh page registered:', ginaName);
+  harry = await runUser(harryName);
+  console.log('Eighth page registered:', harryName);
+
+  // THE CREDIT ARC: alice's exposure claim, corroborators gina + harry.
+  // Gina's upheld check shows the all-parties (1/2) quorum chip; Harry's
+  // completing check credits the FILER's C_15 tally (match 1 × the unset
+  // alpha default 1 — the same filer-credit shape as the C_5 claim, and no
+  // $RES moves because the classification dim pays no bounty); alice settles.
+  console.log('Exposure credit arc: alice files, gina + harry uphold');
+  const exposeSummary = 'Exposure e2e demo ' + Math.floor(Math.random() * 10000);
+  await submitContribution(alice, '15', exposeSummary, [ginaName, harryName]);
+  const exposeSettleFlow = alice.page.locator('.wizard-flow[data-flow-id="settle"]');
+
+  let exposeHalf = false;
+  for (let attempt = 0; !exposeHalf && attempt < 15; attempt++) {
+    await runContributionFlow(gina, exposeSummary, 'verify', { choiceValue: 'yes', textValue: 'the incentive skew is real' });
+    exposeHalf = await gina.page
+      .locator('.lc-phase__progress:text-is("1/2")')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!exposeHalf) {
+    const statusBar = await gina.page.locator('#status').textContent();
+    throw new Error(`The exposure claim's quorum never showed (1/2). Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('EXPOSURE PROGRESS: (1/2) after the first corroborator');
+
+  let exposeVerified = false;
+  for (let attempt = 0; !exposeVerified && attempt < 15; attempt++) {
+    await runContributionFlow(harry, exposeSummary, 'verify', { choiceValue: 'yes', textValue: 'the second corroborator agrees' });
+    exposeVerified = await exposeSettleFlow
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!exposeVerified) {
+    const statusBar = await harry.page.locator('#status').textContent();
+    throw new Error(`The exposure claim's second corroborator never completed. Status bar: ${statusBar || '(empty)'}`);
+  }
+
+  let exposeSettled = false;
+  for (let attempt = 0; !exposeSettled && attempt < 15; attempt++) {
+    await completeFlow(alice.page, 'settle', { textValue: 'accepting the corroborated exposure' });
+    exposeSettled = await alice.page
+      .locator('.lc-pill--accepted')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!exposeSettled) {
+    const statusBar = await alice.page.locator('#status').textContent();
+    throw new Error(`The exposure claim's pill never flipped to accepted. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('CONTRIBUTION STATUS PILL: accepted (exposure credit arc)');
+
+  // The FILER's chip: 'C_15 Exposing — 1', EXACT (element-scoped — a
+  // container read would run across adjacent span boundaries, and presence
+  // alone would miss a units-scale regression, the established standard).
+  await nav(alice.page, '/account');
+  const exposeChip = alice.page.locator('#dim-tallies .tally:has-text("C_15")');
+  let exposeTallySeen = false;
+  for (let attempt = 0; !exposeTallySeen && attempt < 15; attempt++) {
+    exposeTallySeen = (await exposeChip.count()) > 0;
+    if (!exposeTallySeen) await alice.page.waitForTimeout(1000);
+  }
+  if (!exposeTallySeen) throw new Error(`alice's C_15 tally missing from #dim-tallies after the exposure arc`);
+  const exposeTally = (await exposeChip.textContent()).trim();
+  console.log('EXPOSURE TALLY:', exposeTally);
+  if (exposeTally !== 'C_15 Exposing — 1') {
+    throw new Error(`alice's C_15 tally should read 'C_15 Exposing — 1' (match 1 x the unset alpha default 1), got '${exposeTally}'`);
+  }
+
+  // THE PENALTY ARC: eve's false exposure, corroborators carol + dave. A
+  // rejection terminates the lifecycle immediately — the machine's final
+  // resolution happens at the FIRST reject — so carol's REJECT is where the
+  // gateway fires (dave is never asked): eve's C_15 tally takes the symmetric
+  // penalty (−match × alpha 15, the per-mille accumulate with a negative
+  // delta) and her chip reads NEGATIVE. The penalty is credibility-only —
+  // no $RES moves (the account balance is asserted below as chip presence's
+  // jest-side counterpart).
+  console.log('Exposure penalty arc: eve files, carol rejects');
+  const falseSummary = 'False exposure e2e demo ' + Math.floor(Math.random() * 10000);
+  await submitContribution(eve, '15', falseSummary, [carolName, daveName]);
+
+  let falseRejected = false;
+  for (let attempt = 0; !falseRejected && attempt < 15; attempt++) {
+    await runContributionFlow(carol, falseSummary, 'verify', { choiceValue: 'no', textValue: 'the claimed skew is disproven' });
+    falseRejected = await eve.page
+      .locator('.lc-pill--rejected')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!falseRejected) {
+    const statusBar = await eve.page.locator('#status').textContent();
+    throw new Error(`The false exposure's reject never recorded. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('CONTRIBUTION STATUS PILL: rejected (exposure penalty arc)');
+
+  // The FILER's chip renders the NEGATIVE tally: the tally panel lists every
+  // nonzero tally (C_15's penalty is the negative state the panel now shows),
+  // and the per-mille register −1000 renders as '-1' after the /1000 read.
+  await nav(eve.page, '/account');
+  const falseChip = eve.page.locator('#dim-tallies .tally:has-text("C_15")');
+  let falseTallySeen = false;
+  for (let attempt = 0; !falseTallySeen && attempt < 15; attempt++) {
+    falseTallySeen = (await falseChip.count()) > 0;
+    if (!falseTallySeen) await eve.page.waitForTimeout(1000);
+  }
+  if (!falseTallySeen) throw new Error(`eve's C_15 penalty tally missing from #dim-tallies after the rejected exposure`);
+  const falseTally = (await falseChip.textContent()).trim();
+  console.log('PENALTY TALLY:', falseTally);
+  if (falseTally !== 'C_15 Exposing — -1') {
+    throw new Error(`eve's C_15 tally should read 'C_15 Exposing — -1' (the symmetric penalty: −match x the unset alpha default), got '${falseTally}'`);
+  }
+
 
   // --- Custodian election flow ---
   // carol and dave registered (live pages) back in the contribution flows;
@@ -1357,7 +1495,7 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
     // route-scoped in the SPA, so each read gets a short timeout — a page
     // sitting on a route without that node just reports its route instead of
     // stalling the dump for 30s.
-    for (const [name, u] of [['alice', alice], ['bob', bob], ['carol', carol], ['dave', dave], ['eve', eve], ['frank', frank]]) {
+    for (const [name, u] of [['alice', alice], ['bob', bob], ['carol', carol], ['dave', dave], ['eve', eve], ['frank', frank], ['gina', gina], ['harry', harry]]) {
       if (!u?.page) continue;
       try {
         console.log(`[${name} status]`, await u.page.locator('#status').textContent({ timeout: 2000 }));
@@ -1370,7 +1508,7 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
     }
     throw err;
   } finally {
-    for (const u of [alice, bob, carol, dave, eve, frank]) {
+    for (const u of [alice, bob, carol, dave, eve, frank, gina, harry]) {
       if (u) { try { await u.browser.close(); } catch (err) { /* already closed */ } }
     }
   }
