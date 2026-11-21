@@ -159,12 +159,25 @@ export interface SettleContributionPayload {
   submitter: string;
   reason: string;
   verifiers?: string[]; // client-attested verifiers whose checks this settlement upholds (same PoC trust class as dims/submitter)
+  // The record's schema re-carry (slice #6g, C_7): multi-step schemas place
+  // the settle step at a DIFFERENT index than the phase-1 register pin of 2,
+  // so the handler locates it in the schema resolved from these fields (the
+  // verify payload's establish pattern). ABSENT = legacy positional check.
+  dims?: Record<string, number>;
+  schemaVersion?: string;
 }
 
 export interface AppealVerdictPayload {
   contributionId: string;
   submitter: string; // must equal op.signerId (submitter-only)
   reason: string;
+  // The record's schema re-carry (slice #6g, C_7): the rewind targets the
+  // schema's FIRST verify step and resets EVERY verify step's completion
+  // counter — on a two-verify schema a rejected second gate must not
+  // pre-satisfy the re-review. ABSENT = legacy positional rewind (index 1,
+  // the 'verify' counter only).
+  dims?: Record<string, number>;
+  schemaVersion?: string;
 }
 
 // Targeted verification (slice #4c): op 'reassign_verifiers'. The SUBMITTER

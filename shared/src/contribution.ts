@@ -29,8 +29,9 @@ export const DIMENSION_COUNT = 22 as const;
 // declaring themselves pickable here (no hardcoded picker lists anywhere).
 // The claim schemas: C_1 (building's two-verifier v2), C_2 (recording),
 // C_18 (verifying — embedded only), C_19 (recognition, slice #6a), C_5
-// (teaching, slice #6e — the claim-gate map's first other-shape) and C_15
-// (exposure, slice #6f — the claim-gate map's corroboration shape).
+// (teaching, slice #6e — the claim-gate map's first other-shape), C_15
+// (exposure, slice #6f — the corroboration shape) and C_7 (driving's
+// milestone claim, slice #6g — the two-verify-step shape).
 export const DIMENSIONS: DimensionDef[] = [
   { index: 0,  code: 'C_0',  name: 'Fool',       cls: 'Crossing',    implemented: false, pickable: false },
   { index: 1,  code: 'C_1',  name: 'Magician',   cls: 'Building',    implemented: true,  pickable: true },
@@ -39,7 +40,7 @@ export const DIMENSIONS: DimensionDef[] = [
   { index: 4,  code: 'C_4',  name: 'Emperor',    cls: 'Structuring', implemented: false, pickable: false },
   { index: 5,  code: 'C_5',  name: 'Hierophant', cls: 'Teaching',    implemented: true,  pickable: true },
   { index: 6,  code: 'C_6',  name: 'Lovers',     cls: 'Joining',     implemented: false, pickable: false },
-  { index: 7,  code: 'C_7',  name: 'Chariot',    cls: 'Driving',     implemented: false, pickable: false },
+  { index: 7,  code: 'C_7',  name: 'Chariot',    cls: 'Driving',     implemented: true,  pickable: true },
   { index: 8,  code: 'C_8',  name: 'Strength',   cls: 'Resolving',   implemented: false, pickable: false },
   { index: 9,  code: 'C_9',  name: 'Hermit',     cls: 'Discovering', implemented: false, pickable: false },
   { index: 10, code: 'C_10', name: 'Wheel',      cls: 'Cycling',     implemented: false, pickable: false },
@@ -198,6 +199,17 @@ const C1_VERIFY_V2: StepDef = {
 // step object is shared (one machine rule, one step).
 const C15_VERIFY_V2 = C1_VERIFY_V2;
 
+// C_7's SECOND milestone gate (slice #6g): a plain single check riding the
+// same op and rules as the first verify — only its stepId differs, because
+// the verify handler matches the payload's stepId against the CURRENT step's
+// (identical ids would collapse the two gates into one) and each step owns
+// its own stepDone counter.
+const C7_VERIFY_2: StepDef = {
+  ...VERIFY_STEP,
+  stepId: 'verify-2',
+  title: 'Milestone 2',
+};
+
 // Legacy v1 schemas (single-verify everywhere) — kept so contributions
 // submitted before v2 keep verifying under the rules they were submitted under.
 const LEGACY_DEFAULT_SCHEMA: DimensionSchema = {
@@ -223,13 +235,17 @@ export const DEFAULT_SCHEMA: DimensionSchema = {
 };
 
 export const SCHEMAS: Map<number, DimensionSchema> = new Map();
-for (const dimIndex of [1, 2, 5, 15, 18, 19]) {
+for (const dimIndex of [1, 2, 5, 7, 15, 18, 19]) {
   SCHEMAS.set(dimIndex, {
     dimIndex,
     schemaVersion: SCHEMA_VERSION,
     steps: [
       SUBMIT_STEP,
       dimIndex === 1 ? C1_VERIFY_V2 : dimIndex === 15 ? C15_VERIFY_V2 : VERIFY_STEP,
+      // C_7's second milestone gate (slice #6g): the two-gate walk —
+      // milestone N completes only when milestone N−1 has, by the step
+      // register's own ordering (machine-guaranteed already).
+      ...(dimIndex === 7 ? [C7_VERIFY_2] : []),
       SETTLE_STEP,
     ],
   });

@@ -200,6 +200,21 @@ const CLAIM_RULES: Record<number, ClaimRule> = {
     creditDim: 15,
     rejectPenalty: true,
   },
+  // C_7 Chariot (slice #6g): the milestone claim — C_15's no-tie shape with a
+  // SINGLE named verifier (the schema's first verify count 1) who carries BOTH
+  // of the two-verify-step schema's gates. The credit is the FILER's C_7
+  // tally, and the verify handler fires it at the schema's LAST verify step's
+  // completion — the milestones shape the credit's TIMING, not its count. No
+  // $RES moves (the classification dim pays no bounty; the tally is the sole
+  // write), and no tie re-carry: the gates themselves are the gate.
+  7: {
+    submitOk: (_state, payload) => Array.isArray(payload.verifiers) && payload.verifiers.length > 0,
+    tieSets: () => [],
+    stamp: () => {},
+    verifyGate: () => true,
+    creditTarget: (payload) => payload.submitter,
+    creditDim: 7,
+  },
 };
 
 // Every schema starts with a submit step whose op is 'submit_contribution',
@@ -415,13 +430,31 @@ export function makeVerifyContributionHandler(
     // Reciprocity conflict guard — the last validation tier, all-or-nothing:
     // any barred verifier exits here, before the per-check credit, so a
     // blocked check pays nothing and mutates no guard set.
-    if (Array.isArray(payload.priorVerifiers) && payload.priorVerifiers.includes(op.signerId)) {
-      return -1; // all-parties: distinct verifiers (client-attested prior list)
+    //
+    // The milestone carve (slice #6g): a multi-verify-step schema's pair
+    // rules key per-verify-STEP, not per-pair-lifetime — ONE named verifier
+    // carries BOTH of a milestone claim's gates, and a pair whose check
+    // history is already consumed (earlier work) stays eligible for the
+    // claim's two ops (the #4c targeted set bounds who that is). The data
+    // carve is scoped to the schema's shape: a single-verify schema keeps
+    // the standing pair-once bar verbatim.
+    const milestoneClaim = schema.steps.filter((s) => s.op === 'verify_contribution').length > 1;
+    if (
+      step.requirement.mode === 'all-parties' &&
+      Array.isArray(payload.priorVerifiers) && payload.priorVerifiers.includes(op.signerId)
+    ) {
+      return -1; // all-parties partial step: distinct verifiers (client-attested prior list)
     }
-    if (state.setContains(RECIP_NAMES.verifiedBy(payload.submitter), op.signerId)) {
+    if (
+      !milestoneClaim &&
+      state.setContains(RECIP_NAMES.verifiedBy(payload.submitter), op.signerId)
+    ) {
       return -1; // per-pair once: this verifier already verified this submitter
     }
-    if (state.setContains(RECIP_NAMES.verifiedBy(op.signerId), payload.submitter)) {
+    if (
+      !milestoneClaim &&
+      state.setContains(RECIP_NAMES.verifiedBy(op.signerId), payload.submitter)
+    ) {
       return -1; // mutual loop bar: the submitter previously verified this verifier
     }
 
@@ -492,6 +525,21 @@ export function makeVerifyContributionHandler(
     state.incrementPNCounter(doneName, 1, op.signerId);
     const done = state.getPNCounter(doneName) || 0;
     const isFinal = done >= step.requirement.count;
+    // The per-contribution-final gate (slice #6g): payments fire at a verify
+    // step's final completion — for a two-verify schema that would mean TWICE
+    // (once per gate), so the bounty/tally/claim-credit loops gate on the
+    // schema's LAST verify step (the milestone claim's M2). A single-verify
+    // schema's only verify step coincides — every pre-#6g arc is
+    // byte-identical. The step advance below stays per-step-final: each gate
+    // moves the register forward.
+    let lastVerifyIndex = -1;
+    for (let i = schema.steps.length - 1; i >= 0; i--) {
+      if (schema.steps[i].op === 'verify_contribution') {
+        lastVerifyIndex = i;
+        break;
+      }
+    }
+    const claimFinal = isFinal && stepIndex === lastVerifyIndex;
 
     const nowMs = config.getTimeMs ? config.getTimeMs() : Date.now();
     const verification = { verifier: op.signerId, pass: payload.pass, reason: payload.reason, at: nowMs };
@@ -550,11 +598,12 @@ export function makeVerifyContributionHandler(
     }
 
     const payments: Record<string, number> = {};
-    if (isFinal) {
+    if (claimFinal) {
       // Submitter outcome bounties: every non-per-check rule fires once at the
-      // step's final requirement completion. The actor entry (per-check) was
-      // already paid above. The verified harm scales the outcome (never the
-      // verifier's per-check credit paid above).
+      // claim's LAST verify step's final completion (slice #6g: the milestone
+      // claim's gates shape the credit's timing, never its count). The actor
+      // entry (per-check) was already paid above. The verified harm scales
+      // the outcome (never the verifier's per-check credit paid above).
       let submitterAmount = 0;
       for (const pay of step.pays ?? []) {
         if (pay.rule === 'per-dims') {
@@ -624,7 +673,9 @@ export function makeVerifyContributionHandler(
           op.signerId
         );
       }
+    }
 
+    if (isFinal) {
       // The orientation credit (slice #6d, C_17): the SUBMITTER's guide earns
       // the C_17 tally when the guide's orientee's work is FIRST proven — the
       // completion of this verify step IS that first proven work, and the
@@ -676,11 +727,15 @@ export function makeVerifyContributionHandler(
 // Terminal lifecycle settle step (op 'settle_contribution'): the submitter
 // acknowledges the verified outcome; the lifecycle finalizes as accepted. No
 // payments — every payout already fired at the final verify completion.
-// Positional validation (documented limitation): handlers cannot read the
-// fact record's dims, so the settle step is validated by position — the
-// settle step exists only as the terminal step (index 2) in phase-1 schemas.
-// Future multi-step schemas will pass dims like verify does to locate the
-// settle step in the schema instead of pinning the register index.
+// Step location: the settle op may RE-CARRY the record's dims+schemaVersion
+// (slice #6g, C_7 — the verify payload's establish pattern), and the handler
+// locates the settle step in the schema resolved from them (multi-step
+// schemas place it at a different index than the phase-1 pin of 2). A payload
+// without the re-carry keeps the legacy positional check — the settle step
+// exists only as terminal step (index 2) in the single-verify schemas, and
+// the legacy byte-compat leaves every pre-#6g payload untouched. A malformed
+// re-carry (invalid dims / unknown version) dies outright — never defaulted
+// silently.
 export function makeSettleContributionHandler(
   node: { addRegister(name: string, initial?: number): void; addORSet(name: string): void },
   config: { getTimeMs?: () => number } = {}
@@ -690,7 +745,9 @@ export function makeSettleContributionHandler(
     if (
       !isNonEmptyString(payload.contributionId) ||
       !isNonEmptyString(payload.submitter) ||
-      !isNonEmptyString(payload.reason)
+      !isNonEmptyString(payload.reason) ||
+      (payload.schemaVersion !== undefined && !KNOWN_SCHEMA_VERSIONS(payload.schemaVersion)) ||
+      (payload.dims !== undefined && !isValidDims(payload.dims))
     ) {
       return -1;
     }
@@ -714,7 +771,17 @@ export function makeSettleContributionHandler(
     if (status === undefined || (status !== STATUS_PENDING && status !== STATUS_APPEALED)) {
       return -1; // already accepted/terminal, or never submitted
     }
-    if (state.getRegister(CONTRIB_NAMES.step(payload.contributionId)) !== 2) {
+    let settleIndex: number;
+    if (payload.dims !== undefined) {
+      const schema = schemaForRecord(payload.schemaVersion ?? SCHEMA_VERSION, payload.dims);
+      settleIndex = schema.steps.findIndex((s) => s.op === 'settle_contribution');
+      if (settleIndex < 0) {
+        return -1; // a schema without a settle step settles nothing
+      }
+    } else {
+      settleIndex = 2; // legacy positional: the single-verify schemas' terminal
+    }
+    if (state.getRegister(CONTRIB_NAMES.step(payload.contributionId)) !== settleIndex) {
       return -1;
     }
     // Client-attested verifier list (deduped, non-empty strings only) — every
@@ -768,7 +835,9 @@ export function makeAppealVerdictHandler(
     if (
       !isNonEmptyString(payload.contributionId) ||
       !isNonEmptyString(payload.submitter) ||
-      !isNonEmptyString(payload.reason)
+      !isNonEmptyString(payload.reason) ||
+      (payload.schemaVersion !== undefined && !KNOWN_SCHEMA_VERSIONS(payload.schemaVersion)) ||
+      (payload.dims !== undefined && !isValidDims(payload.dims))
     ) {
       return -1;
     }
@@ -801,17 +870,41 @@ export function makeAppealVerdictHandler(
     try { node.addRegister(appealedReg, 0); } catch (err) { /* exists */ }
     state.setRegister(appealedReg, 1, op.signerId);
     state.setRegister(statusReg, STATUS_APPEALED, op.signerId);
-    // Rewind the lifecycle position to the verify step — positional index:
-    // every current schema (v1, v2, default) places verify at index 1, and a
+    // Rewind the lifecycle position to the FIRST verify step and reset EVERY
+    // verify step's completion counter, so the appealed re-review requires
+    // the FULL fresh quorum at each gate (decrementPNCounter is exact —
+    // PNCounters support decrement; the pre-appeal verdicts no longer occupy
+    // slots). With the record's schema re-carried (slice #6g, C_7 — the
+    // verify/settle payload's establish pattern) both come from the resolved
+    // schema: a two-verify schema rewinds to its 'verify' index and clears
+    // the second gate's counter too (a rejected milestone check must not
+    // pre-satisfy the re-review). Without the re-carry the legacy positional
+    // rewind stands — every pre-#6g schema places verify at index 1 and a
     // rejection never advances past it.
-    state.setRegister(CONTRIB_NAMES.step(payload.contributionId), 1, op.signerId);
-    // Reset the verify step's completion counter so the appealed re-review
-    // requires the FULL fresh quorum (decrementPNCounter is exact — PNCounters
-    // support decrement; the pre-appeal verdicts no longer occupy slots).
-    const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, 'verify');
-    const done = state.getPNCounter(doneReg) || 0;
-    if (done > 0) {
-      state.decrementPNCounter(doneReg, done, op.signerId);
+    if (payload.dims !== undefined) {
+      const schema = schemaForRecord(payload.schemaVersion ?? SCHEMA_VERSION, payload.dims);
+      const rewindIndex = schema.steps.findIndex((s) => s.op === 'verify_contribution');
+      if (rewindIndex < 0) {
+        return -1;
+      }
+      state.setRegister(CONTRIB_NAMES.step(payload.contributionId), rewindIndex, op.signerId);
+      for (const step of schema.steps) {
+        if (step.op !== 'verify_contribution') {
+          continue;
+        }
+        const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId);
+        const done = state.getPNCounter(doneReg) || 0;
+        if (done > 0) {
+          state.decrementPNCounter(doneReg, done, op.signerId);
+        }
+      }
+    } else {
+      state.setRegister(CONTRIB_NAMES.step(payload.contributionId), 1, op.signerId);
+      const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, 'verify');
+      const done = state.getPNCounter(doneReg) || 0;
+      if (done > 0) {
+        state.decrementPNCounter(doneReg, done, op.signerId);
+      }
     }
 
     try { node.addORSet(CONTRIB_NAMES.explanations(payload.contributionId)); } catch (err) { /* declared by submit */ }
