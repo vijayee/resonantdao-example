@@ -1382,6 +1382,192 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   console.log('MILESTONE CREDIT: bob +4 $RES for the two checks');
 
 
+  // --- C_9 discovery claims (slice #6h) ---
+  // The milestone machinery plus the OPTIONAL ADOPTION TIE. The direct
+  // proposal above ('Multi-choice direct') is long expired by now, so
+  // alice's Execute op reaches the machine regardless of majority and stamps
+  // its executed state — the card's pill flipping to 'Executed' is the
+  // machine's adoption truth rendered (and the un-executed cards keep
+  // 'Open', the proposalExecuted reads staying false). Then alice files a
+  // C_9 tying it: the wizard's adopt pick offers EXACTLY her executed
+  // proposals (the tie screen — the un-executed quadratic is NEVER offered,
+  // the same truth the submit gate machine-reads), the reviewer is frank
+  // (the one member whose pair with alice the earlier arcs never consumed —
+  // eve's pair went to the teaching claim, gina's and harry's to the
+  // corroborated exposure), and the SAME named verifier carries BOTH
+  // milestone gates (the carve). The final gate credits once: alice's C_9
+  // chip is exact AND her balance gains EXACTLY the +5 $RES adoption bonus
+  // (the classification dim pays no bounty — the bonus is the tie's), while
+  // frank's two checks pay the standing +4.
+  console.log('Discovery: alice executes the direct proposal, then ties it into a C_9 claim');
+  await nav(alice.page, '/proposals');
+  const directCard = alice.page.locator(`.proposal-card:has(.proposal-card__id:text-is("${directId}"))`).first();
+  let executedPillSeen = false;
+  for (let attempt = 0; !executedPillSeen && attempt < 15; attempt++) {
+    await directCard.locator('button.execute').click({ force: true });
+    executedPillSeen = await directCard
+      .locator('.pill:text-is("Executed")')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!executedPillSeen) {
+    const statusBar = await alice.page.locator('#status').textContent();
+    throw new Error(`The executed proposal's pill never flipped to 'Executed'. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('PROPOSAL EXECUTED: the direct proposal’s card shows the Executed pill');
+
+  await nav(alice.page, '/account');
+  await alice.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
+  const aliceResBefore = Number(((await alice.page.locator('#account-res').textContent()).match(/([\d.]+) \$RES/) || [])[1]);
+  if (Number.isNaN(aliceResBefore)) {
+    throw new Error(`alice's pre-discovery $RES balance never rendered a parsable number`);
+  }
+
+  const discoverySummary = 'Discovery e2e demo ' + Math.floor(Math.random() * 10000);
+  await nav(alice.page, '/contribute');
+  await alice.page.click('#new-contribution-btn');
+  const discoveryFlow = alice.page.locator('.wizard-flow[data-flow-id="contribute-new"]');
+  await discoveryFlow.waitFor({ state: 'visible', timeout: 10000 });
+  await discoveryFlow.locator('.wizard-option[value="9"]').check();
+  await discoveryFlow.locator('.wizard-next').click();
+  // The adopt pick (count 1 — alice's executed proposals): the executed
+  // direct proposal is offered; the UN-executed quadratic is never here
+  // (the mirror's executed screen, the same truth the submit gate reads).
+  const tieDirect = discoveryFlow.locator(`.wizard-member--adopt[value="${directId}"]`);
+  let tieOffered = false;
+  for (let attempt = 0; !tieOffered && attempt < 10; attempt++) {
+    tieOffered = (await tieDirect.count()) > 0;
+    if (!tieOffered) await alice.page.waitForTimeout(1000);
+  }
+  if (!tieOffered) {
+    throw new Error(`The adopt pick never offered alice's executed proposal (${directId})`);
+  }
+  const tieOpenOffered = await discoveryFlow.locator(`.wizard-member--adopt[value="${qId}"]`).count();
+  if (tieOpenOffered !== 0) {
+    throw new Error(`The adopt pick offered the UN-executed proposal ${qId} — the executed screen never landed`);
+  }
+  await tieDirect.check();
+  await discoveryFlow.locator('.wizard-next').click();
+  await discoveryFlow.locator('.wizard-member--verifiers').first().waitFor({ state: 'visible', timeout: 10000 });
+  await discoveryFlow.locator(`.wizard-member--verifiers[value="${frankName}"]`).check();
+  await discoveryFlow.locator('.wizard-next').click();
+  await discoveryFlow.locator('textarea').fill(discoverySummary);
+  await discoveryFlow.locator('.wizard-next').click();
+  await discoveryFlow.locator('.wizard-evidence-pointer').fill('https://example.com/evidence/discovery');
+  await discoveryFlow.locator('.wizard-next').click();
+  // The review carries the tie mapped to its title from the mirror.
+  await discoveryFlow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 10000 });
+  const discoveryReview = (await discoveryFlow.locator('#wizard-review').textContent()) ?? '';
+  if (!discoveryReview.includes('Adopted decision: "Multi-choice direct"')) {
+    throw new Error(`Discovery claim review missing the adopted-decision line: ${discoveryReview}`);
+  }
+  await discoveryFlow.locator('.wizard-submit').click();
+  await alice.page.waitForURL(/\/contribute\/[0-9a-f-]{36}$/, { timeout: 30000 });
+  console.log('Submitted discovery claim:', alice.page.url().split('/contribute/')[1]);
+  const discoverySettleFlow = alice.page.locator('.wizard-flow[data-flow-id="settle"]');
+
+  // frank's M1 check: the pass advances the rail to the M2 phase — its own
+  // (0/1) chip on the 'Milestone 2' phase, the verify flow still mounted.
+  // Sample first, drive only when it has not advanced (the same-flow mechanic
+  // the C_7 arc established).
+  let discoveryM1 = false;
+  for (let attempt = 0; !discoveryM1 && attempt < 15; attempt++) {
+    discoveryM1 = await frank.page
+      .locator('.lc-phase:has-text("Milestone 2") .lc-phase__progress:text-is("0/1")')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+    if (!discoveryM1) {
+      await runContributionFlow(frank, discoverySummary, 'verify', { choiceValue: 'yes', textValue: 'the discovery checks out' });
+    }
+  }
+  if (!discoveryM1) {
+    const statusBar = await frank.page.locator('#status').textContent();
+    throw new Error(`The discovery rail never advanced to the M2 phase after the first check. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('DISCOVERY RAIL: advanced to the M2 phase after frank\'s first check');
+
+  // No credit yet: alice's page still shows the second gate waiting on the
+  // milestone text, not a name (the discovery claim's M2 rides 'verify-2').
+  let discoveryM2Waiting = false;
+  for (let attempt = 0; !discoveryM2Waiting && attempt < 15; attempt++) {
+    await nav(alice.page, '/contribute');
+    const row = alice.page.locator(`.contribution-row:has-text("${discoverySummary}")`).first();
+    await row.waitFor({ state: 'visible', timeout: 10000 });
+    await row.click();
+    discoveryM2Waiting = await alice.page
+      .locator('.lc-phase:has-text("Milestone 2") .lc-phase__wait:text-is("awaiting the second milestone check")')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!discoveryM2Waiting) {
+    throw new Error(`alice's discovery page never showed the M2 phase waiting on the second check`);
+  }
+  console.log('DISCOVERY PHASE TEXT: awaiting the second milestone check');
+
+  // frank's M2 check (the 'verify-2' step): the final gate — the tally and
+  // the adoption bonus both fire here, once — and the settle flow mounts for
+  // the filer.
+  let discoveryM2 = false;
+  for (let attempt = 0; !discoveryM2 && attempt < 15; attempt++) {
+    await runContributionFlow(frank, discoverySummary, 'verify', { choiceValue: 'yes', textValue: 'the steering validation checks out' });
+    discoveryM2 = await discoverySettleFlow
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!discoveryM2) {
+    const statusBar = await frank.page.locator('#status').textContent();
+    throw new Error(`The discovery claim's second check never completed. Status bar: ${statusBar || '(empty)'}`);
+  }
+
+  let discoverySettled = false;
+  for (let attempt = 0; !discoverySettled && attempt < 15; attempt++) {
+    await completeFlow(alice.page, 'settle', { textValue: 'accepting the discovered finding' });
+    discoverySettled = await alice.page
+      .locator('.lc-pill--accepted')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!discoverySettled) {
+    const statusBar = await alice.page.locator('#status').textContent();
+    throw new Error(`The discovery claim's pill never flipped to accepted. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('CONTRIBUTION STATUS PILL: accepted (discovery arc)');
+
+  // The FILER's chip: 'C_9 Discovering — 1', EXACT (element-scoped — the
+  // established standard), credited once by the two gates.
+  await nav(alice.page, '/account');
+  const discoveryChip = alice.page.locator('#dim-tallies .tally:has-text("C_9")');
+  let discoveryTallySeen = false;
+  for (let attempt = 0; !discoveryTallySeen && attempt < 15; attempt++) {
+    discoveryTallySeen = (await discoveryChip.count()) > 0;
+    if (!discoveryTallySeen) await alice.page.waitForTimeout(1000);
+  }
+  if (!discoveryTallySeen) throw new Error(`alice's C_9 tally missing from #dim-tallies after the discovery arc`);
+  const discoveryTally = (await discoveryChip.textContent()).trim();
+  console.log('DISCOVERY TALLY:', discoveryTally);
+  if (discoveryTally !== 'C_9 Discovering — 1') {
+    throw new Error(`alice's C_9 tally should read 'C_9 Discovering — 1' (two gates, credited once at the last), got '${discoveryTally}'`);
+  }
+
+  // The ADOPTION BONUS: alice's balance delta is EXACTLY +5 $RES (the flat
+  // tie bonus at the final gate; the settle and the tally move nothing of
+  // hers), and frank carries exactly the two checks' +4 (the bonus is the
+  // FILER's — the verifier never gains it).
+  await nav(frank.page, '/account');
+  await frank.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
+  const frankResAfter = Number(((await frank.page.locator('#account-res').textContent()).match(/([\d.]+) \$RES/) || [])[1]);
+  if (frankResAfter - 2 !== 4) {
+    throw new Error(`frank's balance should carry exactly the two checks' +4 $RES (entered the arc at 2, now ${frankResAfter})`);
+  }
+  await nav(alice.page, '/account');
+  await alice.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
+  const aliceResAfter = Number(((await alice.page.locator('#account-res').textContent()).match(/([\d.]+) \$RES/) || [])[1]);
+  if (aliceResAfter - aliceResBefore !== 5) {
+    throw new Error(`alice's balance should have gained exactly +5 $RES for the adopted tie (before ${aliceResBefore}, after ${aliceResAfter})`);
+  }
+  console.log('DISCOVERY BONUS: alice +5 $RES for the adopted tie');
+
+
   // --- Custodian election flow ---
   // carol and dave registered (live pages) back in the contribution flows;
   // the candidates list is every member set — alphabetical, so alice is
