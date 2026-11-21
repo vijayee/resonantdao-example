@@ -28,8 +28,9 @@ export const DIMENSION_COUNT = 22 as const;
 // verifies, never as its own picker type. Future claim dims enter by
 // declaring themselves pickable here (no hardcoded picker lists anywhere).
 // The claim schemas: C_1 (building's two-verifier v2), C_2 (recording),
-// C_18 (verifying — embedded only), C_19 (recognition, slice #6a) and C_5
-// (teaching, slice #6e — the claim-gate map's first other-shape).
+// C_18 (verifying — embedded only), C_19 (recognition, slice #6a), C_5
+// (teaching, slice #6e — the claim-gate map's first other-shape) and C_15
+// (exposure, slice #6f — the claim-gate map's corroboration shape).
 export const DIMENSIONS: DimensionDef[] = [
   { index: 0,  code: 'C_0',  name: 'Fool',       cls: 'Crossing',    implemented: false, pickable: false },
   { index: 1,  code: 'C_1',  name: 'Magician',   cls: 'Building',    implemented: true,  pickable: true },
@@ -46,7 +47,7 @@ export const DIMENSIONS: DimensionDef[] = [
   { index: 12, code: 'C_12', name: 'Hanged Man', cls: 'Re-seeing',   implemented: false, pickable: false },
   { index: 13, code: 'C_13', name: 'Death',      cls: 'Ending',      implemented: false, pickable: false },
   { index: 14, code: 'C_14', name: 'Temperance', cls: 'Balancing',   implemented: false, pickable: false },
-  { index: 15, code: 'C_15', name: 'Devil',      cls: 'Exposing',    implemented: false, pickable: false },
+  { index: 15, code: 'C_15', name: 'Devil',      cls: 'Exposing',    implemented: true,  pickable: true },
   { index: 16, code: 'C_16', name: 'Tower',      cls: 'Responding',  implemented: false, pickable: false },
   { index: 17, code: 'C_17', name: 'Star',       cls: 'Meaning',     implemented: false, pickable: false },
   { index: 18, code: 'C_18', name: 'Moon',       cls: 'Verifying',   implemented: true,  pickable: false },
@@ -192,6 +193,11 @@ const C1_VERIFY_V2: StepDef = {
   requirement: { mode: 'all-parties', count: 2 },
 };
 
+// C_15's corroboration (slice #6f) rides the SAME shape as C_1's v2 verify:
+// two distinct verifiers, all-parties — the corroboration IS the gate, so the
+// step object is shared (one machine rule, one step).
+const C15_VERIFY_V2 = C1_VERIFY_V2;
+
 // Legacy v1 schemas (single-verify everywhere) — kept so contributions
 // submitted before v2 keep verifying under the rules they were submitted under.
 const LEGACY_DEFAULT_SCHEMA: DimensionSchema = {
@@ -217,11 +223,15 @@ export const DEFAULT_SCHEMA: DimensionSchema = {
 };
 
 export const SCHEMAS: Map<number, DimensionSchema> = new Map();
-for (const dimIndex of [1, 2, 5, 18, 19]) {
+for (const dimIndex of [1, 2, 5, 15, 18, 19]) {
   SCHEMAS.set(dimIndex, {
     dimIndex,
     schemaVersion: SCHEMA_VERSION,
-    steps: [SUBMIT_STEP, dimIndex === 1 ? C1_VERIFY_V2 : VERIFY_STEP, SETTLE_STEP],
+    steps: [
+      SUBMIT_STEP,
+      dimIndex === 1 ? C1_VERIFY_V2 : dimIndex === 15 ? C15_VERIFY_V2 : VERIFY_STEP,
+      SETTLE_STEP,
+    ],
   });
 }
 

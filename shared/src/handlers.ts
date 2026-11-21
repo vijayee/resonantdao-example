@@ -59,6 +59,13 @@ interface ClaimNode {
 //     — the recipients DIFFER per claim (C_19 credits the RECOGNIZED member;
 //     C_5 credits the FILER). The calibration term scales both like every
 //     tally.
+//   - rejectPenalty (slice #6f, C_15): the symmetric gateway. When set, the
+//     claim's FINAL REJECT — a rejection terminates the lifecycle
+//     immediately, so every completed reject IS final — decrements the
+//     FILER's claim-dim tally by −match × alphaFor(dim): false exposures
+//     cost exactly what true ones earn. The per-mille accumulate rides the
+//     same prev + toRegisterUnits(delta) idiom with a NEGATIVE delta. Rules
+//     without it (C_19/C_5) keep the reject path's credit-nothing behavior.
 // C_19's inline blocks (slice #6a) refactored INTO this map — behavior
 // identical for C_19 (its contracts stay byte-green). The next claim types
 // (C_15's corroboration etc.) design onto this map, not around it.
@@ -69,6 +76,8 @@ interface ClaimRule {
   verifyGate(node: ClaimNode, state: HandlerState, payload: VerifyContributionPayload): boolean;
   creditTarget(payload: VerifyContributionPayload): string | undefined;
   creditDim: number;
+  // THE PENALTY GATEWAY (slice #6f, C_15): the claim's reject pays the FILER.
+  rejectPenalty?: boolean;
 }
 
 const CLAIM_RULES: Record<number, ClaimRule> = {
@@ -166,6 +175,30 @@ const CLAIM_RULES: Record<number, ClaimRule> = {
     },
     creditTarget: (payload) => payload.submitter,
     creditDim: 5,
+  },
+  // C_15 Devil (slice #6f): the exposure claim — NO tie fields, because the
+  // corroboration IS the gate: two NAMED corroborators (the submit's targeted
+  // set against the schema's all-parties count-2 verify — the C_1 v2 shape)
+  // must uphold it, and an unnamed member's op dies at the #4c targeted gate
+  // before anything moves. The pass credit is the FILER's C_15 tally (the
+  // C_5 recipient shape), and the rejectPenalty gateway makes the claim's
+  // final REJECT pay the symmetric negative: exposing validated distortion
+  // earns among the largest; false exposures pay the same, negative. $RES is
+  // untouched by the whole claim (credibility only; the classification dim
+  // pays no bounty — the tally credits are the sole writes).
+  15: {
+    // The corroborators ride the submit's verifiers field: the gate REQUIRES
+    // them named (untargeted → -1; the generic #4c validation pins distinct
+    // members ≠ the signer at exactly the schema's count 2).
+    submitOk: (_state, payload) => Array.isArray(payload.verifiers) && payload.verifiers.length > 0,
+    tieSets: () => [],
+    stamp: () => {},
+    // The pass path carries no tie re-carry: the corroboration quorum
+    // (all-parties, 2) is the machine's whole gate.
+    verifyGate: () => true,
+    creditTarget: (payload) => payload.submitter,
+    creditDim: 15,
+    rejectPenalty: true,
   },
 };
 
@@ -468,11 +501,39 @@ export function makeVerifyContributionHandler(
     // reduced outcome never pays partially on a mid-flight error.
     const effectiveHarm = strongestHarm(payload.priorHarm, payload.harm);
     const harmFactor = harmFactorFor(effectiveHarm);
+    // The calibration term (slice #6a's general rule): the dimension's live
+    // weight scales every tally credit AND the penalty — the same register
+    // the RCT aggregation reads; default weight 1 (the :1251 idiom). Hoisted
+    // above the reject block so the penalty gateway reads it too.
+    const alphaFor = (i: number) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1;
 
     if (!payload.pass) {
+      // THE PENALTY GATEWAY (slice #6f, C_15): the claim rule that declares
+      // it pays the FILER on the claim's final resolution — and a rejection
+      // terminates the lifecycle immediately, so this reject IS final. The
+      // delta is the symmetric negative of the reward
+      // (−match × alphaFor(dim), no harm term: a rejected check never
+      // resolves an effective outcome), written through the same per-mille
+      // accumulate with a NEGATIVE delta
+      // (prev + toRegisterUnits(delta); no read-scale-write cycle). An
+      // unnamed member's reject never reaches this loop (the #4c targeted
+      // gate exits above), so only a named corroborator can pull the trigger.
+      for (const [dimKey, match] of Object.entries(payload.dims)) {
+        const rule = CLAIM_RULES[Number(dimKey)];
+        if (rule?.rejectPenalty !== true) {
+          continue;
+        }
+        const delta = -(dimensionDeltaFor(Number(dimKey), match) * alphaFor(Number(dimKey)));
+        const tallyReg = CONTRIB_NAMES.dimensionBalance(payload.submitter, Number(dimKey));
+        try { node.addRegister(tallyReg, 0); } catch (err) { /* ignore duplicate */ }
+        state.setRegister(tallyReg, (state.getRegister(tallyReg) || 0) + toRegisterUnits(delta), op.signerId);
+      }
+
       // Rejection terminates the lifecycle immediately; dimension tallies are
-      // NOT touched (outcome voided). No payments apply on this path — the
-      // record carries this check's verdict, not an effective outcome.
+      // NOT touched (outcome voided) — the sole exception is a claim rule's
+      // rejectPenalty gateway above (C_15's symmetric penalty). No payments
+      // apply on this path — the record carries this check's verdict, not an
+      // effective outcome.
       try { node.addRegister(statusReg, 0); } catch (err) { /* ignore duplicate */ }
       state.setRegister(statusReg, 2, op.signerId);
       const record = {
@@ -514,10 +575,6 @@ export function makeVerifyContributionHandler(
         payments[payload.submitter] = submitterAmount;
       }
 
-      // The calibration term (slice #6a's general rule): the dimension's
-      // live weight scales every tally credit — the same register the RCT
-      // aggregation reads; default weight 1 (the :1251 idiom).
-      const alphaFor = (i: number) => fromRegisterUnits(state.getRegister(CALIBRATIONS.alpha(i)) || 0) || 1;
       // Dimension tallies grow by the accept delta scaled by the harm factor —
       // but only for dimensions with an implemented payment rule;
       // classification-only dims (payment 0) cannot be distinguished from

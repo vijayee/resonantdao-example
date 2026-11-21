@@ -22,25 +22,25 @@ describe('contribution registry', () => {
     expect(DIMENSIONS[18].name).toBe('Moon');
   });
 
-  it('marks exactly C_1, C_2, C_18, C_19 and C_5 as implemented (payment rules + the wired claim schemas)', () => {
+  it('marks exactly C_1, C_2, C_18, C_19, C_5 and C_15 as implemented (payment rules + the wired claim schemas)', () => {
     const implemented = DIMENSIONS.filter((d) => d.implemented).map((d) => d.index);
-    expect(implemented.sort((a, b) => a - b)).toEqual([1, 2, 5, 18, 19]);
+    expect(implemented.sort((a, b) => a - b)).toEqual([1, 2, 5, 15, 18, 19]);
   });
 
-  it('marks pickable only the claimable dims — C_1, C_2, C_19, C_5 (C_18 is implemented but NOT pickable)', () => {
+  it('marks pickable only the claimable dims — C_1, C_2, C_19, C_5, C_15 (C_18 is implemented but NOT pickable)', () => {
     // implemented = submittable machine rules; pickable = surfaces as a claim
     // type in the picker. C_18 is implemented (its rule is live) but NOT
     // pickable — embedded rules surface through the flows they belong to.
-    expect([...DIMENSIONS].filter((d) => d.pickable).map((d) => d.index)).toEqual([1, 2, 5, 19]);
+    expect([...DIMENSIONS].filter((d) => d.pickable).map((d) => d.index)).toEqual([1, 2, 5, 15, 19]);
   });
 
-  it('derives the picker claim list (implemented ∧ schema-wired ∧ pickable) — C_19 and C_5 present, C_18 absent', () => {
+  it('derives the picker claim list (implemented ∧ schema-wired ∧ pickable) — C_15 joins C_19/C_5, C_18 absent', () => {
     // The factory filter is contribute-flows.ts dimensionOptions()'s exact
     // derivation, asserted against the registry so a registry change that
     // flips the picker's menu fails here (the store-tick'd derivation runs
     // in the browser; the registry predicate is what it filters by).
     const pickerDims = [...DIMENSIONS.filter((d) => d.implemented && SCHEMAS.has(d.index) && d.pickable)].map((d) => d.index);
-    expect(pickerDims).toEqual([1, 2, 5, 19]);
+    expect(pickerDims).toEqual([1, 2, 5, 15, 19]);
   });
 
   describe('isValidDims', () => {
