@@ -22,12 +22,19 @@ import { FlowStep } from '../types';
 //     the gate; the SAME single named verifier carries both of the
 //     two-verify-step schema's milestones (the count derives from the
 //     schema's FIRST verify step: exactly one name).
+//   - C_9 (slice #6h): ONE OPTIONAL tie step — the adopted-decision pick (the
+//     members kind): the options are the VIEWER'S OWN EXECUTED proposals
+//     (their ids; the machine's executed state is the adoption truth), and
+//     the count is DYNAMIC 0|1 — exactly 1 when the viewer has executed
+//     proposals, exactly 0 when they have none (an empty pick validates Next
+//     straight through; the no-tie claim walks the deep-work path only).
 // The exact count-1 members picks are the flow's validation (Choose exactly
 // 1); EMPTY options leave Next unpassable — the machine's gate mirrors it.
 export interface ClaimTieWorld {
   members: string[]; // the store's known member list
   username: string | null; // the viewer (the filer)
   acceptedContributions: Array<{ id: string; submitter: string }>; // the mirror's accepted records
+  executedProposals: string[]; // the viewer's EXECUTED proposals (ids; slice #6h)
 }
 
 export function claimTieSteps(
@@ -67,6 +74,15 @@ export function claimTieSteps(
         kind: 'members' as const, id: 'record', title: 'Tie it to the student’s proven record',
         options: acceptedBy(answers.taught),
         count: 1,
+      },
+    ];
+  }
+  if (dim === 9) {
+    return [
+      {
+        kind: 'members' as const, id: 'adopt', title: 'Tie it to an executed decision of yours (optional)',
+        options: world.executedProposals,
+        count: world.executedProposals.length > 0 ? 1 : 0,
       },
     ];
   }

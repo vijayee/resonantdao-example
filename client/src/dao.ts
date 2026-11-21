@@ -73,6 +73,11 @@ export interface ContributionMirrorEntry {
   recognized?: string;  // the member whose work the claim recognizes
   taught?: string;      // the member whose competence the claim demonstrates (C_5)
   recordIdTie?: string; // the claim's tied contribution id (both claim shapes)
+  // The adopted-decision tie (slice #6h, C_9): parsed straight off the claim
+  // payload — absent on every other submission, and absent on the NO-TIE
+  // discovery claims. The verify flow re-carries it; a forged re-carry dies
+  // at the machine's adoptedTie pin.
+  proposalTie?: string;
 }
 
 export class BrowserDao {
@@ -309,6 +314,10 @@ export class BrowserDao {
   }
 
   private proposals = new Map<string, ProposalPayload>();
+  // The creator per proposal (parseCreateProposal loses op.signerId, so the
+  // mirror records it here): the adopted-decision tie's options screen the
+  // viewer's OWN executed proposals through it (slice #6h).
+  private proposalCreators = new Map<string, string>();
   private contributions = new Map<string, ContributionMirrorEntry>();
   private elections = new Map<string, { electionId: string; candidates: string[]; isRunoff: boolean; seats: number }>();
   custodians: string[] = [];
@@ -362,6 +371,7 @@ export class BrowserDao {
     const proposal = await this.parseCreateProposal(bytes);
     if (proposal) {
       this.proposals.set(proposal.proposalId, proposal);
+      this.proposalCreators.set(proposal.proposalId, op.signerId);
     }
     await this.mirrorContributionState(op);
     await this.mirrorElectionState(op);
@@ -437,6 +447,7 @@ export class BrowserDao {
           ...(payload.recognized ? { recognized: payload.recognized } : {}),
           ...(payload.taught ? { taught: payload.taught } : {}),
           ...(payload.recordId ? { recordIdTie: payload.recordId } : {}),
+          ...(payload.proposalId ? { proposalTie: payload.proposalId } : {}),
         });
       }
       return;
@@ -583,6 +594,17 @@ export class BrowserDao {
 
   isProposalExecuted(id: string): boolean {
     return this.node.setContains(STATE_NAMES.executedProposals, id);
+  }
+
+  // The viewer's EXECUTED proposals (slice #6h, the adopted-decision tie's
+  // options): the mirror's proposals the VIEWER created, filtered by the
+  // machine's executed state (the same set/registered truth the submit gate
+  // reads). Empty until an execute op lands — the optional pick rides the
+  // dynamic count 0|1.
+  myExecutedProposals(): string[] {
+    return Array.from(this.proposals.keys())
+      .filter((id) => this.proposalCreators.get(id) === this.walletUser)
+      .filter((id) => this.isProposalExecuted(id));
   }
 
   // Scaled balance namespaces (res:, dim:, rct:, config:alpha:*) store

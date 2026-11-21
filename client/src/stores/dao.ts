@@ -352,16 +352,17 @@ export const useDaoStore = defineStore('dao', () => {
   // The 5th param defaults to [] so untargeted (legacy) call sites —
   // contribute-flows.ts until Task 8 wires the members picker, and the e2e —
   // keep compiling with byte-identical untargeted payloads.
-  // The 6th param (slices #6a/#6e): the claim's ties — the wizard passes them
-  // only for the claim dims (19 recognized / 5 taught); they ride the submit
-  // payload, where the handler validates them and stamps the registers.
+  // The 6th param (slices #6a/#6e/#6h): the claim's ties — the wizard passes
+  // them only for the claim dims (19 recognized / 5 taught / 9 the OPTIONAL
+  // adopted proposal); they ride the submit payload, where the handler
+  // validates them and stamps the registers.
   async function submitContribution(
     summary: string,
     dim: number,
     evidenceFile: File | null,
     evidenceText: string,
     verifiers: string[] = [],
-    ties?: { recognized?: string; taught?: string; recordId: string }
+    ties?: { recognized?: string; taught?: string; recordId?: string; proposalId?: string }
   ): Promise<string | null> {
     if (!dao.value || submitting.value) return null;
     submitting.value = true;
@@ -395,12 +396,15 @@ export const useDaoStore = defineStore('dao', () => {
         // Targeted verification (slice #4c): when names are picked, the
         // payload carries them (count-exact validation lives in the handler).
         ...(verifiers.length > 0 ? { verifiers } : {}),
-        // Claim ties (slices #6a/#6e): the claim's partner member + the tied
-        // record — only on a claim dim, where the submit handler validates
-        // them. Per-shape fields: recognized (C_19) / taught (C_5); recordId
-        // is the shared tie.
+        // Claim ties (slices #6a/#6e/#6h): the claim's partner member + the
+        // tied record, or C_9's OPTIONAL adopted proposal — only on a claim
+        // dim, where the submit handler validates them. Per-shape fields:
+        // recognized (C_19) / taught (C_5) with recordId the shared tie;
+        // proposalId rides alone on C_9 (ABSENT on the no-tie claim — the
+        // optional pick's count-0 validly submits nothing).
         ...(dim === 19 && ties ? { recognized: ties.recognized, recordId: ties.recordId } : {}),
         ...(dim === 5 && ties ? { taught: ties.taught, recordId: ties.recordId } : {}),
+        ...(dim === 9 && ties?.proposalId ? { proposalId: ties.proposalId } : {}),
       };
       const bytes = await dao.value.submitContribution(username.value, payload);
       await serverClient.submitOp(bytesToBase64(bytes));
@@ -486,6 +490,13 @@ export const useDaoStore = defineStore('dao', () => {
         : {}),
       ...(entry.record.dims['5'] !== undefined
         ? { taught: entry.taught, recordId: entry.recordIdTie }
+        : {}),
+      // The adopted-decision re-carry (slice #6h, C_9): the claim's tie id
+      // rides EVERY verify op of a C_9 record (M1 and M2 alike — the bonus
+      // hook reads the re-carry at the final gate). Absent on the no-tie
+      // claims — the payload key is dropped when the mirror never saw one.
+      ...(entry.record.dims['9'] !== undefined
+        ? { proposalId: entry.proposalTie }
         : {}),
       // The orientation re-carry (slice #6d): absent when the submitter is
       // un-oriented or already proven — the hook is absent with it.

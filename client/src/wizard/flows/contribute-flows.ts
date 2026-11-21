@@ -91,6 +91,7 @@ const DIM_DESCS: Record<number, string> = {
   19: 'recognize someone’s proven work — credits their C_19 tally (the tie is machine-checked)',
   15: 'expose a skewed incentive — two corroborators named up front, and false exposures cost the same weight (the symmetric penalty)',
   7: 'drove something across its milestones — two verified gates, one same-name checker, credited once at the last',
+  9: 'discovered something real — the milestone walk plus an optional tie to an executed decision of yours, worth a +5 $RES adoption bonus',
 };
 
 export function dimensionOptions(): Array<{ value: string; label: string; desc: string }> {
@@ -100,13 +101,14 @@ export function dimensionOptions(): Array<{ value: string; label: string; desc: 
     .map((d) => ({ value: String(d.index), label: `${d.code} ${d.name} — ${d.cls}`, desc: DIM_DESCS[d.index] ?? '' }));
 }
 
-// The claim tie steps' mirror read (slices #6a/#6e): the store's known members,
-// the viewer, and the machine-ACCEPTED contributions (id + submitter) both
-// tie picks screen by — the tie must be a contribution whose status register
-// is the machine's accepted, and the C_19/C_5 rules each further screen
-// ownership inside claimTieSteps (the recognizer's own records / the chosen
-// taught member's records). Values are the contribution ids (LOW-cosmetic:
-// the picker prints the raw ids; the review line shows the mapped summary).
+// The claim tie steps' mirror read (slices #6a/#6e/#6h): the store's known
+// members, the viewer, the machine-ACCEPTED contributions (id + submitter) —
+// the C_19/C_5 picks screen by them (the tie must be a contribution whose
+// status register is the machine's accepted, and each rule further screens
+// ownership inside claimTieSteps) — and the VIEWER'S EXECUTED proposals (ids;
+// the C_9 adopt pick's options, the machine's executed state via the mirror).
+// Values are the raw ids (LOW-cosmetic: the picker prints the raw ids; the
+// review line shows the mapped summary/title).
 function claimTieWorld(ds: ReturnType<typeof useDaoStore>) {
   void ds.tick;
   const d = ds.dao;
@@ -119,16 +121,18 @@ function claimTieWorld(ds: ReturnType<typeof useDaoStore>) {
         .filter((e) => d.getContributionStatus(e.record.contributionId) === 'accepted')
         .map((e) => ({ id: e.record.contributionId, submitter: e.submitter }))
       : [],
+    executedProposals: d ? d.myExecutedProposals() : [],
   };
 }
 
 // The new-contribution wizard: linear flow at /contribute/new. The step list
-// is a function of the answers (slices #6a/#6e): the claim-family types gain
-// the two tie picks (C_19: recognized + own record; C_5: taught + the student's
-// record — the options DYNAMIC per the taught answer); C_1/C_2 walk the plain
-// form. The submit success routes to the new lifecycle page — the page
-// supplies onSubmitted (the store returns the id; routing is the page's
-// business, never the factory's).
+// is a function of the answers (slices #6a/#6e/#6h): the claim-family types
+// gain their tie picks (C_19: recognized + own record; C_5: taught + the
+// student's record — the options DYNAMIC per the taught answer; C_9: the
+// OPTIONAL adopted-decision pick, count 0|1 per the viewer's executed
+// proposals); C_1/C_2 walk the plain form. The submit success routes to the
+// new lifecycle page — the page supplies onSubmitted (the store returns the
+// id; routing is the page's business, never the factory's).
 export function contributeNewFlow(onSubmitted: (contributionId: string) => void): FlowDefinition {
   const ds = useDaoStore();
   return {
@@ -171,7 +175,11 @@ export function contributeNewFlow(onSubmitted: (contributionId: string) => void)
         ? { recognized: (a.recognized ?? '').trim(), recordId: (a.record ?? '').trim() }
         : dim === 5
           ? { taught: (a.taught ?? '').trim(), recordId: (a.record ?? '').trim() }
-          : undefined;
+          : dim === 9
+            // The OPTIONAL tie: an empty pick rides NOTHING (the no-tie
+            // claim), so an absent answer stays absent in the payload.
+            ? { proposalId: (a.adopt ?? '').trim() || undefined }
+            : undefined;
       const id = await ds.submitContribution((a.summary ?? '').trim(), dim, files?.['evidence'] ?? null, (a.evidence ?? '').trim(), named, ties);
       if (!id) throw new Error('The contribution did not record — check the message below the page.');
       onSubmitted(id);
@@ -179,14 +187,16 @@ export function contributeNewFlow(onSubmitted: (contributionId: string) => void)
   };
 }
 
-// The review's tie lines (slices #6a/#6e): the claim's partner by name (the
-// recognized member / the taught member); the tied record mapped to its
+// The review's tie lines (slices #6a/#6e/#6h): the claim's partner by name
+// (the recognized member / the taught member); the tied record mapped to its
 // summary through the mirror (the raw id rides along so the review stays
-// honest to the submitted payload; unmapped → the raw id). LOW-cosmetic note:
-// the PICK itself shows the raw id — the review is where the summary shows.
+// honest to the submitted payload; unmapped → the raw id); the adopted
+// decision mapped to its TITLE through the proposal mirror (the raw id rides
+// along the same way). A NO-TIE C_9 claim renders NO tie line — the pick's
+// emptiness is the absence rendering itself.
 function claimReviewLines(ds: ReturnType<typeof useDaoStore>, a: FlowAnswers): string[] {
   const dim = Number(a.dim);
-  if (dim !== 19 && dim !== 5) return [];
+  if (dim !== 19 && dim !== 5 && dim !== 9) return [];
   void ds.tick;
   const lines: string[] = [];
   if (a.recognized) lines.push(`Recognized: ${a.recognized}`);
@@ -194,6 +204,10 @@ function claimReviewLines(ds: ReturnType<typeof useDaoStore>, a: FlowAnswers): s
   if (a.record) {
     const tied = (ds.dao?.getContributions() ?? []).find((e) => e.record.contributionId === a.record);
     lines.push(`Tied record: ${tied ? `"${tied.record.summary}" (${a.record})` : a.record}`);
+  }
+  if (a.adopt) {
+    const adopted = (ds.dao?.getProposals() ?? []).find((p) => p.proposalId === a.adopt);
+    lines.push(`Adopted decision: ${adopted ? `"${adopted.title}" (${a.adopt})` : a.adopt}`);
   }
   return lines;
 }

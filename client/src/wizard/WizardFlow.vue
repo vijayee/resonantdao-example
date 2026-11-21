@@ -50,11 +50,13 @@
       </div>
 
       <!-- Slice #4c: the members picker. Options are the flow's screened
-           eligible list; an empty list is the visible dead-end (the step
-           stays invalid, so Next blocks until the factory offers names). -->
+           eligible list; an empty list is the visible dead-end (Next blocks
+           until the factory offers names) — EXCEPT a step whose count is 0
+           (slice #6h's optional adopt pick): exactly 0 is the valid pick, so
+           Next passes empty. -->
       <fieldset v-else-if="current.kind === 'members'" class="wizard-fieldset" :id="`wizard-${flow.id}-${current.id}`">
         <legend>{{ current.title }}</legend>
-        <p v-if="current.options.length === 0" class="muted">No eligible verifiers right now.</p>
+        <p v-if="current.options.length === 0" class="muted">Nothing eligible to pick right now.</p>
         <label v-for="opt in current.options" :key="opt" class="wizard-choice">
           <input
             type="checkbox"

@@ -97,8 +97,9 @@ describe('claimTieSteps — the claim flows walk their ties per the dim answer',
     return step as Extract<FlowStep, { kind: 'members' }>;
   }
 
-  // A structural fake of the store/mirror read: the members list and the
-  // accepted contributions (id + submitter) the tie picks screen by.
+  // A structural fake of the store/mirror read: the members list, the
+  // accepted contributions (id + submitter), and the VIEWER'S EXECUTED
+  // proposals (the adopted-decision tie's options, slice #6h).
   const world = {
     members: ['alice', 'bob', 'carol'],
     username: 'alice',
@@ -108,6 +109,7 @@ describe('claimTieSteps — the claim flows walk their ties per the dim answer',
       { id: 'r-alice-1', submitter: 'alice' },
       { id: 'r-carol-1', submitter: 'carol' },
     ],
+    executedProposals: ['p-mine', 'p-theirs'],
   };
 
   it('C_19 keeps its two picks: the recognized member (non-self) + the recognizer’s OWN accepted records', () => {
@@ -149,5 +151,26 @@ describe('claimTieSteps — the claim flows walk their ties per the dim answer',
     // verifiers pick instead (its count derives from the all-parties count-2
     // C_15 schema, so the corroborators are exactly two).
     expect(claimTieSteps(15, {}, world)).toEqual([]);
+  });
+
+  it('C_9 gains the OPTIONAL adopted-tie pick: the viewer’s executed proposals, count 0|1 (slice #6h)', () => {
+    const steps = claimTieSteps(9, {}, world);
+    expect(steps).toHaveLength(1);
+    const adopt = memberStep(steps[0], 'adopt');
+    // The options are the VIEWER'S OWN EXECUTED proposals (machine state the
+    // submit gate would accept); a proposal being offered but not the
+    // viewer's is never here (the factory screens by creator before this).
+    expect(adopt.options).toEqual(['p-mine', 'p-theirs']);
+    expect(adopt.count).toBe(1);
+    // The OPTIONALITY (the spec's dynamic 0|1): with NO executed proposals the
+    // step validates EXACTLY 0 — Next passes without a pick, the no-tie path.
+    const dry = claimTieSteps(9, {}, { ...world, executedProposals: [] });
+    const dryAdopt = memberStep(dry[0], 'adopt');
+    expect(dryAdopt.options).toEqual([]);
+    expect(dryAdopt.count).toBe(0);
+    expect(validateStep(dryAdopt, {})).toBeNull();
+    // With options present the machine gate mirrors the pick: exactly 1.
+    expect(validateStep(adopt, {})).not.toBeNull();
+    expect(validateStep(adopt, { adopt: 'p-mine' })).toBeNull();
   });
 });
