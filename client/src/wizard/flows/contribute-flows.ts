@@ -143,8 +143,12 @@ export function contributeNewFlow(onSubmitted: (contributionId: string) => void)
       {
         kind: 'members', id: 'verifiers', title: 'Who verifies this?',
         // Screened at pick: non-self members the projection says may verify.
-        // Reciprocity bars name their reason in the pick list's title attr.
-        options: eligibleVerifierOptions(ds),
+        // Reciprocity bars name their reason in the pick list's title attr —
+        // EXCEPT the milestone carve (slice #6g): a multi-verify-step
+        // schema's pair rule keys per-verify-STEP, so a pair whose history
+        // is already consumed still offers (the machine accepts it; the
+        // single-verify schemas keep the standing screen).
+        options: eligibleVerifierOptions(ds, milestoneClaimDim(a.dim)),
         count: () => schemaForDims({ [Number(a.dim ?? '2')]: 1 }).steps.find((s) => s.op === 'verify_contribution')!.requirement.count,
       },
       { kind: 'text', id: 'summary', title: 'Describe it', placeholder: 'What did you make or record?' },
@@ -194,18 +198,29 @@ function claimReviewLines(ds: ReturnType<typeof useDaoStore>, a: FlowAnswers): s
   return lines;
 }
 
+// The milestone carve (slice #6g): the picked claim dim's schema carries a
+// SECOND verify step — the pair bars key per-verify-step there (the same
+// data rule the verify handler applies to the payload's op).
+function milestoneClaimDim(dimAnswer: string | undefined): boolean {
+  const schema = schemaForDims({ [Number(dimAnswer ?? '2')]: 1 });
+  return schema.steps.filter((s) => s.op === 'verify_contribution').length > 1;
+}
+
 // Screened eligible-verifier options — shared by the submit picker above and
 // the reassign flow (ContributionPage). Non-self members only; the
 // reciprocity projection bars both halves of the mutual loop (m already
 // verified this submitter, or the submitter already verified m — the verify
 // handler rejects either pair on arrival, so the picker never offers them).
-export function eligibleVerifierOptions(ds: ReturnType<typeof useDaoStore>): string[] {
+// `skipPairBars` (the milestone carve): a multi-verify-step schema's gates
+// key per-verify-STEP, so consumed pairs still offer — every single-verify
+// call site keeps the standing screen (the reassign flow passes nothing).
+export function eligibleVerifierOptions(ds: ReturnType<typeof useDaoStore>, skipPairBars = false): string[] {
   void ds.tick; // reactivity anchor: re-screen when the projection changes
   const d = ds.dao;
   const me = ds.username;
   if (!d || !me) return [];
   return ds.members
     .filter((m) => m && m !== me)
-    .filter((m) => !(d.node.setContains(RECIP_NAMES.verifiedBy(m), me) || d.node.setContains(RECIP_NAMES.verifiedBy(me), m)))
+    .filter((m) => skipPairBars || !(d.node.setContains(RECIP_NAMES.verifiedBy(m), me) || d.node.setContains(RECIP_NAMES.verifiedBy(me), m)))
     .sort();
 }
