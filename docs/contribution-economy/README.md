@@ -26,7 +26,7 @@ Serve this directory with `python3 -m http.server` and open the served `index.ht
 | `bpmn/c12-hanged-man.bpmn` | C_12 Hanged Man — Re-seeing | `specified` | Rewards reframing a problem in a way that changes a real decision — sitting in a pause earns nothing. |
 | `bpmn/c13-death.bpmn` | C_13 Death — Ending | `specified` | Rewards clean endings: learning preserved and resources released. Endings staged for appearance earn no credit. |
 | `bpmn/c14-temperance.bpmn` | C_14 Temperance — Health in Range | `proposed interpretation` | Rewards keeping a health measure in a healthy range, with stall detection to catch quiet stops. |
-| `bpmn/c15-devil.bpmn` | C_15 Devil — Exposing | `specified` | Rewards exposing a skewed incentive. It needs a second person to confirm, earns one of the largest credits, and false claims are penalized. |
+| `bpmn/c15-devil.bpmn` | C_15 Devil — Exposing | `specified` | **LIVE** | Rewards exposing a skewed incentive. It needs a second person to confirm, earns one of the largest credits, and false claims are penalized. |
 | `bpmn/c16-tower.bpmn` | C_16 Tower — Crisis Response | `specified` | Rewards stabilizing a verified crisis. Spotting one earns nothing, and causing it earns nothing. |
 | `bpmn/c17-star.bpmn` | C_17 Star — Orientation | `proposed interpretation` | **LIVE** | Rewards a guide when their new member completes a first proven contribution — running sessions alone gets no credit. |
 | `bpmn/c18-moon.bpmn` | C_18 Moon — Verifying | `specified` | **LIVE** | Rewards finishing verification checks in either direction. Accuracy is tracked against chance, and suspicious reviewer patterns rotate reviewers out. |

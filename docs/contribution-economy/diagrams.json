@@ -688,6 +688,7 @@
       "file": "bpmn/c15-devil.bpmn",
       "title": "C_15 Devil — Exposing",
       "badge": "specified",
+      "live": true,
       "description": "Rewards exposing a skewed incentive. It needs a second person to confirm, earns one of the largest credits, and false claims are penalized.",
       "whoActs": [
         "A second person confirms the claim",
