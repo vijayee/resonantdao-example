@@ -108,6 +108,16 @@ class MockState implements HandlerState {
   }
   setAdd(name: string, element: string, tag = element): void {
     this.ensureSet(name);
+    // Real CRABS dedupes OR-Set adds by TAG: a reused tag silently drops the
+    // earlier element (the documented rule above the explanation records). The
+    // mock mirrors it, so a tag-collision regression fails HERE, not on a real
+    // replica.
+    for (const [priorElement, priorTag] of this.setTags.get(name) ?? []) {
+      if (priorTag === tag && priorElement !== element) {
+        this.sets.get(name)!.delete(priorElement);
+        this.setTags.get(name)!.delete(priorElement);
+      }
+    }
     this.sets.get(name)!.add(element);
     this.setTags.get(name)!.set(element, tag);
   }
@@ -331,9 +341,14 @@ describe('C_9 verify: two gates, the tally once, the bonus only with the tie', (
     expect(h.res('alice')).toBe(5);
     expect(h.settle(h.state, settleOp('alice', { dims: { '9': 1 }, schemaVersion: SCHEMA_VERSION }))).toBe(0);
     expect(h.state.getRegister(CONTRIB_NAMES.status('c-discover'))).toBe(STATUS_ACCEPTED);
-    // The explanation record shows the bonus on the final verify's payments.
+    // The explanation records: BOTH verify checks keep their own record (the
+    // tag rule — step id + check ordinal — survives the real CRABS' by-tag
+    // dedupe; a bare signer tag would have eaten M1's record) and the final
+    // one shows the bonus on its payments.
     const records = h.state.getSetElements(CONTRIB_NAMES.explanations('c-discover')).map((r) => JSON.parse(r));
-    const finalRecord = records.reverse().find((r) => r.stepId === 'verify-2');
+    const verifyRecords = records.filter((r) => r.stepId === 'verify' || r.stepId === 'verify-2');
+    expect(verifyRecords).toHaveLength(2);
+    const finalRecord = records.find((r) => r.stepId === 'verify-2');
     expect(finalRecord.payments).toEqual({ alice: 5 });
   });
 });
@@ -404,6 +419,22 @@ describe('C_9 $RES invariant (the spec\'s D-E)', () => {
     expect(h.settle(h.state, settleOp('alice', { dims: { '9': 1 }, schemaVersion: SCHEMA_VERSION }))).toBe(0);
     expect(h.res('alice')).toBe(0);
     expect(h.res('bob')).toBe(4);
+    expect(h.tally('alice', 9)).toBe(1);
+  });
+
+  it('D-E3. an execution AFTER a tie-less submit cannot re-validate the claim — the walk stays honest', () => {
+    const h = arc();
+    // The tie-less claim exists FIRST; a proposal is executed only LATER.
+    expect(h.submit(h.state, makeOp('submit_contribution', 'alice', milestoneClaimOp({})))).toBe(0);
+    executedProposal(h, 'p-later');
+    // A verify payload riding the NOW-executed proposal is a forged tie (the
+    // claim's stamp set is empty) — the later execution never re-validated it.
+    expect(h.verify(h.state, verifyOp('bob', { stepId: 'verify', proposalId: 'p-later' }))).toBe(-1);
+    // The honest no-tie walk completes with NO bonus.
+    expect(h.verify(h.state, verifyOp('bob', { stepId: 'verify' }))).toBe(0);
+    expect(h.verify(h.state, verifyOp('bob', { stepId: 'verify-2' }))).toBe(0);
+    expect(h.settle(h.state, settleOp('alice', { dims: { '9': 1 }, schemaVersion: SCHEMA_VERSION }))).toBe(0);
+    expect(h.res('alice')).toBe(0);
     expect(h.tally('alice', 9)).toBe(1);
   });
 });

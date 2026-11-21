@@ -689,7 +689,17 @@ export function makeVerifyContributionHandler(
         calibrationVersion: CALIBRATION_VERSION,
         schemaVersion: schema.schemaVersion,
       };
-      state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), `verify:${op.signerId}`);
+      // Tag rule (slice #6h de-wonk): CRABS dedupes OR-Set adds by TAG, so a
+      // bare `verify:${signer}` would silently drop every earlier record —
+      // a two-verify-step schema's M1 record replaced by M2's, an appeal
+      // re-review's record replaced by the pre-appeal one. The tag carries
+      // the step id + the check's ordinal (the pre-increment done counter),
+      // making EVERY completed check its own element.
+      state.setAdd(
+        CONTRIB_NAMES.explanations(payload.contributionId),
+        JSON.stringify(record),
+        `verify:${op.signerId}:${step.stepId}:${done}`
+      );
       return 0;
     }
 
@@ -819,7 +829,13 @@ export function makeVerifyContributionHandler(
       calibrationVersion: CALIBRATION_VERSION,
       schemaVersion: schema.schemaVersion,
     };
-    state.setAdd(CONTRIB_NAMES.explanations(payload.contributionId), JSON.stringify(record), `verify:${op.signerId}`);
+    // The tag rule above (slice #6h de-wonk): step id + the check's ordinal —
+    // every completed check keeps its own explanation record.
+    state.setAdd(
+      CONTRIB_NAMES.explanations(payload.contributionId),
+      JSON.stringify(record),
+      `verify:${op.signerId}:${step.stepId}:${done}`
+    );
     return 0;
   };
 }

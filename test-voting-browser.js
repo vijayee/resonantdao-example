@@ -1422,6 +1422,12 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   if (Number.isNaN(aliceResBefore)) {
     throw new Error(`alice's pre-discovery $RES balance never rendered a parsable number`);
   }
+  await nav(frank.page, '/account');
+  await frank.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
+  const frankResBefore = Number(((await frank.page.locator('#account-res').textContent()).match(/([\d.]+) \$RES/) || [])[1]);
+  if (Number.isNaN(frankResBefore)) {
+    throw new Error(`frank's pre-discovery $RES balance never rendered a parsable number`);
+  }
 
   const discoverySummary = 'Discovery e2e demo ' + Math.floor(Math.random() * 10000);
   await nav(alice.page, '/contribute');
@@ -1458,8 +1464,11 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // The review carries the tie mapped to its title from the mirror.
   await discoveryFlow.locator('.wizard-submit').waitFor({ state: 'visible', timeout: 10000 });
   const discoveryReview = (await discoveryFlow.locator('#wizard-review').textContent()) ?? '';
-  if (!discoveryReview.includes('Adopted decision: "Multi-choice direct"')) {
-    throw new Error(`Discovery claim review missing the adopted-decision line: ${discoveryReview}`);
+  if (!discoveryReview.includes('Type: 9')) {
+    throw new Error(`Discovery claim review missing the C_9 type line: ${discoveryReview}`);
+  }
+  if (!discoveryReview.includes(`Adopted decision: "Multi-choice direct" (${directId})`)) {
+    throw new Error(`Discovery claim review missing the adopted-decision line (title + the tie id): ${discoveryReview}`);
   }
   await discoveryFlow.locator('.wizard-submit').click();
   await alice.page.waitForURL(/\/contribute\/[0-9a-f-]{36}$/, { timeout: 30000 });
@@ -1477,7 +1486,14 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
     if (!discoveryM1) {
-      await runContributionFlow(frank, discoverySummary, 'verify', { choiceValue: 'yes', textValue: 'the discovery checks out' });
+      try {
+        await runContributionFlow(frank, discoverySummary, 'verify', { choiceValue: 'yes', textValue: 'the discovery checks out' });
+      } catch (err) {
+        // A transient locator race inside one attempt must not escape the
+        // retry loop (the completeFlow mechanic) — the rail sample below
+        // re-drives the check.
+        await frank.page.waitForTimeout(1000);
+      }
     }
   }
   if (!discoveryM1) {
@@ -1509,7 +1525,12 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   // the filer.
   let discoveryM2 = false;
   for (let attempt = 0; !discoveryM2 && attempt < 15; attempt++) {
-    await runContributionFlow(frank, discoverySummary, 'verify', { choiceValue: 'yes', textValue: 'the steering validation checks out' });
+    try {
+      await runContributionFlow(frank, discoverySummary, 'verify', { choiceValue: 'yes', textValue: 'the steering validation checks out' });
+    } catch (err) {
+      // The per-attempt race guard, as on the M1 loop.
+      await frank.page.waitForTimeout(1000);
+    }
     discoveryM2 = await discoverySettleFlow
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true, () => false);
@@ -1556,8 +1577,8 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   await nav(frank.page, '/account');
   await frank.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
   const frankResAfter = Number(((await frank.page.locator('#account-res').textContent()).match(/([\d.]+) \$RES/) || [])[1]);
-  if (frankResAfter - 2 !== 4) {
-    throw new Error(`frank's balance should carry exactly the two checks' +4 $RES (entered the arc at 2, now ${frankResAfter})`);
+  if (frankResAfter - frankResBefore !== 4) {
+    throw new Error(`frank's balance should have gained exactly +4 $RES for the two checks (before ${frankResBefore}, after ${frankResAfter})`);
   }
   await nav(alice.page, '/account');
   await alice.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
