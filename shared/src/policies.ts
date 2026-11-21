@@ -7,6 +7,7 @@ export const RES_CONFIG = {
   verificationCheckCredit: 2, // C_18 Moon: per completed check, either direction
   buildingBounty: 12,         // C_1 Magician: delivery bounty on acceptance
   recordingBaseCredit: 3,     // C_2 Priestess: base credit on accepted record
+  adoptionBonus: 5,           // C_9 Hermit (slice #6h): the adopted-decision tie's flat bonus
 } as const;
 
 export const TIMING: { defaultExpiryMs: number } = {
@@ -106,6 +107,12 @@ export const CONTRIB_NAMES = {
   // verify gate reads the tied record's OWNER set and requires the taught
   // name in it (the owner sets are the machine's authorship stamps).
   taught: (contributionId: string) => `contrib:${contributionId}:taught`,
+  // C_9's tie (discovery, slice #6h): the ADOPTED DECISION — the proposal the
+  // finding steered, stamped at submit when the claim carries `proposalId`
+  // (an OPTIONAL field). The OR-set is the pin the verify gate reads: the
+  // verify payload re-carries the id and the gate requires it in HERE (a
+  // forged re-carry dies all-or-nothing). A no-tie claim stamps nothing.
+  adoptedTie: (contributionId: string) => `contrib:${contributionId}:adopt`,
   // C_17 Star (slice #6d): the orientation registry. `oriented(orientee)` is
   // the per-orientee once-register (0→1 — the FIRST orientation wins; the
   // panel reads it per candidate), `orientedBy(orientee)` holds the winning

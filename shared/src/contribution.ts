@@ -30,8 +30,9 @@ export const DIMENSION_COUNT = 22 as const;
 // The claim schemas: C_1 (building's two-verifier v2), C_2 (recording),
 // C_18 (verifying — embedded only), C_19 (recognition, slice #6a), C_5
 // (teaching, slice #6e — the claim-gate map's first other-shape), C_15
-// (exposure, slice #6f — the corroboration shape) and C_7 (driving's
-// milestone claim, slice #6g — the two-verify-step shape).
+// (exposure, slice #6f — the corroboration shape), C_7 (driving's
+// milestone claim, slice #6g — the two-verify-step shape) and C_9
+// (discovery, slice #6h — the milestone shape with the OPTIONAL adoption tie).
 export const DIMENSIONS: DimensionDef[] = [
   { index: 0,  code: 'C_0',  name: 'Fool',       cls: 'Crossing',    implemented: false, pickable: false },
   { index: 1,  code: 'C_1',  name: 'Magician',   cls: 'Building',    implemented: true,  pickable: true },
@@ -42,7 +43,7 @@ export const DIMENSIONS: DimensionDef[] = [
   { index: 6,  code: 'C_6',  name: 'Lovers',     cls: 'Joining',     implemented: false, pickable: false },
   { index: 7,  code: 'C_7',  name: 'Chariot',    cls: 'Driving',     implemented: true,  pickable: true },
   { index: 8,  code: 'C_8',  name: 'Strength',   cls: 'Resolving',   implemented: false, pickable: false },
-  { index: 9,  code: 'C_9',  name: 'Hermit',     cls: 'Discovering', implemented: false, pickable: false },
+  { index: 9,  code: 'C_9',  name: 'Hermit',     cls: 'Discovering', implemented: true,  pickable: true },
   { index: 10, code: 'C_10', name: 'Wheel',      cls: 'Cycling',     implemented: false, pickable: false },
   { index: 11, code: 'C_11', name: 'Justice',    cls: 'Weighing',    implemented: false, pickable: false },
   { index: 12, code: 'C_12', name: 'Hanged Man', cls: 'Re-seeing',   implemented: false, pickable: false },
@@ -235,17 +236,18 @@ export const DEFAULT_SCHEMA: DimensionSchema = {
 };
 
 export const SCHEMAS: Map<number, DimensionSchema> = new Map();
-for (const dimIndex of [1, 2, 5, 7, 15, 18, 19]) {
+for (const dimIndex of [1, 2, 5, 7, 9, 15, 18, 19]) {
   SCHEMAS.set(dimIndex, {
     dimIndex,
     schemaVersion: SCHEMA_VERSION,
     steps: [
       SUBMIT_STEP,
       dimIndex === 1 ? C1_VERIFY_V2 : dimIndex === 15 ? C15_VERIFY_V2 : VERIFY_STEP,
-      // C_7's second milestone gate (slice #6g): the two-gate walk —
+      // The second milestone gate (slices #6g/#6h): the two-gate walk —
       // milestone N completes only when milestone N−1 has, by the step
-      // register's own ordering (machine-guaranteed already).
-      ...(dimIndex === 7 ? [C7_VERIFY_2] : []),
+      // register's own ordering (machine-guaranteed already). C_9 rides the
+      // SAME shape (the discovery claim's machinery is C_7's verbatim).
+      ...(dimIndex === 7 || dimIndex === 9 ? [C7_VERIFY_2] : []),
       SETTLE_STEP,
     ],
   });

@@ -22,25 +22,25 @@ describe('contribution registry', () => {
     expect(DIMENSIONS[18].name).toBe('Moon');
   });
 
-  it('marks exactly C_1, C_2, C_18, C_19, C_5, C_15 and C_7 as implemented (payment rules + the wired claim schemas)', () => {
+  it('marks exactly C_1, C_2, C_18, C_19, C_5, C_15, C_7 and C_9 as implemented (payment rules + the wired claim schemas)', () => {
     const implemented = DIMENSIONS.filter((d) => d.implemented).map((d) => d.index);
-    expect(implemented.sort((a, b) => a - b)).toEqual([1, 2, 5, 7, 15, 18, 19]);
+    expect(implemented.sort((a, b) => a - b)).toEqual([1, 2, 5, 7, 9, 15, 18, 19]);
   });
 
-  it('marks pickable only the claimable dims — C_1, C_2, C_19, C_5, C_15, C_7 (C_18 is implemented but NOT pickable)', () => {
+  it('marks pickable only the claimable dims — C_1, C_2, C_19, C_5, C_15, C_7, C_9 (C_18 is implemented but NOT pickable)', () => {
     // implemented = submittable machine rules; pickable = surfaces as a claim
     // type in the picker. C_18 is implemented (its rule is live) but NOT
     // pickable — embedded rules surface through the flows they belong to.
-    expect([...DIMENSIONS].filter((d) => d.pickable).map((d) => d.index)).toEqual([1, 2, 5, 7, 15, 19]);
+    expect([...DIMENSIONS].filter((d) => d.pickable).map((d) => d.index)).toEqual([1, 2, 5, 7, 9, 15, 19]);
   });
 
-  it('derives the picker claim list (implemented ∧ schema-wired ∧ pickable) — C_15/C_7 join C_19/C_5, C_18 absent', () => {
+  it('derives the picker claim list (implemented ∧ schema-wired ∧ pickable) — C_15/C_7/C_9 join C_19/C_5, C_18 absent', () => {
     // The factory filter is contribute-flows.ts dimensionOptions()'s exact
     // derivation, asserted against the registry so a registry change that
     // flips the picker's menu fails here (the store-tick'd derivation runs
     // in the browser; the registry predicate is what it filters by).
     const pickerDims = [...DIMENSIONS.filter((d) => d.implemented && SCHEMAS.has(d.index) && d.pickable)].map((d) => d.index);
-    expect(pickerDims).toEqual([1, 2, 5, 7, 15, 19]);
+    expect(pickerDims).toEqual([1, 2, 5, 7, 9, 15, 19]);
   });
 
   describe('isValidDims', () => {
@@ -264,8 +264,8 @@ describe('step schemas', () => {
 
   it('defines a 2-step default schema for unwired dimensions', () => {
     expect(DEFAULT_SCHEMA.steps.map((s) => s.stepId)).toEqual(['submit', 'verify']);
-    expect(schemaForDims({ '9': 1 }).dimIndex).toBe(-1);
-    expect(schemaForDims({ '9': 1 })).toBe(DEFAULT_SCHEMA);
+    expect(schemaForDims({ '3': 1 }).dimIndex).toBe(-1);
+    expect(schemaForDims({ '3': 1 })).toBe(DEFAULT_SCHEMA);
   });
 
   it('resolves the schema of the lowest wired dimIndex (deterministic priority)', () => {
@@ -318,7 +318,7 @@ describe('schema v2 (two-verifier C_1) and legacy resolution', () => {
     const v1c1 = schemaForRecord('v1', { '1': 1 });
     expect(v1c1.steps[1].requirement).toEqual({ mode: 'single', count: 1 });
     expect(v1c1.steps.map((s) => s.stepId)).toEqual(['submit', 'verify', 'settle']); // legacy 3-step
-    expect(schemaForRecord('v1', { '9': 1 }).schemaVersion).toBe('v1'); // legacy default: 2-step, dimIndex -1
+    expect(schemaForRecord('v1', { '3': 1 }).schemaVersion).toBe('v1'); // legacy default: 2-step, dimIndex -1
     expect(() => schemaForRecord('v9', { '1': 1 })).toThrow(); // unknown version → callers reject
   });
 
@@ -369,24 +369,24 @@ describe('verify_contribution handler (schema-driven)', () => {
   it('on pass at the final requirement: pays submitter per-dims, updates tallies, advances to settle', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    setupSubmitted(state, node, 'alice', 'c-multi', { '1': 1, '2': 0.5, '9': 1 });
+    setupSubmitted(state, node, 'alice', 'c-multi', { '1': 1, '2': 0.5, '3': 1 });
     setupMembers(state, 'carol'); // v2: C_1 needs a second distinct verifier
     const verify = makeVerifyContributionHandler(node);
     // First completed check (bob): requirement (all-parties, 2) not yet final —
     // no submitter payout, lifecycle does not advance.
     expect(run(verify, state, makeOp('verify_contribution', 'bob',
-      verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '9': 1 }, reason: 'real artifact' })))).toBe(0);
+      verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '3': 1 }, reason: 'real artifact' })))).toBe(0);
     expect(logical(state, RES_NAMES.balance('alice')) ?? -999).toBe(0);
     expect(state.getRegister(CONTRIB_NAMES.step('c-multi'))).toBe(1);
     // Second completed check (carol): final requirement completes — payout,
     // tallies, and step advance fire exactly once, here.
     expect(run(verify, state, makeOp('verify_contribution', 'carol',
-      verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '9': 1 }, reason: 'also real' })))).toBe(0);
+      verifyOp({ contributionId: 'c-multi', dims: { '1': 1, '2': 0.5, '3': 1 }, reason: 'also real' })))).toBe(0);
     const expected = RES_CONFIG.buildingBounty * 1 + RES_CONFIG.recordingBaseCredit * 0.5;
     expect(logical(state, RES_NAMES.balance('alice'))).toBe(expected);
     expect(logical(state, 'dim:alice:c1')).toBe(1);
     expect(logical(state, 'dim:alice:c2')).toBe(0.5);
-    expect(logical(state, 'dim:alice:c9')).toBeUndefined(); // classification-only: never registered
+    expect(logical(state, 'dim:alice:c3')).toBeUndefined(); // classification-only: never registered
     expect(state.getRegister(CONTRIB_NAMES.step('c-multi'))).toBe(2); // advanced to settle
     expect(state.getRegister(CONTRIB_NAMES.status('c-multi'))).toBe(0);
     expect(logical(state, RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
@@ -395,10 +395,10 @@ describe('verify_contribution handler (schema-driven)', () => {
   it('default schema: pass at the terminal verify step finalizes as accepted', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    setupSubmitted(state, node, 'alice', 'c-term', { '9': 1 });
+    setupSubmitted(state, node, 'alice', 'c-term', { '3': 1 });
     const verify = makeVerifyContributionHandler(node);
     expect(run(verify, state, makeOp('verify_contribution', 'bob',
-      verifyOp({ contributionId: 'c-term', dims: { '9': 1 } })))).toBe(0);
+      verifyOp({ contributionId: 'c-term', dims: { '3': 1 } })))).toBe(0);
     expect(state.getRegister(CONTRIB_NAMES.status('c-term'))).toBe(1);
     expect(logical(state, RES_NAMES.balance('alice'))).toBe(0);
     expect(logical(state, RES_NAMES.balance('bob'))).toBe(RES_CONFIG.verificationCheckCredit);
@@ -416,12 +416,12 @@ describe('verify_contribution handler (schema-driven)', () => {
   it('rejects a second verification after the terminal step finalized', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    setupSubmitted(state, node, 'alice', 'c-twice', { '9': 1 });
+    setupSubmitted(state, node, 'alice', 'c-twice', { '3': 1 });
     const verify = makeVerifyContributionHandler(node);
-    expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 } })))).toBe(0);
+    expect(run(verify, state, makeOp('verify_contribution', 'bob', verifyOp({ contributionId: 'c-twice', dims: { '3': 1 } })))).toBe(0);
     const bobBalance = logical(state, RES_NAMES.balance('bob'));
-    expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 } })))).toBe(-1);
-    expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-twice', dims: { '9': 1 }, pass: false })))).toBe(-1);
+    expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-twice', dims: { '3': 1 } })))).toBe(-1);
+    expect(run(verify, state, makeOp('verify_contribution', 'carol', verifyOp({ contributionId: 'c-twice', dims: { '3': 1 }, pass: false })))).toBe(-1);
     expect(logical(state, RES_NAMES.balance('bob'))).toBe(bobBalance);
   });
 
@@ -661,7 +661,7 @@ describe('settle_contribution handler', () => {
   it('rejects settle at the verify step and for the default-schema lifecycle', () => {
     const node = new MockNode();
     const state = new MockState(node);
-    setupSubmitted(state, node, 'alice', 'c-nosettle', { '9': 1 });
+    setupSubmitted(state, node, 'alice', 'c-nosettle', { '3': 1 });
     const settle = makeSettleContributionHandler(node);
     // default schema: terminal is verify (index 1) ⇒ settle invalid at index 1
     expect(run(settle, state, makeOp('settle_contribution', 'alice',
@@ -1163,10 +1163,10 @@ describe('appeal_verdict', () => {
       { contributionId: 'c-app3', submitter: 'carol2', reason: 'pending' } as AppealVerdictPayload))).toBe(-1);
     // An accepted contribution is final — appeal it and get -1.
     setupMembers(state, 'dave');
-    setupSubmitted(state, node, 'carol2', 'c-app3b', { '9': 1 });
+    setupSubmitted(state, node, 'carol2', 'c-app3b', { '3': 1 });
     const verify = makeVerifyContributionHandler(node);
     expect(run(verify, state, makeOp('verify_contribution', 'dave',
-      verifyOp({ contributionId: 'c-app3b', submitter: 'carol2', dims: { '9': 1 } })))).toBe(0);
+      verifyOp({ contributionId: 'c-app3b', submitter: 'carol2', dims: { '3': 1 } })))).toBe(0);
     expect(state.getRegister(CONTRIB_NAMES.status('c-app3b'))).toBe(1);
     expect(run(appeal, state, makeOp('appeal_verdict', 'carol2',
       { contributionId: 'c-app3b', submitter: 'carol2', reason: 'accepted' } as AppealVerdictPayload))).toBe(-1);

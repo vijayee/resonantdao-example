@@ -65,7 +65,15 @@ interface ClaimNode {
 //     FILER's claim-dim tally by −match × alphaFor(dim): false exposures
 //     cost exactly what true ones earn. The per-mille accumulate rides the
 //     same prev + toRegisterUnits(delta) idiom with a NEGATIVE delta. Rules
-//     without it (C_19/C_5) keep the reject path's credit-nothing behavior.
+//     without it (C_19/C_5/C_9) keep the reject path's credit-nothing behavior.
+//   - claimBonus (slice #6h, C_9): the OPTIONAL $RES side payment at the
+//     claim's final completion — the hook the tally credit cannot express
+//     because its amount is independent of dims/alpha (C_9's flat adoption
+//     bonus: RES_CONFIG.adoptionBonus to the FILER when the verify payload
+//     re-carries the submit-stamped adopted-decision tie). The hook writes
+//     through the $RES idiom (declare-first balance register, raw prev,
+//     prev + toRegisterUnits(bonus)) and records itself in the explanation
+//     record's payments. Absent on every rule without a bonus.
 // C_19's inline blocks (slice #6a) refactored INTO this map — behavior
 // identical for C_19 (its contracts stay byte-green). The next claim types
 // (C_15's corroboration etc.) design onto this map, not around it.
@@ -78,6 +86,16 @@ interface ClaimRule {
   creditDim: number;
   // THE PENALTY GATEWAY (slice #6f, C_15): the claim's reject pays the FILER.
   rejectPenalty?: boolean;
+  // THE BONUS HOOK (slice #6h, C_9): an OPTIONAL flat $RES side payment at
+  // the claim's final verify completion (the claimFinal site below fires it
+  // once, next to the tally credit).
+  claimBonus?(
+    node: ClaimNode,
+    state: HandlerState,
+    payload: VerifyContributionPayload,
+    payments: Record<string, number>,
+    signerId: string
+  ): void;
 }
 
 const CLAIM_RULES: Record<number, ClaimRule> = {
@@ -214,6 +232,84 @@ const CLAIM_RULES: Record<number, ClaimRule> = {
     verifyGate: () => true,
     creditTarget: (payload) => payload.submitter,
     creditDim: 7,
+  },
+  // C_9 Hermit (slice #6h): the MILESTONE machinery verbatim (C_7's shape,
+  // the schema's STEPIDS are shared) with one new piece — the OPTIONAL
+  // ADOPTION TIE. The gate at submit: when the payload carries `proposalId`
+  // it must be a REAL proposal (STATE_NAMES.proposals) AND already EXECUTED
+  // (the register the execute handler stamps — the machine's adoption truth;
+  // an absent/unexecuted tie → -1); when absent the claim is the plain
+  // deep-work walk (no stamp, no bonus). The stamped tie is the pin the
+  // verify gate reads, and the bonus is the rule's claimBonus hook.
+  9: {
+    submitOk: (state, payload) => {
+      if (!Array.isArray(payload.verifiers) || payload.verifiers.length === 0) {
+        return false; // the milestone shape requires its checker NAMED (C_7's rule verbatim)
+      }
+      const tie = payload.proposalId;
+      if (tie === undefined) {
+        return true; // the tie is OPTIONAL — the no-tie claim is valid
+      }
+      // An executed tie only: execute stamps the register 1 and the
+      // executedProposals set for the claim's lifetime; reads of an
+      // undeclared register return 0 on every replica, so a lagging replica
+      // rejects honestly (the tie's truth is not yet mirrored there).
+      return (
+        isNonEmptyString(tie) &&
+        state.setContains(STATE_NAMES.proposals, tie) &&
+        (state.getRegister(TOKEN_NAMES.proposalExecuted(tie)) || 0) === 1
+      );
+    },
+    tieSets: (contributionId) => [CONTRIB_NAMES.adoptedTie(contributionId)],
+    stamp: (state, payload, signerId) => {
+      if (payload.proposalId === undefined) {
+        return; // the no-tie claim stamps nothing
+      }
+      state.setAdd(
+        CONTRIB_NAMES.adoptedTie(payload.contributionId),
+        payload.proposalId as string,
+        `submit:adopt:${signerId}`
+      );
+    },
+    // The re-carry pin (the C_19/C_5 pattern): the payload's proposalId is
+    // NOT trusted — it must satisfy the submit-stamped adoptedTie set. The
+    // carried side handles the FORGERIES (a different proposal, or any id on
+    // a no-tie claim: neither is in the stamps → -1, all-or-nothing); the
+    // absent side is the no-tie claim's honest walk — the machine cannot
+    // enumerate the stamp set to prove emptiness, and the omission can only
+    // FORFEIT the filer's own bonus (it never gains), so the gate passes and
+    // the bonus simply stays unpaid (the claimBonus hook reads the re-carry).
+    verifyGate: (node, state, payload) => {
+      try { node.addORSet(CONTRIB_NAMES.adoptedTie(payload.contributionId)); } catch (err) { /* exists */ }
+      const tie = payload.proposalId;
+      if (tie === undefined || tie === '') {
+        return true;
+      }
+      return state.setContains(CONTRIB_NAMES.adoptedTie(payload.contributionId), tie);
+    },
+    creditTarget: (payload) => payload.submitter,
+    creditDim: 9,
+    // The ADOPTION BONUS: the flat RES_CONFIG.adoptionBonus to the FILER at
+    // the claim's final verify, gated on the re-carried tie surviving the
+    // pin above. The $RES idiom verbatim (declare-first, raw prev, prev +
+    // toRegisterUnits). Not harm-scaled and not alpha-scaled — the bonus pays
+    // for the ADOPTION (the decision's machine state), not the finding's
+    // outcome weight; the tally beside it stays the standard claim credit.
+    claimBonus: (node, state, payload, payments, signerId) => {
+      const tie = payload.proposalId;
+      if (!isNonEmptyString(tie)) {
+        return; // no tie re-carried → the deep-work path only (D-A)
+      }
+      try { node.addORSet(CONTRIB_NAMES.adoptedTie(payload.contributionId)); } catch (err) { /* exists */ }
+      if (!state.setContains(CONTRIB_NAMES.adoptedTie(payload.contributionId), tie)) {
+        return; // the gate already failed this; the hook stays defensible
+      }
+      const balance = RES_NAMES.balance(payload.submitter);
+      try { node.addRegister(balance, 0); } catch (err) { /* exists */ }
+      const prev = state.getRegister(balance) || 0;
+      state.setRegister(balance, prev + toRegisterUnits(RES_CONFIG.adoptionBonus), signerId);
+      payments[payload.submitter] = (payments[payload.submitter] ?? 0) + RES_CONFIG.adoptionBonus;
+    },
   },
 };
 
@@ -672,6 +768,10 @@ export function makeVerifyContributionHandler(
             toRegisterUnits(dimensionDeltaFor(rule.creditDim, payload.dims[dimKey]) * alphaFor(rule.creditDim) * harmFactor),
           op.signerId
         );
+        // The BONUS HOOK (slice #6h, C_9): a rule's optional flat $RES side
+        // payment beside the tally — the adopt bonus rides the claim's final
+        // completion exactly like the tally credit does.
+        rule.claimBonus?.(node, state, payload, payments, op.signerId);
       }
     }
 

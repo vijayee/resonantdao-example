@@ -102,6 +102,14 @@ export interface ContributionPayload {
   // (≠ the filer, a member) — the tied record must be authored by them (the
   // machine's owner set pins the author; the verify gate cross-checks it).
   taught?: string;
+  // The ADOPTED-DECISION tie (slice #6h, C_9): set ONLY on C_9 claims, and
+  // OPTIONAL there — the proposal the finding steered. When present the
+  // submit gate requires the proposal to be a REAL one (STATE_NAMES.proposals)
+  // AND already EXECUTED (the executed register the execute handler stamps);
+  // the claim stamps it into CONTRIB_NAMES.adoptedTie, the pin the verify
+  // gate later checks the re-carry against. A no-tie claim walks the deep-work
+  // path only (no bonus).
+  proposalId?: string;
 }
 
 // Recognition claims (slice #6a, C_19): a ContributionPayload whose
@@ -152,6 +160,13 @@ export interface VerifyContributionPayload {
   // against the declare-stamped registry (a mismatched name is a forged
   // guide: -1). Absent on every other verify — the hook is absent with it.
   orientedBy?: string; // the submitter's orientation guide (from the registry stamp)
+  // The adopted-decision tie (slice #6h, C_9): re-carried on the verify
+  // payload — the C_19/C_5 pattern (the machine cannot enumerate the claim's
+  // tie OR-sets, so the proposal id rides the payload), pinned against the
+  // claim's submit-stamped adoptedTie set (a mismatched or forged id is -1).
+  // Absent on every other dimension, and absent on the NO-TIE discovery
+  // claims (the bonus is the tie's, not the walk's).
+  proposalId?: string; // the claim's adopted (EXECUTED) proposal
 }
 
 export interface SettleContributionPayload {
