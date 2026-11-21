@@ -89,6 +89,7 @@ const DIM_DESCS: Record<number, string> = {
   2: 'a durable, findable record — base credit 3 $RES',
   5: 'taught something real — credited on the student’s demonstrated competence',
   19: 'recognize someone’s proven work — credits their C_19 tally (the tie is machine-checked)',
+  15: 'expose a skewed incentive — two corroborators named up front, and false exposures cost the same weight (the symmetric penalty)',
 };
 
 export function dimensionOptions(): Array<{ value: string; label: string; desc: string }> {

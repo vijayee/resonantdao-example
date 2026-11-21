@@ -141,9 +141,13 @@ describe('claimTieSteps — the claim flows walk their ties per the dim answer',
     expect(memberStep(empty[1], 'record').options).toEqual([]);
   });
 
-  it('plain walks and the embedded rule gain no tie steps', () => {
+  it('plain walks, the embedded rule and the tie-free exposure claim gain no tie steps', () => {
     expect(claimTieSteps(1, {}, world)).toEqual([]);
     expect(claimTieSteps(2, {}, world)).toEqual([]);
     expect(claimTieSteps(18, {}, world)).toEqual([]);
+    // C_15 (slice #6f): no tie picks — the corroboration walks the shared
+    // verifiers pick instead (its count derives from the all-parties count-2
+    // C_15 schema, so the corroborators are exactly two).
+    expect(claimTieSteps(15, {}, world)).toEqual([]);
   });
 });

@@ -14,6 +14,10 @@ import { FlowStep } from '../types';
 //     offerable). The options re-read per the taught answer: the flow's step
 //     list re-evaluates on every answer commit, so the record pick renders
 //     from the taught member's accepted work.
+//   - C_15 (slice #6f): ZERO tie steps — the corroboration IS the gate, and
+//     the corroborators are the shared VERIFIERS pick the contribute-new
+//     flow already walks for every dim (its count derives from the C_15
+//     schema's all-parties count-2 verify: exactly two names).
 // The exact count-1 members picks are the flow's validation (Choose exactly
 // 1); EMPTY options leave Next unpassable — the machine's gate mirrors it.
 export interface ClaimTieWorld {

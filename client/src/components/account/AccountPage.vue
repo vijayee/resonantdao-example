@@ -54,11 +54,15 @@ const visibleTallies = computed(() => {
   if (!ds.dao || !ds.username) return [];
   return DIMENSIONS
     .map((d) => ({ code: `C_${d.index}`, cls: d.cls, value: ds.dao!.getDimensionBalance(ds.username, d.index) }))
-    .filter((t) => t.value > 0)
+    .filter((t) => t.value !== 0)
     .sort((a, b) => b.value - a.value);
 });
 const hiddenCount = computed(() => DIMENSIONS.length - visibleTallies.value.length);
 
+// The tally panel renders every NONZERO tally — a negative dimension tally is
+// a real state (slice #6f: C_15's symmetric penalty decrements the filer's
+// tally on a disproven exposure), so the old positive-only screen would
+// silently hide the penalty chip. Negatives sort last (the value sort holds).
 // The mirror's entries are structural: map record → LedgerContribution inside
 // the lines computed so the projection stays pure (record {contributionId,
 // dims, summary} + entry.harm — the structural inputs ledgerLines retells).
