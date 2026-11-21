@@ -5,7 +5,7 @@ import {
   ServerMessage,
 } from '@shared/types';
 import {
-  CONTENT_LIMITS, schemaForDims, EvidenceRef, HarmVerdict, SCHEMA_VERSION, STATUS_APPEALED,
+  CONTENT_LIMITS, schemaForDims, schemaForRecord, EvidenceRef, HarmVerdict, SCHEMA_VERSION, STATUS_APPEALED,
 } from '@shared/contribution';
 import type { ContributionFacts } from '@shared/wizard';
 import { RECIP_NAMES, RES_CONFIG } from '@shared/policies';
@@ -420,20 +420,34 @@ export const useDaoStore = defineStore('dao', () => {
   // Verify flow (ported): no-self verify, distinct-actor + reciprocity bars,
   // mandatory written reason. The decision UI lives in
   // flows/contribute-flows.ts (verifyFlow); this store op is the gate +
-  // payload assembler.
+  // payload assembler. The gate + payload are keyed on the machine's CURRENT
+  // step (slice #6g): a two-verify schema's second gate carries that step's
+  // own stepId ('verify-2') and repeats the named verifier — the milestone
+  // carve (the same data rule the verify handler applies) scopes the pair
+  // bars to single-verify schemas, and the prior-attested distinctness to
+  // all-parties steps (a single-count step never has a partial completion).
   async function verifyContribution(entry: ContributionMirrorEntry, input: { pass: boolean; harm: HarmVerdict; reason: string }): Promise<boolean> {
     const d = dao.value;
     if (!d || submitting.value) return false;
     if (entry.submitter === username.value) return false;
-    const prior = entry.verifiedBy ? [entry.verifiedBy] : [];
-    if (prior.includes(username.value)) {
+    const schema = schemaForRecord(entry.record.schemaVersion ?? SCHEMA_VERSION, entry.record.dims);
+    const current = schema.steps[d.getContributionStepIndex(entry.record.contributionId)];
+    if (!current || current.op !== 'verify_contribution') {
+      status.set('This contribution is not awaiting a verification now.', 'error');
+      return false;
+    }
+    const milestoneClaim = schema.steps.filter((s) => s.op === 'verify_contribution').length > 1;
+    const allParties = current.requirement.mode === 'all-parties';
+    const prior = allParties && entry.verifiedBy ? [entry.verifiedBy] : [];
+    if (allParties && prior.includes(username.value)) {
       status.set('You already verified this contribution.', 'error');
       return false;
     }
     const verifier = username.value;
     if (
-      d.node.setContains(RECIP_NAMES.verifiedBy(entry.submitter), verifier) ||
-      d.node.setContains(RECIP_NAMES.verifiedBy(verifier), entry.submitter)
+      !milestoneClaim &&
+      (d.node.setContains(RECIP_NAMES.verifiedBy(entry.submitter), verifier) ||
+        d.node.setContains(RECIP_NAMES.verifiedBy(verifier), entry.submitter))
     ) {
       status.set('You already verified this submitter’s earlier work — reciprocity bars re-verification.', 'error');
       return false;
@@ -453,7 +467,11 @@ export const useDaoStore = defineStore('dao', () => {
       contributionId: entry.record.contributionId,
       submitter: entry.submitter,
       dims: entry.record.dims,
-      stepId: 'verify',
+      // The CURRENT verify step's id — 'verify' on the first gate, the
+      // milestone schema's own 'verify-2' on the second (the handler matches
+      // the payload's id against the resolved step; identical ids would
+      // collapse the two gates).
+      stepId: current.stepId,
       pass: input.pass,
       reason: input.reason.trim(),
       harm: input.harm,
@@ -504,6 +522,11 @@ export const useDaoStore = defineStore('dao', () => {
         submitter: entry.submitter,
         reason: input.reason.trim(),
         verifiers: entry.verifiers ?? [],
+        // The record's schema re-carry (slice #6g, C_7): multi-step schemas
+        // place the settle step at a different register index, so the
+        // handler locates it from these fields.
+        dims: entry.record.dims,
+        schemaVersion: entry.record.schemaVersion ?? SCHEMA_VERSION,
       });
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);
@@ -532,6 +555,12 @@ export const useDaoStore = defineStore('dao', () => {
         contributionId: entry.record.contributionId,
         submitter: entry.submitter,
         reason: input.reason.trim(),
+        // The record's schema re-carry (slice #6g, C_7): the rewind targets
+        // the schema's first verify step and resets EVERY verify gate's
+        // counter — a rejected second milestone must not pre-satisfy the
+        // re-review.
+        dims: entry.record.dims,
+        schemaVersion: entry.record.schemaVersion ?? SCHEMA_VERSION,
       });
       await serverClient.submitOp(bytesToBase64(bytes));
       await safeExecuteRemote(bytes);

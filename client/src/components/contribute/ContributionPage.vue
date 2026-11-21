@@ -85,15 +85,19 @@ const composed = computed(() => {
   if (!entry || !ds.dao || !ds.username) return null;
   const { schema, facts } = contributionFacts(ds.dao, entry, ds.members);
   const model = lifecycleModel(schema, facts, entry, ds.username, (ds.custodians ?? []).includes(ds.username), ds.feedEvents());
-  // Attach the CURRENT phase's form (page-side duty; never in the pure model).
+  // Attach the CURRENT phase's form (page-side duty; never in the pure
+  // model). The factories key the STEP OP, not the id — the milestone
+  // claim's second gate ('verify-2') mounts the same verify flow its first
+  // gate does, and the flow's own draft key still rides the stepId.
   const current = model.phases.find((p) => p.state === 'current' && p.mayAct);
   const FACTORIES: Record<string, (e: ContributionMirrorEntry) => FlowDefinition> = {
-    verify: verifyFlow, settle: settleFlow,
+    verify_contribution: verifyFlow, settle_contribution: settleFlow,
   };
+  const currentStep = schema.steps[facts.stepIndex];
   return {
     entry,
     model,
-    pageFlow: current ? (FACTORIES[current.stepId]?.(entry) ?? null) : null,
+    pageFlow: current && currentStep ? (FACTORIES[currentStep.op]?.(entry) ?? null) : null,
     resume: current ? loadDraft(localStorage, ds.username, current.stepId, entry.record.contributionId) : null,
   };
 });

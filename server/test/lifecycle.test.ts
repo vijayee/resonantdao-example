@@ -124,6 +124,44 @@ describe('lifecycleModel', () => {
     // completion at; the older event must not win by array position.
     expect(m.phases[1].doneAt).toBe(2000);
   });
+
+  describe('the milestone claim (slice #6g, C_7: two verify phases)', () => {
+    const c7 = SCHEMAS.get(7)!;
+    const c7Entry = entry({ verifiers: ['bob'] } as Partial<ContributionMirrorEntry>);
+
+    it('the schema renders FOUR phases — both verify phases walk by the step register, data-only', () => {
+      // Submitted: M1 current, M2 locked behind it (the register gates the
+      // order — milestone N completes only when N−1 has).
+      const submitted = lifecycleModel(c7, facts(1, { submit: 1 }), c7Entry, 'alice', false, []);
+      expect(submitted.phases.map((p) => p.stepId)).toEqual(['submit', 'verify', 'verify-2', 'settle']);
+      expect(submitted.phases[1].state).toBe('current');
+      expect(submitted.phases[1].progress).toEqual({ done: 0, required: 1 });
+      expect(submitted.phases[2].state).toBe('locked');
+      expect(submitted.phases[2].progress).toEqual({ done: 0, required: 1 });
+      // M1 complete: the register advanced to M2 — its own current phase.
+      const atM2 = lifecycleModel(c7, facts(2, { submit: 1, verify: 1 }), c7Entry, 'bob', false, [verifyEvent('bob', 2000)]);
+      expect(atM2.phases[1].state).toBe('complete');
+      expect(atM2.phases[1].doneBy).toBe('bob');   // the done-phase annotation keys the VERIFY OP, not the id
+      expect(atM2.phases[1].doneAt).toBe(2000);
+      expect(atM2.phases[2].state).toBe('current');
+      expect(atM2.phases[3].state).toBe('locked');
+      // Both gates done: the rail is at settle.
+      const atSettle = lifecycleModel(c7, facts(3, { submit: 1, verify: 1, 'verify-2': 1 }), c7Entry, 'alice', false, []);
+      expect(atSettle.phases[2].state).toBe('complete');
+      expect(atSettle.phases[3].state).toBe('current');
+    });
+
+    it('the second gate waits on the MILESTONE text (the targeted-name text belongs to the first gate)', () => {
+      // On the named verifier's own page he may act (no waiting text); the
+      // filer's page names the phase instead.
+      const bobsView = lifecycleModel(c7, facts(2, { submit: 1, verify: 1 }), c7Entry, 'bob', false, []);
+      expect(bobsView.phases[2].mayAct).toBe(true);
+      expect(bobsView.phases[2].waitingOn).toBeUndefined();
+      const aliceView = lifecycleModel(c7, facts(2, { submit: 1, verify: 1 }), c7Entry, 'alice', false, []);
+      expect(aliceView.phases[2].mayAct).toBe(false);
+      expect(aliceView.phases[2].waitingOn).toBe('awaiting the second milestone check');
+    });
+  });
 });
 
 describe('isParticipant', () => {

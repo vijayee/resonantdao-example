@@ -35,10 +35,13 @@ export interface LifecycleModel {
 // Role-anchored on purpose: the domain cannot know WHO acts next, so the
 // waiting text names the ROLE that holds the turn — never a member name.
 // EXCEPTION: targeted verification carries the names in the protocol state —
-// there the turn IS determinate and the text names the remaining people.
+// there the turn IS determinate and the text names the remaining people
+// (that reading is scoped to the FIRST verify gate; the milestone claim's
+// second gate names its phase instead).
 const WAITING_TEXT: Record<string, string> = {
   submit: 'awaiting the submitter',
   verify: 'awaiting a verifier',
+  'verify-2': 'awaiting the second milestone check',
   settle: 'awaiting the submitter',
 };
 
@@ -79,14 +82,15 @@ function phaseFor(step: WizardStep, facts: ContributionFacts, entry: Contributio
     waitingOn: step.state === 'current' && !mayAct ? waitingText(step, facts, entry) : undefined,
     // note rides DONE phases only (the spec scopes the verdict display there;
     // a partial all-parties verify shows its own progress, not the first
-    // check's reason).
-    note: step.state === 'complete' && step.stepId === 'verify' && entry.verdictReason ? entry.verdictReason : undefined,
+    // check's reason). The verify annotations key the STEP OP, not the id —
+    // the milestone claim's second gate ('verify-2') annotates like the first.
+    note: step.state === 'complete' && step.op === 'verify_contribution' && entry.verdictReason ? entry.verdictReason : undefined,
   };
   if (step.state === 'complete') {
     if (step.stepId === 'submit') {
       phase.doneBy = entry.submitter;
       phase.doneAt = entry.submittedAt;
-    } else if (step.stepId === 'verify') {
+    } else if (step.op === 'verify_contribution') {
       const ann = verifyAnnotations(entry, feedEvents);
       phase.doneBy = ann.doneBy;
       phase.doneAt = ann.doneAt;

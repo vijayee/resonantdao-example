@@ -18,6 +18,10 @@ import { FlowStep } from '../types';
 //     the corroborators are the shared VERIFIERS pick the contribute-new
 //     flow already walks for every dim (its count derives from the C_15
 //     schema's all-parties count-2 verify: exactly two names).
+//   - C_7 (slice #6g): ZERO tie steps too — the milestone claim's gates are
+//     the gate; the SAME single named verifier carries both of the
+//     two-verify-step schema's milestones (the count derives from the
+//     schema's FIRST verify step: exactly one name).
 // The exact count-1 members picks are the flow's validation (Choose exactly
 // 1); EMPTY options leave Next unpassable — the machine's gate mirrors it.
 export interface ClaimTieWorld {
