@@ -437,6 +437,7 @@
       "file": "bpmn/c07-chariot.bpmn",
       "title": "C_7 Chariot — Milestones",
       "badge": "proposed",
+      "live": true,
       "description": "Rewards completed milestones, reduced or voided if the work caused proven harm.",
       "whoActs": [
         "A reviewer confirms the milestone is done"
