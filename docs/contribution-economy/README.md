@@ -20,7 +20,7 @@ Serve this directory with `python3 -m http.server` and open the served `index.ht
 | `bpmn/c06-lovers.bpmn` | C_6 Lovers — Joint Builds | `proposed interpretation` | Rewards genuine joint builds, with the shared credit split by proven share of the work. |
 | `bpmn/c07-chariot.bpmn` | C_7 Chariot — Milestones | `proposed interpretation` | **LIVE** | Rewards completed milestones, reduced or voided if the work caused proven harm. |
 | `bpmn/c08-strength.bpmn` | C_8 Strength — Resolving | `specified` | Rewards resolving a live dispute. The resolver must be neutral, the credit is sized by severity, and both sides must accept the resolution in writing. |
-| `bpmn/c09-hermit.bpmn` | C_9 Hermit — Discovering | `specified` | Rewards deep research by proven milestones — page count earns nothing. A finding that steers a real vote earns an adoption bonus. |
+| `bpmn/c09-hermit.bpmn` | C_9 Hermit — Discovering | `specified` | **LIVE** | Rewards deep research by proven milestones — page count earns nothing. A finding that steers a real vote earns an adoption bonus. |
 | `bpmn/c10-wheel.bpmn` | C_10 Wheel — Fair Round Completion | `proposed interpretation` | Rewards closing a round fairly. If the audit finds the round unfair, the system records the debt and retries next round. |
 | `bpmn/c11-justice.bpmn` | C_11 Justice — Audits | `proposed interpretation` | Rewards running fairness audits, which stay human-only during the early phase. Missed care, mediation, or upkeep triggers back-pay, re-tuning, or rule retirement. |
 | `bpmn/c12-hanged-man.bpmn` | C_12 Hanged Man — Re-seeing | `specified` | Rewards reframing a problem in a way that changes a real decision — sitting in a pause earns nothing. |

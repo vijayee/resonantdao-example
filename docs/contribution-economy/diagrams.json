@@ -501,6 +501,7 @@
       "file": "bpmn/c09-hermit.bpmn",
       "title": "C_9 Hermit — Discovering",
       "badge": "specified",
+      "live": true,
       "description": "Rewards deep research by proven milestones — page count earns nothing. A finding that steers a real vote earns an adoption bonus.",
       "whoActs": [
         "A reviewer checks milestone evidence",
