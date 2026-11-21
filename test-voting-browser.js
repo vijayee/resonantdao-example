@@ -1261,6 +1261,127 @@ async function runRoundSpineStep(actor, flowId, note, choiceValue = null, afterS
   }
 
 
+  // --- C_7 milestone claims (slice #6g) ---
+  // The claim family's two-gate shape: ONE named verifier carries BOTH of
+  // the two-verify-step schema's milestones — and a pair whose check history
+  // is already consumed (bob checked alice's C_1 back in cycle 1) stays
+  // eligible, because the milestone claim's pair rule keys per-verify-STEP
+  // (the machine's carve, jest M-F; the single-verify schemas keep the
+  // standing pair-once bar verbatim). The milestones shape the credit's
+  // TIMING, not its count: bob's M1 check advances the rail to the M2 phase
+  // and pays NO claim credit; his M2 check ('verify-2') is the final —
+  // credited once — gate; the filer settles. Both checks pay the standing
+  // +2 per-check credit (+4 total, pinned on bob's balance delta), and no
+  // $RES moves to the filer (the classification dim pays no bounty).
+  console.log('Milestone arc: alice files a C_7 naming bob');
+  await nav(bob.page, '/account');
+  await bob.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
+  const bobResBefore = Number(((await bob.page.locator('#account-res').textContent()).match(/([\d.]+) \$RES/) || [])[1]);
+  if (Number.isNaN(bobResBefore)) {
+    throw new Error(`bob's pre-arc $RES balance never rendered a parsable number`);
+  }
+
+  const milestoneSummary = 'Milestone e2e demo ' + Math.floor(Math.random() * 10000);
+  await submitContribution(alice, '7', milestoneSummary, [bobName]);
+  const milestoneSettleFlow = alice.page.locator('.wizard-flow[data-flow-id="settle"]');
+
+  // Bob's M1 check (the 'verify' step): the pass advances past it, and the
+  // phase rail on his page moves to the M2 phase — its own (0/1) progress
+  // chip on the current 'Milestone 2' phase, with the verify flow still the
+  // mounted turn (the SAME flow the first gate used). Each retry SAMPLES
+  // the rail first and only drives when it has not advanced: the M2 phase
+  // mounts the same flow id, so a blind re-drive would run the SECOND check.
+  let m1Advanced = false;
+  for (let attempt = 0; !m1Advanced && attempt < 15; attempt++) {
+    m1Advanced = await bob.page
+      .locator('.lc-phase:has-text("Milestone 2") .lc-phase__progress:text-is("0/1")')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+    if (!m1Advanced) {
+      await runContributionFlow(bob, milestoneSummary, 'verify', { choiceValue: 'yes', textValue: 'the first milestone checks out' });
+    }
+  }
+  if (!m1Advanced) {
+    const statusBar = await bob.page.locator('#status').textContent();
+    throw new Error(`The milestone rail never advanced to the M2 phase after the first check. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('MILESTONE RAIL: advanced to the M2 phase after bob\'s first check');
+
+  // No claim credit yet (the credit's timing is M2): alice's page still shows
+  // the second gate waiting — the milestone waiting text, not a member name.
+  let m2Waiting = false;
+  for (let attempt = 0; !m2Waiting && attempt < 15; attempt++) {
+    await nav(alice.page, '/contribute');
+    const row = alice.page.locator(`.contribution-row:has-text("${milestoneSummary}")`).first();
+    await row.waitFor({ state: 'visible', timeout: 10000 });
+    await row.click();
+    m2Waiting = await alice.page
+      .locator('.lc-phase:has-text("Milestone 2") .lc-phase__wait:text-is("awaiting the second milestone check")')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!m2Waiting) {
+    throw new Error(`alice's milestone page never showed the M2 phase waiting on the second check`);
+  }
+  console.log('MILESTONE PHASE TEXT: awaiting the second milestone check');
+
+  // Bob's M2 check (the 'verify-2' step): the SAME verifier's second op is
+  // the final gate — credited once — and the settle flow mounts for the
+  // filer (she is still on her lifecycle page).
+  let m2Verified = false;
+  for (let attempt = 0; !m2Verified && attempt < 15; attempt++) {
+    await runContributionFlow(bob, milestoneSummary, 'verify', { choiceValue: 'yes', textValue: 'the second milestone checks out' });
+    m2Verified = await milestoneSettleFlow
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!m2Verified) {
+    const statusBar = await bob.page.locator('#status').textContent();
+    throw new Error(`The milestone claim's second check never completed. Status bar: ${statusBar || '(empty)'}`);
+  }
+
+  let milestoneSettled = false;
+  for (let attempt = 0; !milestoneSettled && attempt < 15; attempt++) {
+    await completeFlow(alice.page, 'settle', { textValue: 'accepting the proven milestones' });
+    milestoneSettled = await alice.page
+      .locator('.lc-pill--accepted')
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true, () => false);
+  }
+  if (!milestoneSettled) {
+    const statusBar = await alice.page.locator('#status').textContent();
+    throw new Error(`The milestone claim's pill never flipped to accepted. Status bar: ${statusBar || '(empty)'}`);
+  }
+  console.log('CONTRIBUTION STATUS PILL: accepted (milestone arc)');
+
+  // The FILER's chip: 'C_7 Driving — 1', EXACT (element-scoped — the
+  // established standard), credited ONCE by the two checks.
+  await nav(alice.page, '/account');
+  const driveChip = alice.page.locator('#dim-tallies .tally:has-text("C_7")');
+  let driveTallySeen = false;
+  for (let attempt = 0; !driveTallySeen && attempt < 15; attempt++) {
+    driveTallySeen = (await driveChip.count()) > 0;
+    if (!driveTallySeen) await alice.page.waitForTimeout(1000);
+  }
+  if (!driveTallySeen) throw new Error(`alice's C_7 tally missing from #dim-tallies after the milestone arc`);
+  const driveTally = (await driveChip.textContent()).trim();
+  console.log('MILESTONE TALLY:', driveTally);
+  if (driveTally !== 'C_7 Driving — 1') {
+    throw new Error(`alice's C_7 tally should read 'C_7 Driving — 1' (two gates, credited once at the last), got '${driveTally}'`);
+  }
+
+  // bob's +4 total for the two checks, pinned as a balance DELTA on his
+  // account page (the per-check credit fires at each gate; the settle and
+  // the claim's tally move nothing of his).
+  await nav(bob.page, '/account');
+  await bob.page.locator('#account-res').waitFor({ state: 'visible', timeout: 10000 });
+  const bobResAfter = Number(((await bob.page.locator('#account-res').textContent()).match(/([\d.]+) \$RES/) || [])[1]);
+  if (bobResAfter - bobResBefore !== 4) {
+    throw new Error(`bob's balance should have gained exactly +4 $RES for the two milestone checks (before ${bobResBefore}, after ${bobResAfter})`);
+  }
+  console.log('MILESTONE CREDIT: bob +4 $RES for the two checks');
+
+
   // --- Custodian election flow ---
   // carol and dave registered (live pages) back in the contribution flows;
   // the candidates list is every member set — alphabetical, so alice is
