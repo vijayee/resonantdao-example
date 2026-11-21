@@ -230,10 +230,9 @@ describe('the C_7 schema is wired (the milestone claim, slice #6g)', () => {
   });
 
   it('W-7-C2. every wired schema has unique stepIds (the per-step done counters must not collide)', () => {
-    for (const [dim, schema] of SCHEMAS) {
+    for (const [_dim, schema] of SCHEMAS) {
       const ids = schema.steps.map((s) => s.stepId);
       expect(new Set(ids).size).toBe(ids.length);
-      expect(SCHEMAS.has(dim)).toBe(true);
     }
   });
 });

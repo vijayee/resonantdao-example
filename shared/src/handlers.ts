@@ -864,43 +864,42 @@ export function makeAppealVerdictHandler(
       return -1; // once per contribution
     }
 
+    // The rewind plan, resolved BEFORE any write (validate-before-write:
+    // a schema whose first verify step cannot be located must not have
+    // consumed the once-guard). With the record's schema re-carried (slice
+    // #6g, C_7 — the verify/settle payload's establish pattern) both the
+    // rewind index and the gates-to-reset come from the resolved schema: a
+    // two-verify schema rewinds to its 'verify' index and clears the second
+    // gate's counter too (a rejected milestone check must not pre-satisfy
+    // the re-review). Without the re-carry the legacy positional rewind
+    // stands — every pre-#6g schema places verify at index 1 and a
+    // rejection never advances past it.
+    let rewindIndex = 1;
+    let verifyStepIds = ['verify'];
+    if (payload.dims !== undefined) {
+      const schema = schemaForRecord(payload.schemaVersion ?? SCHEMA_VERSION, payload.dims);
+      rewindIndex = schema.steps.findIndex((s) => s.op === 'verify_contribution');
+      if (rewindIndex < 0) {
+        return -1;
+      }
+      verifyStepIds = schema.steps
+        .filter((s) => s.op === 'verify_contribution')
+        .map((s) => s.stepId);
+    }
+
     // Declaration-first (real wasm throws resource_not_found on undeclared
     // writes): the appealed register and the explanations ORSet are declared
     // here if absent; status/step were declared by the submit handler.
     try { node.addRegister(appealedReg, 0); } catch (err) { /* exists */ }
     state.setRegister(appealedReg, 1, op.signerId);
     state.setRegister(statusReg, STATUS_APPEALED, op.signerId);
-    // Rewind the lifecycle position to the FIRST verify step and reset EVERY
-    // verify step's completion counter, so the appealed re-review requires
-    // the FULL fresh quorum at each gate (decrementPNCounter is exact —
-    // PNCounters support decrement; the pre-appeal verdicts no longer occupy
-    // slots). With the record's schema re-carried (slice #6g, C_7 — the
-    // verify/settle payload's establish pattern) both come from the resolved
-    // schema: a two-verify schema rewinds to its 'verify' index and clears
-    // the second gate's counter too (a rejected milestone check must not
-    // pre-satisfy the re-review). Without the re-carry the legacy positional
-    // rewind stands — every pre-#6g schema places verify at index 1 and a
-    // rejection never advances past it.
-    if (payload.dims !== undefined) {
-      const schema = schemaForRecord(payload.schemaVersion ?? SCHEMA_VERSION, payload.dims);
-      const rewindIndex = schema.steps.findIndex((s) => s.op === 'verify_contribution');
-      if (rewindIndex < 0) {
-        return -1;
-      }
-      state.setRegister(CONTRIB_NAMES.step(payload.contributionId), rewindIndex, op.signerId);
-      for (const step of schema.steps) {
-        if (step.op !== 'verify_contribution') {
-          continue;
-        }
-        const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, step.stepId);
-        const done = state.getPNCounter(doneReg) || 0;
-        if (done > 0) {
-          state.decrementPNCounter(doneReg, done, op.signerId);
-        }
-      }
-    } else {
-      state.setRegister(CONTRIB_NAMES.step(payload.contributionId), 1, op.signerId);
-      const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, 'verify');
+    state.setRegister(CONTRIB_NAMES.step(payload.contributionId), rewindIndex, op.signerId);
+    // Reset EVERY verify gate's completion counter, so the appealed
+    // re-review requires the FULL fresh quorum at each gate
+    // (decrementPNCounter is exact — PNCounters support decrement; the
+    // pre-appeal verdicts no longer occupy slots).
+    for (const stepId of verifyStepIds) {
+      const doneReg = CONTRIB_NAMES.stepDone(payload.contributionId, stepId);
       const done = state.getPNCounter(doneReg) || 0;
       if (done > 0) {
         state.decrementPNCounter(doneReg, done, op.signerId);
